@@ -17,7 +17,8 @@ test("renders the travel planner shell", async () => {
   const html = await response.text();
   assert.match(html, /跳进地理书/);
   assert.match(html, /上海＋杭州/);
-  assert.match(html, /每个人分别花多少/);
+  assert.match(html, /我的个人消费/);
+  assert.match(html, /同行人自助计算/);
   assert.match(html, /杭州东与杭州南/);
   assert.doesNotMatch(html, /Starter Project|react-loading-skeleton/);
 });
