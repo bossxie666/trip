@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "跳进地理书的旅行 · 上海＋杭州省钱攻略",
-  description: "深圳出发，两天一夜上海迪士尼、外滩与杭州衔接的可交互省钱旅行工作台。",
+  title: "跳进地理书的旅行 · Travel Archive",
+  description: "旅行档案、攻略与城市影集。",
   openGraph: {
     title: "跳进地理书的旅行",
     description: "深圳 → 上海迪士尼 → 外滩 → 杭州",
