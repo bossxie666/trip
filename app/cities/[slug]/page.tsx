@@ -1,4 +1,4 @@
-import Link from "next/link";
+/* eslint-disable @next/next/no-html-link-for-pages */
 import { notFound } from "next/navigation";
 import { cities, getCityBySlug } from "@/data/cities";
 
@@ -9,5 +9,5 @@ export function generateStaticParams() {
 export default async function CityAlbumPage({ params }: { params: Promise<{ slug: string }> }) {
   const city = getCityBySlug((await params).slug);
   if (!city) notFound();
-  return <main className="archive-placeholder"><Link href="/cities">返回城市影集</Link><h1>{city.name}</h1><p>城市照片将在后续阶段加入。</p></main>;
+  return <main className="archive-placeholder"><a href="/cities">返回城市影集</a><h1>{city.name}</h1><p>城市照片将在后续阶段加入。</p></main>;
 }

@@ -2,6 +2,7 @@
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
 import { readCookie, sessionCookieName, verifySessionToken } from "../services/session";
+import { safeInternalReturnTo } from "../services/return-to";
 
 interface Env {
   ASSETS: Fetcher;
@@ -50,7 +51,11 @@ const worker = {
     if (!isPublicPath) {
       const memberId = await verifySessionToken(readCookie(request, sessionCookieName), env.TRIP_SPACE_SESSION_SECRET);
       const member = memberId ? await env.DB.prepare("SELECT active FROM members WHERE id = ? LIMIT 1").bind(memberId).first<{ active: number }>() : null;
-      if (!member?.active) return Response.redirect(new URL("/unlock", request.url), 302);
+      if (!member?.active) {
+        const unlock = new URL("/unlock", request.url);
+        unlock.searchParams.set("returnTo", safeInternalReturnTo(`${url.pathname}${url.search}`));
+        return Response.redirect(unlock, 302);
+      }
     }
 
     return handler.fetch(request, env, ctx);

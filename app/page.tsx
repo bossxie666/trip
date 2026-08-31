@@ -1,4 +1,4 @@
-import Link from "next/link";
+/* eslint-disable @next/next/no-html-link-for-pages */
 import { LegacyTripRedirect } from "@/components/layout/LegacyTripRedirect";
 
 export default function TravelArchiveHome() {
@@ -7,7 +7,7 @@ export default function TravelArchiveHome() {
       <LegacyTripRedirect />
       <p>TRAVEL ARCHIVE</p>
       <h1>跳进地理书的旅行</h1>
-      <Link href="/trips">进入攻略</Link>
+      <a href="/trips">进入攻略</a>
     </main>
   );
 }

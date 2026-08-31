@@ -1,4 +1,4 @@
-import Link from "next/link";
+/* eslint-disable @next/next/no-html-link-for-pages */
 import type { Trip } from "@/models/travel";
 import { EditTripForm } from "@/components/trip/EditTripForm";
 import { DayPlacesEditor } from "@/components/trip/DayPlacesEditor";
@@ -14,7 +14,7 @@ function tripDates(trip: Trip) {
 export function GenericTripDetail({ trip, members, placeWorkspace }: { trip: Trip; members: { id: string; displayName: string }[]; placeWorkspace: NonNullable<PlaceWorkspace> }) {
   return (
     <main className="generic-trip-detail">
-      <nav><Link href="/trips">返回攻略中心</Link></nav>
+      <nav><a href="/trips">返回攻略中心</a></nav>
       <header>
         <span>{statusLabels[trip.status]}</span>
         <h1>{trip.title}</h1>

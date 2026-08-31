@@ -70,7 +70,12 @@ test("keeps all Stage A routes available", async () => {
 
 test("filters the protected Shanghai Hangzhou trip correctly", async () => {
   const [all, planning, inspiration] = await Promise.all([render("/trips"), render("/trips?status=planning"), render("/trips?status=inspiration")]);
-  assert.match(await all.text(), /上海 \+ 杭州/);
+  const allHtml = await all.text();
+  assert.match(allHtml, /上海 \+ 杭州/);
+  assert.match(allHtml, /<a[^>]+href="\/"[^>]*>返回首页<\/a>/);
+  assert.match(allHtml, /<a[^>]+href="\/trips\/new"[^>]*>＋ 新建行程<\/a>/);
+  assert.match(allHtml, /<a[^>]+href="\/trips\?status=inspiration"/);
+  assert.match(allHtml, /<a[^>]+href="\/trips\/shanghai-hangzhou-2026"/);
   assert.match(await planning.text(), /上海 \+ 杭州/);
   assert.doesNotMatch(await inspiration.text(), /上海 \+ 杭州/);
 });
@@ -110,7 +115,10 @@ test("keeps the frozen Shanghai Hangzhou detail unchanged", async () => {
 
 test("requires a member session and supports collaborative edit and delete", async () => {
   const saved = sessionCookie; sessionCookie = "";
-  const anonymous = await render("/trips"); assert.equal(anonymous.status, 302); assert.match(anonymous.headers.get("location"), /\/unlock$/);
+  const anonymous = await render("/trips?status=planning"); assert.equal(anonymous.status, 302); assert.equal(new URL(anonymous.headers.get("location")).searchParams.get("returnTo"), "/trips?status=planning");
+  const anonymousRoot = await render("/"); assert.equal(new URL(anonymousRoot.headers.get("location")).searchParams.get("returnTo"), "/");
+  const anonymousDeep = await render("/trips/shanghai-hangzhou-2026"); assert.equal(new URL(anonymousDeep.headers.get("location")).searchParams.get("returnTo"), "/trips/shanghai-hangzhou-2026");
+  const unlock = await render("/unlock?returnTo=https://evil.example/phish"); assert.equal(unlock.status, 200); const unlockHtml = await unlock.text(); assert.equal(unlockHtml.match(/evil\.example/g)?.length, 1);
   sessionCookie = saved;
   const trip = await createTrip({ title: "朋友旅行", status: "planning", cities: ["苏州"], undated: true, people: 2, memberIds: ["member-zhu-jingqi"] });
   const update = await render(`/api/trips/${trip.slug}`, { method: "PUT", body: { title: "朋友旅行更新", status: "completed", cities: ["苏州", "无锡"], undated: true, people: 2, memberIds: ["member-zhu-jingqi"] } });
