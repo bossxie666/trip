@@ -6,6 +6,7 @@ import { TripDetailPage } from "@/components/trip/TripDetailPage";
 import ShanghaiHangzhouTripDetail from "@/components/trip/ShanghaiHangzhouTripDetail";
 import { GenericTripDetail } from "@/components/trip/GenericTripDetail";
 import { listActiveMembers } from "@/services/member-repository.server";
+import { getPlaceWorkspace } from "@/services/place-repository.server";
 
 export function generateStaticParams() {
   return getAllTrips().map((trip) => ({ slug: trip.slug }));
@@ -24,10 +25,11 @@ export default async function TripDetailRoute({ params }: { params: Promise<{ sl
   const trip = await findTripBySlug(slug);
   if (!trip) notFound();
   const members = slug === protectedTripSlug ? [] : await listActiveMembers();
+  const placeWorkspace = slug === protectedTripSlug ? null : await getPlaceWorkspace(slug);
 
   return (
     <TripDetailPage trip={trip}>
-      {slug === protectedTripSlug ? <ShanghaiHangzhouTripDetail /> : <GenericTripDetail trip={trip} members={members} />}
+      {slug === protectedTripSlug ? <ShanghaiHangzhouTripDetail /> : placeWorkspace ? <GenericTripDetail trip={trip} members={members} placeWorkspace={placeWorkspace} /> : null}
     </TripDetailPage>
   );
 }

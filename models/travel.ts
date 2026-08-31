@@ -21,10 +21,19 @@ export type Place = {
   id: string;
   cityId: string;
   name: string;
-  latitude?: number;
-  longitude?: number;
-  category?: string;
+  address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  coordinateSystem: "WGS84" | "GCJ02" | null;
+  provider: "amap" | "osm" | "manual" | null;
+  providerPlaceId: string | null;
+  createdByMemberId: string | null;
+  updatedByMemberId: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
+
+export type DayPlace = { dayId: string; placeId: string; sortOrder: number; note: string | null; arrivalTime: string | null; departureTime: string | null; place: Place };
 
 export type Day = {
   id: string;
@@ -32,6 +41,7 @@ export type Day = {
   date: string | null;
   title: string;
   placeIds: string[];
+  places?: DayPlace[];
 };
 
 export type Expense = {

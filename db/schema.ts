@@ -1,4 +1,4 @@
-import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const memberRecords = sqliteTable("members", {
   id: text("id").primaryKey(),
@@ -46,6 +46,31 @@ export const cityRecords = sqliteTable("cities", {
   uniqueIndex("idx_cities_slug").on(table.slug),
 ]);
 
+export const placeRecords = sqliteTable("places", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  cityId: text("city_id").notNull().references(() => cityRecords.id, { onDelete: "restrict" }),
+  address: text("address"),
+  latitude: real("latitude"),
+  longitude: real("longitude"),
+  coordinateSystem: text("coordinate_system", { enum: ["WGS84", "GCJ02"] }),
+  provider: text("provider", { enum: ["amap", "osm", "manual"] }).default("manual"),
+  providerPlaceId: text("provider_place_id"),
+  createdByMemberId: text("created_by_member_id").references(() => memberRecords.id, { onDelete: "set null" }),
+  updatedByMemberId: text("updated_by_member_id").references(() => memberRecords.id, { onDelete: "set null" }),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("idx_places_city_name").on(table.cityId, table.name),
+  index("idx_places_city_created").on(table.cityId, table.createdAt),
+]);
+
+export const tripPlaceRecords = sqliteTable("trip_places", {
+  tripId: text("trip_id").notNull().references(() => tripRecords.id, { onDelete: "cascade" }),
+  placeId: text("place_id").notNull().references(() => placeRecords.id, { onDelete: "restrict" }),
+  createdAt: text("created_at").notNull(),
+}, (table) => [primaryKey({ columns: [table.tripId, table.placeId] }), index("idx_trip_places_place").on(table.placeId)]);
+
 export const tripCityRecords = sqliteTable("trip_cities", {
   tripId: text("trip_id").notNull().references(() => tripRecords.id, { onDelete: "cascade" }),
   cityId: text("city_id").notNull().references(() => cityRecords.id, { onDelete: "cascade" }),
@@ -63,4 +88,17 @@ export const dayRecords = sqliteTable("days", {
   title: text("title").notNull(),
 }, (table) => [
   uniqueIndex("idx_days_trip_day_number").on(table.tripId, table.dayNumber),
+]);
+
+export const dayPlaceRecords = sqliteTable("day_places", {
+  dayId: text("day_id").notNull().references(() => dayRecords.id, { onDelete: "cascade" }),
+  placeId: text("place_id").notNull().references(() => placeRecords.id, { onDelete: "restrict" }),
+  sortOrder: integer("sort_order").notNull(),
+  note: text("note"),
+  arrivalTime: text("arrival_time"),
+  departureTime: text("departure_time"),
+}, (table) => [
+  primaryKey({ columns: [table.dayId, table.placeId] }),
+  uniqueIndex("idx_day_places_day_sort").on(table.dayId, table.sortOrder),
+  index("idx_day_places_place").on(table.placeId),
 ]);

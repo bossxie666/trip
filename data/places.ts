@@ -1,6 +1,4 @@
-import type { Place } from "@/models/travel";
-
-export const places: Place[] = [
+export const places = [
   { id: "pvg-t2", cityId: "shanghai", name: "浦东 T2", latitude: 31.1443, longitude: 121.8083, category: "airport" },
   { id: "shanghai-disney", cityId: "shanghai", name: "上海迪士尼", latitude: 31.1433, longitude: 121.6578, category: "attraction" },
   { id: "the-bund", cityId: "shanghai", name: "外滩", latitude: 31.24, longitude: 121.49, category: "attraction" },

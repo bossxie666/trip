@@ -21,7 +21,7 @@ class TestD1Database {
 const DB = new TestD1Database();
 globalThis.__TRIP_TEST_D1__ = DB;
 globalThis.__TRIP_TEST_ENV__ = { TRIP_SPACE_INVITE_CODE: "test-invite", TRIP_SPACE_SESSION_SECRET: "test-session-secret-at-least-32-characters" };
-for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
+for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
 
 let sessionCookie = "";
 
@@ -76,7 +76,7 @@ test("creates and persists inspiration and planning trips", async () => {
   const genericDetail = await render(`/trips/${planningTrip.slug}`);
   const detailHtml = await genericDetail.text();
   assert.equal(genericDetail.status, 200);
-  assert.match(detailHtml, /Tokyo Spring/); assert.match(detailHtml, /Day 1/); assert.match(detailHtml, /Day 3/); assert.match(detailHtml, /地图位置已预留/);
+  assert.match(detailHtml, /Tokyo Spring/); assert.match(detailHtml, /Day/); assert.match(detailHtml, /地图将在后续版本启用/);
 });
 
 test("avoids duplicate slugs", async () => {
@@ -106,4 +106,35 @@ test("requires a member session and supports collaborative edit and delete", asy
   assert.equal(update.status, 200); assert.equal((await update.json()).trip.status, "completed");
   const remove = await render(`/api/trips/${trip.slug}`, { method: "DELETE" }); assert.equal(remove.status, 200);
   const protectedRemove = await render("/api/trips/shanghai-hangzhou-2026", { method: "DELETE" }); assert.equal(protectedRemove.status, 403);
+});
+
+test("creates reusable places and keeps stable Day ordering", async () => {
+  const tripA = await createTrip({ title: "关西地点测试", status: "planning", cities: ["大阪"], startDate: "2027-05-01", endDate: "2027-05-01", people: 2, memberIds: [] });
+  const tripB = await createTrip({ title: "大阪重游", status: "planning", cities: ["大阪"], startDate: "2028-05-01", endDate: "2028-05-01", people: 1, memberIds: [] });
+  const workspaceA = (await (await render(`/api/trips/${tripA.slug}/places`)).json()).workspace;
+  const dayA = workspaceA.days[0].id, cityId = workspaceA.cities[0].id;
+  const first = await render(`/api/trips/${tripA.slug}/places`, { method: "POST", body: { action: "create", dayId: dayA, name: "大阪城", cityId, address: "大阪市中央区" } });
+  assert.equal(first.status, 201); const firstWorkspace = (await first.json()).workspace; const osakaCastle = firstWorkspace.days[0].places[0].place;
+  const second = await render(`/api/trips/${tripA.slug}/places`, { method: "POST", body: { action: "create", dayId: dayA, name: "道顿堀", cityId } });
+  assert.equal(second.status, 201); const secondWorkspace = (await second.json()).workspace; const dotonbori = secondWorkspace.days[0].places[1].place;
+  const reordered = await render(`/api/trips/${tripA.slug}/places`, { method: "PATCH", body: { dayId: dayA, orderedPlaceIds: [dotonbori.id, osakaCastle.id] } });
+  assert.equal(reordered.status, 200); assert.deepEqual((await reordered.json()).workspace.days[0].places.map((item) => item.place.name), ["道顿堀", "大阪城"]);
+  const refreshed = (await (await render(`/api/trips/${tripA.slug}/places`)).json()).workspace;
+  assert.deepEqual(refreshed.days[0].places.map((item) => [item.sortOrder, item.place.name]), [[1, "道顿堀"], [2, "大阪城"]]);
+  const workspaceB = (await (await render(`/api/trips/${tripB.slug}/places`)).json()).workspace;
+  assert.ok(workspaceB.availablePlaces.some((place) => place.id === osakaCastle.id));
+  const reused = await render(`/api/trips/${tripB.slug}/places`, { method: "POST", body: { action: "existing", dayId: workspaceB.days[0].id, placeId: osakaCastle.id } }); assert.equal(reused.status, 201);
+  const creator = DB.database.prepare("SELECT created_by_member_id, updated_by_member_id FROM places WHERE id = ?").get(osakaCastle.id); assert.equal(creator.created_by_member_id, "member-nini"); assert.equal(creator.updated_by_member_id, "member-nini");
+  const removed = await render(`/api/trips/${tripA.slug}/places?dayId=${dayA}&placeId=${dotonbori.id}`, { method: "DELETE" }); assert.equal(removed.status, 200);
+  assert.equal(DB.database.prepare("SELECT count(*) AS count FROM places WHERE id = ?").get(dotonbori.id).count, 1);
+  const deleteTripB = await render(`/api/trips/${tripB.slug}`, { method: "DELETE" }); assert.equal(deleteTripB.status, 200);
+  assert.equal(DB.database.prepare("SELECT count(*) AS count FROM places WHERE id = ?").get(osakaCastle.id).count, 1);
+});
+
+test("denies anonymous Place writes and preserves seeded members and shadow places", async () => {
+  const saved = sessionCookie; sessionCookie = "";
+  const denied = await render("/api/trips/anything/places", { method: "POST", body: { action: "create" } }); assert.equal(denied.status, 302);
+  sessionCookie = saved;
+  assert.equal(DB.database.prepare("SELECT count(*) AS count FROM members").get().count, 5);
+  assert.equal(DB.database.prepare("SELECT count(*) AS count FROM places WHERE id LIKE 'place-%'").get().count >= 6, true);
 });

@@ -1,6 +1,6 @@
 import { asc, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
-import { cityRecords, dayRecords, memberRecords, tripCityRecords, tripMemberRecords, tripRecords } from "@/db/schema";
+import { cityRecords, dayPlaceRecords, dayRecords, memberRecords, tripCityRecords, tripMemberRecords, tripRecords } from "@/db/schema";
 import { getTripBySlug as getSeedTripBySlug, trips as seedTrips } from "@/data/trips";
 import type { Day, Trip, TripStatus } from "@/models/travel";
 
@@ -67,6 +67,8 @@ async function hydrateTrips(rows: (typeof tripRecords.$inferSelect)[]): Promise<
     .from(dayRecords)
     .where(inArray(dayRecords.tripId, tripIds))
     .orderBy(asc(dayRecords.dayNumber));
+  const storedDayIds = storedDays.map((day) => day.id);
+  const dayPlaceLinks = storedDayIds.length ? await db.select().from(dayPlaceRecords).where(inArray(dayPlaceRecords.dayId, storedDayIds)).orderBy(asc(dayPlaceRecords.sortOrder)) : [];
   const memberLinks = await db.select({ tripId: tripMemberRecords.tripId, id: memberRecords.id, name: memberRecords.name, displayName: memberRecords.displayName, avatar: memberRecords.avatar, active: memberRecords.active, createdAt: memberRecords.createdAt })
     .from(tripMemberRecords).innerJoin(memberRecords, eq(tripMemberRecords.memberId, memberRecords.id)).where(inArray(tripMemberRecords.tripId, tripIds));
 
@@ -79,7 +81,7 @@ async function hydrateTrips(rows: (typeof tripRecords.$inferSelect)[]): Promise<
       tripId: day.tripId,
       date: day.date,
       title: day.title,
-      placeIds: [],
+      placeIds: dayPlaceLinks.filter((link) => link.dayId === day.id).map((link) => link.placeId),
     })),
     expenses: [],
     photos: [],
@@ -182,9 +184,14 @@ async function replaceCitiesAndDays(tripId: string, input: UpdateTripInput) {
     if (!city) { const id = crypto.randomUUID(); city = { id, slug: `city-${id.slice(0, 8)}`, name, createdAt: now }; await db.insert(cityRecords).values(city); }
     await db.insert(tripCityRecords).values({ tripId, cityId: city.id, position });
   }
-  await db.delete(dayRecords).where(eq(dayRecords.tripId, tripId));
   const days = generateDays(tripId, input.startDate, input.endDate);
-  if (days.length) await db.insert(dayRecords).values(days.map((day, index) => ({ id: day.id, tripId, dayNumber: index + 1, date: day.date, title: day.title })));
+  const existingDays = await db.select().from(dayRecords).where(eq(dayRecords.tripId, tripId)).orderBy(asc(dayRecords.dayNumber));
+  for (const [index, day] of days.entries()) {
+    const existing = existingDays[index];
+    if (existing) await db.update(dayRecords).set({ dayNumber: index + 1, date: day.date, title: day.title }).where(eq(dayRecords.id, existing.id));
+    else await db.insert(dayRecords).values({ id: day.id, tripId, dayNumber: index + 1, date: day.date, title: day.title });
+  }
+  for (const removed of existingDays.slice(days.length)) await db.delete(dayRecords).where(eq(dayRecords.id, removed.id));
 }
 
 export async function updateTrip(slug: string, input: UpdateTripInput, actorMemberId: string) {
