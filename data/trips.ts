@@ -21,8 +21,13 @@ export const trips: Trip[] = [
       { id: "shanghai-disney-ticket", tripId: "trip-001", name: "上海迪士尼门票", amount: 366, currency: "CNY", scope: "person", status: "paid" },
     ],
     photos: [],
+    createdAt: "2026-08-30T00:00:00.000Z",
+    updatedAt: "2026-08-30T00:00:00.000Z",
+    protected: true,
   },
 ];
+
+export const protectedTripSlug = "shanghai-hangzhou-2026";
 
 export function getAllTrips() {
   return trips;

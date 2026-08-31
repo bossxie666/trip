@@ -4,7 +4,7 @@ export type City = {
   id: string;
   slug: string;
   name: string;
-  country: string;
+  country?: string;
   cover?: string;
 };
 
@@ -20,7 +20,7 @@ export type Place = {
 export type Day = {
   id: string;
   tripId: string;
-  date: string;
+  date: string | null;
   title: string;
   placeIds: string[];
 };
@@ -49,12 +49,15 @@ export type Trip = {
   slug: string;
   title: string;
   status: TripStatus;
-  startDate: string;
-  endDate: string;
+  startDate: string | null;
+  endDate: string | null;
   people: number;
-  cover: string;
+  cover: string | null;
   cities: City[];
   days: Day[];
   expenses: Expense[];
   photos: Photo[];
+  createdAt: string;
+  updatedAt: string;
+  protected?: boolean;
 };
