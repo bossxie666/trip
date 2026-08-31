@@ -20,8 +20,19 @@ class TestD1Database {
 
 const DB = new TestD1Database();
 globalThis.__TRIP_TEST_D1__ = DB;
-globalThis.__TRIP_TEST_ENV__ = { TRIP_SPACE_INVITE_CODE: "test-invite", TRIP_SPACE_SESSION_SECRET: "test-session-secret-at-least-32-characters" };
-for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
+globalThis.__TRIP_TEST_ENV__ = { TRIP_SPACE_INVITE_CODE: "test-invite", TRIP_SPACE_SESSION_SECRET: "test-session-secret-at-least-32-characters", AMAP_JS_API_KEY: "test-js-key", AMAP_JS_SECURITY_CODE: "test-js-code", AMAP_WEB_SERVICE_KEY: "test-web-key" };
+for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
+
+const nativeFetch = globalThis.fetch;
+globalThis.fetch = async (input, init) => {
+  const url = input instanceof URL ? input : new URL(typeof input === "string" ? input : input.url);
+  if (url.hostname !== "restapi.amap.com") return nativeFetch(input, init);
+  if (url.pathname === "/v5/place/text") return Response.json({ status: "1", infocode: "10000", pois: [{ id: "B0TESTBUND", name: "测试外滩", address: "中山东一路", location: "121.490317,31.241701", adcode: "310101", citycode: "021", adname: "黄浦区", typecode: "110202" }] });
+  if (url.pathname === "/v5/place/detail") return Response.json({ status: "1", infocode: "10000", pois: [{ id: url.searchParams.get("id"), name: "测试外滩", address: "中山东一路", location: "121.490317,31.241701", adcode: "310101", citycode: "021", adname: "黄浦区", typecode: "110202" }] });
+  if (url.pathname === "/v3/geocode/geo") return Response.json({ status: "1", infocode: "10000", geocodes: [{ formatted_address: "上海市黄浦区中山东一路", location: "121.490317,31.241701", adcode: "310101", citycode: "021", district: "黄浦区" }] });
+  if (url.pathname.startsWith("/v5/direction/")) return Response.json({ status: "1", infocode: "10000", route: { paths: [{ distance: "1200", cost: { duration: "900" }, steps: [{ polyline: "121.490317,31.241701;121.500000,31.250000" }] }] } });
+  return Response.json({ status: "0", infocode: "10002" });
+};
 
 let sessionCookie = "";
 
@@ -32,7 +43,7 @@ async function render(pathname = "/", init = {}) {
   const body = init.body && typeof init.body !== "string" ? JSON.stringify(init.body) : init.body;
   const headers = { accept: "text/html", ...(body ? { "content-type": "application/json" } : {}), ...(sessionCookie ? { cookie: sessionCookie } : {}), ...init.headers };
   return worker.fetch(new Request(`http://localhost${pathname}`, { ...init, body, headers }), {
-    DB, TRIP_SPACE_INVITE_CODE: "test-invite", TRIP_SPACE_SESSION_SECRET: "test-session-secret-at-least-32-characters", ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
+    DB, TRIP_SPACE_INVITE_CODE: "test-invite", TRIP_SPACE_SESSION_SECRET: "test-session-secret-at-least-32-characters", AMAP_JS_API_KEY: "test-js-key", AMAP_JS_SECURITY_CODE: "test-js-code", AMAP_WEB_SERVICE_KEY: "test-web-key", ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
   }, { waitUntil() {}, passThroughOnException() {} });
 }
 
@@ -76,7 +87,7 @@ test("creates and persists inspiration and planning trips", async () => {
   const genericDetail = await render(`/trips/${planningTrip.slug}`);
   const detailHtml = await genericDetail.text();
   assert.equal(genericDetail.status, 200);
-  assert.match(detailHtml, /Tokyo Spring/); assert.match(detailHtml, /Day/); assert.match(detailHtml, /地图将在后续版本启用/);
+  assert.match(detailHtml, /Tokyo Spring/); assert.match(detailHtml, /Day/); assert.match(detailHtml, /高德地点/); assert.match(detailHtml, /规划路线/);
 });
 
 test("avoids duplicate slugs", async () => {
@@ -137,4 +148,21 @@ test("denies anonymous Place writes and preserves seeded members and shadow plac
   sessionCookie = saved;
   assert.equal(DB.database.prepare("SELECT count(*) AS count FROM members").get().count, 5);
   assert.equal(DB.database.prepare("SELECT count(*) AS count FROM places WHERE id LIKE 'place-%'").get().count >= 6, true);
+});
+
+test("searches AMap POIs, persists GCJ-02 data, and plans a Day route", async () => {
+  const trip = await createTrip({ title: "高德地图测试", status: "planning", cities: ["上海"], startDate: "2027-06-01", endDate: "2027-06-01", people: 2, memberIds: [] });
+  const workspace = (await (await render(`/api/trips/${trip.slug}/places`)).json()).workspace, dayId = workspace.days[0].id, cityId = workspace.cities[0].id;
+  const search = await render(`/api/amap/places/search?keywords=${encodeURIComponent("外滩")}&cityId=${cityId}`, { headers: { accept: "application/json" } });
+  assert.equal(search.status, 200); const poi = (await search.json()).pois[0]; assert.equal(poi.id, "B0TESTBUND");
+  const saved = await render(`/api/trips/${trip.slug}/places`, { method: "POST", body: { action: "create-amap", dayId, cityId, providerPlaceId: poi.id } });
+  assert.equal(saved.status, 201); const place = (await saved.json()).workspace.days[0].places[0].place;
+  assert.equal(place.provider, "amap"); assert.equal(place.coordinateSystem, "GCJ02"); assert.equal(place.providerPlaceId, poi.id); assert.equal(place.adcode, "310101");
+  const manual = await render(`/api/trips/${trip.slug}/places`, { method: "POST", body: { action: "create", dayId, cityId, name: "测试终点" } });
+  const destination = (await manual.json()).workspace.days[0].places[1].place;
+  DB.database.prepare("UPDATE places SET longitude = ?, latitude = ?, coordinate_system = 'GCJ02' WHERE id = ?").run(121.5, 31.25, destination.id);
+  const route = await render("/api/amap/routes", { method: "POST", body: { slug: trip.slug, originPlaceId: place.id, destinationPlaceId: destination.id, mode: "walking" } });
+  assert.equal(route.status, 200); const planned = (await route.json()).route; assert.equal(planned.distanceMeters, 1200); assert.equal(planned.durationSeconds, 900); assert.equal(planned.polylines.length, 1);
+  const config = await render("/api/amap/config", { headers: { accept: "application/json" } }); assert.equal(config.status, 200); const configBody = await config.json(); assert.equal(configBody.key, "test-js-key"); assert.match(configBody.serviceHost, /\/_AMapService$/);
+  const geocode = await render("/api/amap/geocode", { method: "POST", body: { address: "中山东一路", cityId } }); assert.equal(geocode.status, 200); assert.equal((await geocode.json()).result.coordinateSystem, "GCJ02");
 });

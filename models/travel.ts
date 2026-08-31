@@ -27,6 +27,11 @@ export type Place = {
   coordinateSystem: "WGS84" | "GCJ02" | null;
   provider: "amap" | "osm" | "manual" | null;
   providerPlaceId: string | null;
+  adcode: string | null;
+  cityCode: string | null;
+  district: string | null;
+  typeCode: string | null;
+  providerUpdatedAt: string | null;
   createdByMemberId: string | null;
   updatedByMemberId: string | null;
   createdAt: string;

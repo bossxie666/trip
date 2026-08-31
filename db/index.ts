@@ -8,6 +8,9 @@ export function getRuntimeEnv() {
   return runtimeEnv as typeof runtimeEnv & {
     TRIP_SPACE_INVITE_CODE?: string;
     TRIP_SPACE_SESSION_SECRET?: string;
+    AMAP_JS_API_KEY?: string;
+    AMAP_JS_SECURITY_CODE?: string;
+    AMAP_WEB_SERVICE_KEY?: string;
   };
 }
 

@@ -56,13 +56,19 @@ export const placeRecords = sqliteTable("places", {
   coordinateSystem: text("coordinate_system", { enum: ["WGS84", "GCJ02"] }),
   provider: text("provider", { enum: ["amap", "osm", "manual"] }).default("manual"),
   providerPlaceId: text("provider_place_id"),
+  adcode: text("adcode"),
+  cityCode: text("city_code"),
+  district: text("district"),
+  typeCode: text("type_code"),
+  providerUpdatedAt: text("provider_updated_at"),
   createdByMemberId: text("created_by_member_id").references(() => memberRecords.id, { onDelete: "set null" }),
   updatedByMemberId: text("updated_by_member_id").references(() => memberRecords.id, { onDelete: "set null" }),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
-  uniqueIndex("idx_places_city_name").on(table.cityId, table.name),
+  index("idx_places_city_name").on(table.cityId, table.name),
   index("idx_places_city_created").on(table.cityId, table.createdAt),
+  uniqueIndex("idx_places_provider_id").on(table.provider, table.providerPlaceId),
 ]);
 
 export const tripPlaceRecords = sqliteTable("trip_places", {

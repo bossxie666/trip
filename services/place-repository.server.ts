@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray, max } from "drizzle-orm";
 import { getDb } from "@/db";
 import { cityRecords, dayPlaceRecords, dayRecords, placeRecords, tripCityRecords, tripPlaceRecords, tripRecords } from "@/db/schema";
+import { getAmapPoi } from "@/services/amap/amap-web-service.server";
 
 export type PlaceWorkspace = Awaited<ReturnType<typeof getPlaceWorkspace>>;
 
@@ -44,6 +45,31 @@ export async function createManualPlace(slug: string, input: { name: string; cit
   const now = new Date().toISOString();
   const place = { id: crypto.randomUUID(), name: input.name, cityId: input.cityId, address: input.address, latitude: null, longitude: null, coordinateSystem: null, provider: "manual" as const, providerPlaceId: null, createdByMemberId: actorMemberId, updatedByMemberId: actorMemberId, createdAt: now, updatedAt: now };
   await db.insert(placeRecords).values(place); return place;
+}
+
+export async function createAmapPlace(slug: string, input: { providerPlaceId: string; cityId: string }, actorMemberId: string) {
+  const db = getDb(), trip = await getStoredTrip(slug); if (!trip) throw new Error("TRIP_NOT_FOUND");
+  const cityLink = await db.select().from(tripCityRecords).where(and(eq(tripCityRecords.tripId, trip.id), eq(tripCityRecords.cityId, input.cityId))).limit(1);
+  if (!cityLink.length) throw new Error("CITY_NOT_IN_TRIP");
+  const existing = (await db.select().from(placeRecords).where(and(eq(placeRecords.provider, "amap"), eq(placeRecords.providerPlaceId, input.providerPlaceId))).limit(1))[0];
+  if (existing) return existing;
+  const poi = await getAmapPoi(input.providerPlaceId), now = new Date().toISOString();
+  const sameName = (await db.select().from(placeRecords).where(and(eq(placeRecords.cityId, input.cityId), eq(placeRecords.name, poi.name))).limit(1))[0];
+  if (sameName?.provider === "manual") {
+    await db.update(placeRecords).set({ address: poi.address, latitude: poi.latitude, longitude: poi.longitude, coordinateSystem: "GCJ02", provider: "amap", providerPlaceId: poi.id, adcode: poi.adcode, cityCode: poi.cityCode, district: poi.district, typeCode: poi.typeCode, providerUpdatedAt: now, updatedByMemberId: actorMemberId, updatedAt: now }).where(eq(placeRecords.id, sameName.id));
+    return (await db.select().from(placeRecords).where(eq(placeRecords.id, sameName.id)).limit(1))[0];
+  }
+  const place = { id: crypto.randomUUID(), name: poi.name, cityId: input.cityId, address: poi.address, latitude: poi.latitude, longitude: poi.longitude, coordinateSystem: "GCJ02" as const, provider: "amap" as const, providerPlaceId: poi.id, adcode: poi.adcode, cityCode: poi.cityCode, district: poi.district, typeCode: poi.typeCode, providerUpdatedAt: now, createdByMemberId: actorMemberId, updatedByMemberId: actorMemberId, createdAt: now, updatedAt: now };
+  await db.insert(placeRecords).values(place); return place;
+}
+
+export async function getRoutePlaces(slug: string, originPlaceId: string, destinationPlaceId: string) {
+  const db = getDb(), trip = await getStoredTrip(slug); if (!trip) throw new Error("TRIP_NOT_FOUND");
+  const linked = await db.select({ place: placeRecords }).from(tripPlaceRecords).innerJoin(placeRecords, eq(tripPlaceRecords.placeId, placeRecords.id)).where(and(eq(tripPlaceRecords.tripId, trip.id), inArray(tripPlaceRecords.placeId, [originPlaceId, destinationPlaceId])));
+  const origin = linked.find((item) => item.place.id === originPlaceId)?.place, destination = linked.find((item) => item.place.id === destinationPlaceId)?.place;
+  if (!origin || !destination) throw new Error("PLACE_NOT_IN_TRIP");
+  if (origin.latitude == null || origin.longitude == null || destination.latitude == null || destination.longitude == null) throw new Error("PLACE_MISSING_COORDINATES");
+  return { origin, destination };
 }
 
 export async function addPlaceToDay(slug: string, dayId: string, placeId: string) {
