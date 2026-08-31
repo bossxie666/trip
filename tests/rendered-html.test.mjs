@@ -105,7 +105,25 @@ test("hydrates Shanghai Hangzhou from D1 with stage participation and candidate 
   assert.match(await page.text(), /上海4人 · 杭州5人/);
   const detail = await render("/trips/shanghai-hangzhou-2026");
   assert.equal(detail.status, 200);
-  assert.match(await detail.text(), /地图地点读取自这趟旅行的 Day \/ Place 数据/);
+  const detailHtml = await detail.text();
+  assert.match(detailHtml, /地图地点读取自这趟旅行的 Day \/ Place 数据/);
+  assert.match(detailHtml, /高德真实地图/);
+  assert.match(detailHtml, /详细离线图/);
+  assert.match(detailHtml, /上海→杭州铁路候选预算/);
+  assert.match(detailHtml, /2 DAYS · SHANGHAI 4 · HANGZHOU 5/);
+  assert.doesNotMatch(detailHtml, /简单方位图/);
+  assert.doesNotMatch(detailHtml, /active-candidate/);
+});
+
+test("scopes the Shanghai Hangzhou AMap to its active Stage and reruns fitView after loading", () => {
+  const adapter = readFileSync(new URL("../components/trip/ShanghaiHangzhouMapDesk.tsx", import.meta.url), "utf8");
+  const map = readFileSync(new URL("../components/trip/GenericTripMap.tsx", import.meta.url), "utf8");
+  assert.match(adapter, /currentStage = initial\.stages\.find/);
+  assert.match(adapter, /day\.places\.filter\(\(item\) => item\.place\.cityId === activeCityId\)/);
+  assert.match(adapter, /杭州: \[120\.1551, 30\.2741\]/);
+  assert.match(map, /setMapReady\(true\)/);
+  assert.match(map, /\[allPlaces, mapReady, route\]/);
+  assert.match(map, /place\.planStatus === "candidate" \? 0\.48 : 1/);
 });
 
 test("creates and persists inspiration and planning trips", async () => {
