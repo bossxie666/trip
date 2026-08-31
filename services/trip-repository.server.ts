@@ -1,6 +1,6 @@
 import { asc, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
-import { cityRecords, dayPlaceRecords, dayRecords, memberRecords, tripCityRecords, tripMemberRecords, tripRecords } from "@/db/schema";
+import { cityRecords, dayPlaceRecords, dayRecords, memberRecords, tripCityRecords, tripMemberRecords, tripRecords, tripStageMemberRecords, tripStageRecords } from "@/db/schema";
 import { getTripBySlug as getSeedTripBySlug, trips as seedTrips } from "@/data/trips";
 import type { Day, Trip, TripStatus } from "@/models/travel";
 
@@ -62,6 +62,29 @@ async function hydrateTrips(rows: (typeof tripRecords.$inferSelect)[]): Promise<
     .innerJoin(cityRecords, eq(tripCityRecords.cityId, cityRecords.id))
     .where(inArray(tripCityRecords.tripId, tripIds))
     .orderBy(asc(tripCityRecords.position));
+  const stageLinks = await db
+    .select({
+      tripId: tripStageRecords.tripId,
+      id: tripStageRecords.id,
+      cityId: tripStageRecords.cityId,
+      citySlug: cityRecords.slug,
+      cityName: cityRecords.name,
+      title: tripStageRecords.title,
+      sortOrder: tripStageRecords.sortOrder,
+      createdAt: tripStageRecords.createdAt,
+      updatedAt: tripStageRecords.updatedAt,
+    })
+    .from(tripStageRecords)
+    .innerJoin(cityRecords, eq(tripStageRecords.cityId, cityRecords.id))
+    .where(inArray(tripStageRecords.tripId, tripIds))
+    .orderBy(asc(tripStageRecords.sortOrder));
+  const stageIds = stageLinks.map((stage) => stage.id);
+  const stageMemberLinks = stageIds.length
+    ? await db.select({ stageId: tripStageMemberRecords.stageId, id: memberRecords.id, name: memberRecords.name, displayName: memberRecords.displayName, avatar: memberRecords.avatar, active: memberRecords.active, createdAt: memberRecords.createdAt })
+      .from(tripStageMemberRecords)
+      .innerJoin(memberRecords, eq(tripStageMemberRecords.memberId, memberRecords.id))
+      .where(inArray(tripStageMemberRecords.stageId, stageIds))
+    : [];
   const storedDays = await db
     .select()
     .from(dayRecords)
@@ -76,6 +99,17 @@ async function hydrateTrips(rows: (typeof tripRecords.$inferSelect)[]): Promise<
     ...row,
     status: row.status as TripStatus,
     cities: cityLinks.filter((link) => link.tripId === row.id).map(({ id, slug, name }) => ({ id, slug, name })),
+    stages: stageLinks.filter((stage) => stage.tripId === row.id).map((stage) => ({
+      id: stage.id,
+      tripId: row.id,
+      cityId: stage.cityId,
+      title: stage.title,
+      sortOrder: stage.sortOrder,
+      createdAt: stage.createdAt,
+      updatedAt: stage.updatedAt,
+      city: { id: stage.cityId, slug: stage.citySlug, name: stage.cityName },
+      members: stageMemberLinks.filter((member) => member.stageId === stage.id).map((member) => ({ id: member.id, name: member.name, displayName: member.displayName, avatar: member.avatar, active: Boolean(member.active), createdAt: member.createdAt })),
+    })),
     days: storedDays.filter((day) => day.tripId === row.id).map((day) => ({
       id: day.id,
       tripId: day.tripId,
@@ -100,15 +134,15 @@ export async function listTrips(status: TripStatus | "all" = "all") {
   const storedTrips = await hydrateTrips(rows);
   const seeds = status === "all" ? seedTrips : seedTrips.filter((trip) => trip.status === status);
   const storedSlugs = new Set(storedTrips.map((trip) => trip.slug));
-  return [...seeds.filter((trip) => !storedSlugs.has(trip.slug)), ...storedTrips];
+  return [...storedTrips, ...seeds.filter((trip) => !storedSlugs.has(trip.slug))];
 }
 
 export async function findTripBySlug(slug: string) {
-  const seed = getSeedTripBySlug(slug);
-  if (seed) return seed;
   const db = getDb();
   const rows = await db.select().from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1);
-  return (await hydrateTrips(rows))[0];
+  const stored = (await hydrateTrips(rows))[0];
+  if (stored) return stored;
+  return getSeedTripBySlug(slug);
 }
 
 async function slugExists(slug: string) {
@@ -195,10 +229,13 @@ async function replaceCitiesAndDays(tripId: string, input: UpdateTripInput) {
 }
 
 export async function updateTrip(slug: string, input: UpdateTripInput, actorMemberId: string) {
-  if (getSeedTripBySlug(slug)) throw new Error("PROTECTED_TRIP");
   const db = getDb();
   const row = (await db.select().from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1))[0];
-  if (!row) return null;
+  if (!row) {
+    if (getSeedTripBySlug(slug)) throw new Error("PROTECTED_TRIP");
+    return null;
+  }
+  if (row.protected) throw new Error("PROTECTED_TRIP");
   await db.update(tripRecords).set({ title: input.title, status: input.status, startDate: input.startDate, endDate: input.endDate, people: input.people, cover: input.cover, updatedAt: new Date().toISOString(), updatedByMemberId: actorMemberId }).where(eq(tripRecords.id, row.id));
   await replaceCitiesAndDays(row.id, input);
   await db.delete(tripMemberRecords).where(eq(tripMemberRecords.tripId, row.id));
@@ -208,10 +245,13 @@ export async function updateTrip(slug: string, input: UpdateTripInput, actorMemb
 }
 
 export async function deleteTrip(slug: string) {
-  if (getSeedTripBySlug(slug)) throw new Error("PROTECTED_TRIP");
   const db = getDb();
   const row = (await db.select().from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1))[0];
-  if (!row) return false;
+  if (!row) {
+    if (getSeedTripBySlug(slug)) throw new Error("PROTECTED_TRIP");
+    return false;
+  }
+  if (row.protected) throw new Error("PROTECTED_TRIP");
   await db.delete(tripRecords).where(eq(tripRecords.id, row.id));
   return true;
 }

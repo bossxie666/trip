@@ -29,6 +29,13 @@
       "when": 1788157525875,
       "tag": "0003_bright_prodigy",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1788179265756,
+      "tag": "0004_clean_starfox",
+      "breakpoints": true
     }
   ]
 }

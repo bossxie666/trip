@@ -21,7 +21,7 @@ class TestD1Database {
 const DB = new TestD1Database();
 globalThis.__TRIP_TEST_D1__ = DB;
 globalThis.__TRIP_TEST_ENV__ = { TRIP_SPACE_INVITE_CODE: "test-invite", TRIP_SPACE_SESSION_SECRET: "test-session-secret-at-least-32-characters", AMAP_JS_API_KEY: "test-js-key", AMAP_JS_SECURITY_CODE: "test-js-code", AMAP_WEB_SERVICE_KEY: "test-web-key" };
-for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
+for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
 
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
@@ -78,6 +78,34 @@ test("filters the protected Shanghai Hangzhou trip correctly", async () => {
   assert.match(allHtml, /<a[^>]+href="\/trips\/shanghai-hangzhou-2026"/);
   assert.match(await planning.text(), /上海 \+ 杭州/);
   assert.doesNotMatch(await inspiration.text(), /上海 \+ 杭州/);
+});
+
+test("hydrates Shanghai Hangzhou from D1 with stage participation and candidate places", async () => {
+  const trip = DB.database.prepare("SELECT id, slug, title, status, start_date, end_date, people, protected FROM trips WHERE slug = ?").get("shanghai-hangzhou-2026");
+  assert.deepEqual({ ...trip }, { id: "trip-shanghai-hangzhou-2026", slug: "shanghai-hangzhou-2026", title: "上海 + 杭州", status: "planning", start_date: "2026-09-23", end_date: "2026-09-24", people: 4, protected: 1 });
+  assert.equal(DB.database.prepare("SELECT count(*) AS count FROM trip_members WHERE trip_id = ?").get(trip.id).count, 5);
+  const stageCounts = DB.database.prepare("SELECT s.title, count(sm.member_id) AS members FROM trip_stages s LEFT JOIN trip_stage_members sm ON sm.stage_id = s.id WHERE s.trip_id = ? GROUP BY s.id ORDER BY s.sort_order").all(trip.id);
+  assert.deepEqual(stageCounts.map((stage) => ({ ...stage })), [{ title: "上海阶段", members: 4 }, { title: "杭州阶段", members: 5 }]);
+  const stageMembers = DB.database.prepare("SELECT s.title, sm.member_id FROM trip_stages s INNER JOIN trip_stage_members sm ON sm.stage_id = s.id WHERE s.trip_id = ? ORDER BY s.sort_order, sm.member_id").all(trip.id);
+  assert.deepEqual(stageMembers.map((stage) => ({ ...stage })), [
+    { title: "上海阶段", member_id: "member-liu-xu" },
+    { title: "上海阶段", member_id: "member-nini" },
+    { title: "上海阶段", member_id: "member-sun-yan" },
+    { title: "上海阶段", member_id: "member-wang-jingwen" },
+    { title: "杭州阶段", member_id: "member-liu-xu" },
+    { title: "杭州阶段", member_id: "member-nini" },
+    { title: "杭州阶段", member_id: "member-sun-yan" },
+    { title: "杭州阶段", member_id: "member-wang-jingwen" },
+    { title: "杭州阶段", member_id: "member-zhu-jingqi" },
+  ]);
+  assert.equal(DB.database.prepare("SELECT count(*) AS count FROM trip_places WHERE trip_id = ? AND plan_status = 'candidate'").get(trip.id).count, 6);
+  assert.equal(DB.database.prepare("SELECT count(*) AS count FROM trip_places WHERE trip_id = ? AND plan_status != 'candidate'").get(trip.id).count, 0);
+  assert.equal(DB.database.prepare("SELECT count(*) AS count FROM places WHERE id IN ('place-pvg-t2','place-shanghai-south','place-shanghai-disney','place-oriental-pearl','place-the-bund','place-hangzhou-east') AND coordinate_system = 'GCJ02' AND latitude IS NOT NULL AND longitude IS NOT NULL").get().count, 6);
+  const page = await render("/trips");
+  assert.match(await page.text(), /上海4人 · 杭州5人/);
+  const detail = await render("/trips/shanghai-hangzhou-2026");
+  assert.equal(detail.status, 200);
+  assert.match(await detail.text(), /地图地点读取自这趟旅行的 Day \/ Place 数据/);
 });
 
 test("creates and persists inspiration and planning trips", async () => {

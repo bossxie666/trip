@@ -22,7 +22,7 @@ export function GenericTripDetail({ trip, members, placeWorkspace }: { trip: Tri
       </header>
       <section><h2>概览</h2><p>这是一条新建行程，详细内容可以在后续阶段继续完善。</p></section>
       <section><h2>日程</h2><DayPlacesEditor slug={trip.slug} initial={placeWorkspace} /></section>
-      <section><h2>地图</h2><p>按 Day 查看已确认的高德地点，并比较步行、公交、驾车或骑行路线。</p><GenericTripMap slug={trip.slug} initial={placeWorkspace} /></section>
+      <section><h2>地图</h2><p>按 Day 查看已确认的高德地点，并比较步行、公共交通、驾车或骑行路线。</p><GenericTripMap slug={trip.slug} initial={placeWorkspace} /></section>
       <section><h2>预算</h2><p>还没有预算记录。</p></section>
       <section><h2>Checklist</h2><p>还没有待办事项。</p></section>
       <EditTripForm trip={trip} members={members} />

@@ -74,8 +74,30 @@ export const placeRecords = sqliteTable("places", {
 export const tripPlaceRecords = sqliteTable("trip_places", {
   tripId: text("trip_id").notNull().references(() => tripRecords.id, { onDelete: "cascade" }),
   placeId: text("place_id").notNull().references(() => placeRecords.id, { onDelete: "restrict" }),
+  planStatus: text("plan_status", { enum: ["candidate", "selected", "locked"] }).notNull().default("candidate"),
   createdAt: text("created_at").notNull(),
 }, (table) => [primaryKey({ columns: [table.tripId, table.placeId] }), index("idx_trip_places_place").on(table.placeId)]);
+
+export const tripStageRecords = sqliteTable("trip_stages", {
+  id: text("id").primaryKey(),
+  tripId: text("trip_id").notNull().references(() => tripRecords.id, { onDelete: "cascade" }),
+  cityId: text("city_id").notNull().references(() => cityRecords.id, { onDelete: "restrict" }),
+  title: text("title").notNull(),
+  sortOrder: integer("sort_order").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("idx_trip_stages_trip_order").on(table.tripId, table.sortOrder),
+  index("idx_trip_stages_trip").on(table.tripId),
+]);
+
+export const tripStageMemberRecords = sqliteTable("trip_stage_members", {
+  stageId: text("stage_id").notNull().references(() => tripStageRecords.id, { onDelete: "cascade" }),
+  memberId: text("member_id").notNull().references(() => memberRecords.id, { onDelete: "cascade" }),
+}, (table) => [
+  primaryKey({ columns: [table.stageId, table.memberId] }),
+  index("idx_trip_stage_members_member").on(table.memberId),
+]);
 
 export const tripCityRecords = sqliteTable("trip_cities", {
   tripId: text("trip_id").notNull().references(() => tripRecords.id, { onDelete: "cascade" }),

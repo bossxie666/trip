@@ -25,11 +25,11 @@ export default async function TripDetailRoute({ params }: { params: Promise<{ sl
   const trip = await findTripBySlug(slug);
   if (!trip) notFound();
   const members = slug === protectedTripSlug ? [] : await listActiveMembers();
-  const placeWorkspace = slug === protectedTripSlug ? null : await getPlaceWorkspace(slug);
+  const placeWorkspace = await getPlaceWorkspace(slug);
 
   return (
     <TripDetailPage trip={trip}>
-      {slug === protectedTripSlug ? <ShanghaiHangzhouTripDetail /> : placeWorkspace ? <GenericTripDetail trip={trip} members={members} placeWorkspace={placeWorkspace} /> : null}
+      {slug === protectedTripSlug ? <ShanghaiHangzhouTripDetail mapWorkspace={placeWorkspace} /> : placeWorkspace ? <GenericTripDetail trip={trip} members={members} placeWorkspace={placeWorkspace} /> : null}
     </TripDetailPage>
   );
 }

@@ -13,6 +13,12 @@ const filters: { value: TripStatus | "all"; label: string }[] = [
   { value: "planning", label: "待出行" }, { value: "completed", label: "已出行" },
 ];
 
+function participantSummary(trip: Awaited<ReturnType<typeof listTrips>>[number]) {
+  const stages = trip.stages?.filter((stage) => stage.members?.length);
+  if (stages?.length) return stages.map((stage) => `${stage.city?.name || stage.title}${stage.members?.length}人`).join(" · ");
+  return `${trip.members?.length || trip.people} 人`;
+}
+
 export default async function TripsPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   const requested = (await searchParams).status;
   const activeStatus = filters.some((filter) => filter.value === requested) ? requested as TripStatus : "all";
@@ -28,7 +34,7 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
         {trips.map((trip) => (
           <a key={trip.id} href={`/trips/${trip.slug}`}>
             {trip.cover ? <img src={trip.cover} alt="" /> : <div className="trip-cover-empty">NO COVER</div>}
-            <div><span>{statusLabels[trip.status]}</span><h2>{trip.title}</h2><p>{trip.startDate && trip.endDate ? `${trip.startDate} — ${trip.endDate}` : "日期未定"}</p><p>{trip.cities.length ? trip.cities.map((city) => city.name).join("、") : "暂无城市"} · {trip.people} 人</p></div>
+            <div><span>{statusLabels[trip.status]}</span><h2>{trip.title}</h2><p>{trip.startDate && trip.endDate ? `${trip.startDate} — ${trip.endDate}` : "日期未定"}</p><p>{trip.cities.length ? trip.cities.map((city) => city.name).join("、") : "暂无城市"} · {participantSummary(trip)}</p></div>
           </a>
         ))}
       </section>

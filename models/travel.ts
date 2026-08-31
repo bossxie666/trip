@@ -17,6 +17,20 @@ export type City = {
   cover?: string;
 };
 
+export type TripPlaceStatus = "candidate" | "selected" | "locked";
+
+export type TripStage = {
+  id: string;
+  tripId: string;
+  cityId: string;
+  title: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  city?: City;
+  members?: Member[];
+};
+
 export type Place = {
   id: string;
   cityId: string;
@@ -38,7 +52,7 @@ export type Place = {
   updatedAt: string;
 };
 
-export type DayPlace = { dayId: string; placeId: string; sortOrder: number; note: string | null; arrivalTime: string | null; departureTime: string | null; place: Place };
+export type DayPlace = { dayId: string; placeId: string; sortOrder: number; note: string | null; arrivalTime: string | null; departureTime: string | null; planStatus?: TripPlaceStatus; place: Place };
 
 export type Day = {
   id: string;
@@ -81,6 +95,7 @@ export type Trip = {
   days: Day[];
   expenses: Expense[];
   photos: Photo[];
+  stages?: TripStage[];
   createdAt: string;
   updatedAt: string;
   protected?: boolean;
