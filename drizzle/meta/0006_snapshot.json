@@ -1,0 +1,2864 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "4d774552-9bdb-4d67-93c2-0135f445bfcb",
+  "prevId": "f33d9601-ede9-4475-ba6c-cc57a0275b00",
+  "tables": {
+    "booking_cost_allocations": {
+      "name": "booking_cost_allocations",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cost_line_id": {
+          "name": "cost_line_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "member_id": {
+          "name": "member_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "amount_minor": {
+          "name": "amount_minor",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_booking_allocations_member": {
+          "name": "idx_booking_allocations_member",
+          "columns": [
+            "cost_line_id",
+            "member_id"
+          ],
+          "isUnique": true
+        },
+        "idx_booking_allocations_member_lookup": {
+          "name": "idx_booking_allocations_member_lookup",
+          "columns": [
+            "member_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "booking_cost_allocations_cost_line_id_booking_cost_lines_id_fk": {
+          "name": "booking_cost_allocations_cost_line_id_booking_cost_lines_id_fk",
+          "tableFrom": "booking_cost_allocations",
+          "tableTo": "booking_cost_lines",
+          "columnsFrom": [
+            "cost_line_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "booking_cost_allocations_member_id_members_id_fk": {
+          "name": "booking_cost_allocations_member_id_members_id_fk",
+          "tableFrom": "booking_cost_allocations",
+          "tableTo": "members",
+          "columnsFrom": [
+            "member_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "booking_cost_lines": {
+      "name": "booking_cost_lines",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "booking_id": {
+          "name": "booking_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "service_start_date": {
+          "name": "service_start_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "service_end_date": {
+          "name": "service_end_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "amount_minor": {
+          "name": "amount_minor",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "currency": {
+          "name": "currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "allocation_mode": {
+          "name": "allocation_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_booking_cost_lines_order": {
+          "name": "idx_booking_cost_lines_order",
+          "columns": [
+            "booking_id",
+            "sort_order"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "booking_cost_lines_booking_id_bookings_id_fk": {
+          "name": "booking_cost_lines_booking_id_bookings_id_fk",
+          "tableFrom": "booking_cost_lines",
+          "tableTo": "bookings",
+          "columnsFrom": [
+            "booking_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "booking_participants": {
+      "name": "booking_participants",
+      "columns": {
+        "booking_id": {
+          "name": "booking_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "member_id": {
+          "name": "member_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'covered'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_booking_participants_member": {
+          "name": "idx_booking_participants_member",
+          "columns": [
+            "member_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "booking_participants_booking_id_bookings_id_fk": {
+          "name": "booking_participants_booking_id_bookings_id_fk",
+          "tableFrom": "booking_participants",
+          "tableTo": "bookings",
+          "columnsFrom": [
+            "booking_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "booking_participants_member_id_members_id_fk": {
+          "name": "booking_participants_member_id_members_id_fk",
+          "tableFrom": "booking_participants",
+          "tableTo": "members",
+          "columnsFrom": [
+            "member_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "booking_participants_booking_id_member_id_pk": {
+          "columns": [
+            "booking_id",
+            "member_id"
+          ],
+          "name": "booking_participants_booking_id_member_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "bookings": {
+      "name": "bookings",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "trip_id": {
+          "name": "trip_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "temporal_kind": {
+          "name": "temporal_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "start_at": {
+          "name": "start_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "end_at": {
+          "name": "end_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "start_date_local": {
+          "name": "start_date_local",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "end_date_local": {
+          "name": "end_date_local",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "timezone": {
+          "name": "timezone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "place_id": {
+          "name": "place_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "origin_place_id": {
+          "name": "origin_place_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "destination_place_id": {
+          "name": "destination_place_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "total_amount_minor": {
+          "name": "total_amount_minor",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "currency": {
+          "name": "currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "booking_reference": {
+          "name": "booking_reference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "protected": {
+          "name": "protected",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "created_by_member_id": {
+          "name": "created_by_member_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updated_by_member_id": {
+          "name": "updated_by_member_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_bookings_trip_status_start": {
+          "name": "idx_bookings_trip_status_start",
+          "columns": [
+            "trip_id",
+            "status",
+            "start_at"
+          ],
+          "isUnique": false
+        },
+        "idx_bookings_trip_local_date": {
+          "name": "idx_bookings_trip_local_date",
+          "columns": [
+            "trip_id",
+            "start_date_local"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "bookings_trip_id_trips_id_fk": {
+          "name": "bookings_trip_id_trips_id_fk",
+          "tableFrom": "bookings",
+          "tableTo": "trips",
+          "columnsFrom": [
+            "trip_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "bookings_place_id_places_id_fk": {
+          "name": "bookings_place_id_places_id_fk",
+          "tableFrom": "bookings",
+          "tableTo": "places",
+          "columnsFrom": [
+            "place_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "bookings_origin_place_id_places_id_fk": {
+          "name": "bookings_origin_place_id_places_id_fk",
+          "tableFrom": "bookings",
+          "tableTo": "places",
+          "columnsFrom": [
+            "origin_place_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "bookings_destination_place_id_places_id_fk": {
+          "name": "bookings_destination_place_id_places_id_fk",
+          "tableFrom": "bookings",
+          "tableTo": "places",
+          "columnsFrom": [
+            "destination_place_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "bookings_created_by_member_id_members_id_fk": {
+          "name": "bookings_created_by_member_id_members_id_fk",
+          "tableFrom": "bookings",
+          "tableTo": "members",
+          "columnsFrom": [
+            "created_by_member_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "bookings_updated_by_member_id_members_id_fk": {
+          "name": "bookings_updated_by_member_id_members_id_fk",
+          "tableFrom": "bookings",
+          "tableTo": "members",
+          "columnsFrom": [
+            "updated_by_member_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "cities": {
+      "name": "cities",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_cities_name": {
+          "name": "idx_cities_name",
+          "columns": [
+            "name"
+          ],
+          "isUnique": true
+        },
+        "idx_cities_slug": {
+          "name": "idx_cities_slug",
+          "columns": [
+            "slug"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "day_places": {
+      "name": "day_places",
+      "columns": {
+        "day_id": {
+          "name": "day_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "place_id": {
+          "name": "place_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "arrival_time": {
+          "name": "arrival_time",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "departure_time": {
+          "name": "departure_time",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_day_places_day_sort": {
+          "name": "idx_day_places_day_sort",
+          "columns": [
+            "day_id",
+            "sort_order"
+          ],
+          "isUnique": true
+        },
+        "idx_day_places_place": {
+          "name": "idx_day_places_place",
+          "columns": [
+            "place_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "day_places_day_id_days_id_fk": {
+          "name": "day_places_day_id_days_id_fk",
+          "tableFrom": "day_places",
+          "tableTo": "days",
+          "columnsFrom": [
+            "day_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "day_places_place_id_places_id_fk": {
+          "name": "day_places_place_id_places_id_fk",
+          "tableFrom": "day_places",
+          "tableTo": "places",
+          "columnsFrom": [
+            "place_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "day_places_day_id_place_id_pk": {
+          "columns": [
+            "day_id",
+            "place_id"
+          ],
+          "name": "day_places_day_id_place_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "days": {
+      "name": "days",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "trip_id": {
+          "name": "trip_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "day_number": {
+          "name": "day_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "date": {
+          "name": "date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_days_trip_day_number": {
+          "name": "idx_days_trip_day_number",
+          "columns": [
+            "trip_id",
+            "day_number"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "days_trip_id_trips_id_fk": {
+          "name": "days_trip_id_trips_id_fk",
+          "tableFrom": "days",
+          "tableTo": "trips",
+          "columnsFrom": [
+            "trip_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "framework_constraints": {
+      "name": "framework_constraints",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "trip_id": {
+          "name": "trip_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "day_id": {
+          "name": "day_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "stage_id": {
+          "name": "stage_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "booking_id": {
+          "name": "booking_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "constraint_type": {
+          "name": "constraint_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "strength": {
+          "name": "strength",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "starts_at": {
+          "name": "starts_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "ends_at": {
+          "name": "ends_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_by_member_id": {
+          "name": "created_by_member_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updated_by_member_id": {
+          "name": "updated_by_member_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_framework_constraints_trip_day": {
+          "name": "idx_framework_constraints_trip_day",
+          "columns": [
+            "trip_id",
+            "day_id",
+            "deleted_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "framework_constraints_trip_id_trips_id_fk": {
+          "name": "framework_constraints_trip_id_trips_id_fk",
+          "tableFrom": "framework_constraints",
+          "tableTo": "trips",
+          "columnsFrom": [
+            "trip_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "framework_constraints_day_id_days_id_fk": {
+          "name": "framework_constraints_day_id_days_id_fk",
+          "tableFrom": "framework_constraints",
+          "tableTo": "days",
+          "columnsFrom": [
+            "day_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "framework_constraints_stage_id_trip_stages_id_fk": {
+          "name": "framework_constraints_stage_id_trip_stages_id_fk",
+          "tableFrom": "framework_constraints",
+          "tableTo": "trip_stages",
+          "columnsFrom": [
+            "stage_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "framework_constraints_booking_id_bookings_id_fk": {
+          "name": "framework_constraints_booking_id_bookings_id_fk",
+          "tableFrom": "framework_constraints",
+          "tableTo": "bookings",
+          "columnsFrom": [
+            "booking_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "framework_constraints_created_by_member_id_members_id_fk": {
+          "name": "framework_constraints_created_by_member_id_members_id_fk",
+          "tableFrom": "framework_constraints",
+          "tableTo": "members",
+          "columnsFrom": [
+            "created_by_member_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "framework_constraints_updated_by_member_id_members_id_fk": {
+          "name": "framework_constraints_updated_by_member_id_members_id_fk",
+          "tableFrom": "framework_constraints",
+          "tableTo": "members",
+          "columnsFrom": [
+            "updated_by_member_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "itinerary_item_participant_overrides": {
+      "name": "itinerary_item_participant_overrides",
+      "columns": {
+        "itinerary_item_id": {
+          "name": "itinerary_item_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "member_id": {
+          "name": "member_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "participation": {
+          "name": "participation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_itinerary_overrides_member": {
+          "name": "idx_itinerary_overrides_member",
+          "columns": [
+            "member_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "itinerary_item_participant_overrides_itinerary_item_id_itinerary_items_id_fk": {
+          "name": "itinerary_item_participant_overrides_itinerary_item_id_itinerary_items_id_fk",
+          "tableFrom": "itinerary_item_participant_overrides",
+          "tableTo": "itinerary_items",
+          "columnsFrom": [
+            "itinerary_item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "itinerary_item_participant_overrides_member_id_members_id_fk": {
+          "name": "itinerary_item_participant_overrides_member_id_members_id_fk",
+          "tableFrom": "itinerary_item_participant_overrides",
+          "tableTo": "members",
+          "columnsFrom": [
+            "member_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "itinerary_item_participant_overrides_itinerary_item_id_member_id_pk": {
+          "columns": [
+            "itinerary_item_id",
+            "member_id"
+          ],
+          "name": "itinerary_item_participant_overrides_itinerary_item_id_member_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "itinerary_items": {
+      "name": "itinerary_items",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "trip_id": {
+          "name": "trip_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "day_id": {
+          "name": "day_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "stage_id": {
+          "name": "stage_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "recommendation_id": {
+          "name": "recommendation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "place_id": {
+          "name": "place_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "origin_place_id": {
+          "name": "origin_place_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "destination_place_id": {
+          "name": "destination_place_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "item_type": {
+          "name": "item_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "start_time_local": {
+          "name": "start_time_local",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "duration_minutes": {
+          "name": "duration_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "locked_at": {
+          "name": "locked_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_by_member_id": {
+          "name": "created_by_member_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updated_by_member_id": {
+          "name": "updated_by_member_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_itinerary_items_day_order": {
+          "name": "idx_itinerary_items_day_order",
+          "columns": [
+            "day_id",
+            "sort_order"
+          ],
+          "isUnique": true
+        },
+        "idx_itinerary_items_trip_day": {
+          "name": "idx_itinerary_items_trip_day",
+          "columns": [
+            "trip_id",
+            "day_id"
+          ],
+          "isUnique": false
+        },
+        "idx_itinerary_items_recommendation": {
+          "name": "idx_itinerary_items_recommendation",
+          "columns": [
+            "recommendation_id"
+          ],
+          "isUnique": false
+        },
+        "idx_itinerary_items_place": {
+          "name": "idx_itinerary_items_place",
+          "columns": [
+            "place_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "itinerary_items_trip_id_trips_id_fk": {
+          "name": "itinerary_items_trip_id_trips_id_fk",
+          "tableFrom": "itinerary_items",
+          "tableTo": "trips",
+          "columnsFrom": [
+            "trip_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "itinerary_items_day_id_days_id_fk": {
+          "name": "itinerary_items_day_id_days_id_fk",
+          "tableFrom": "itinerary_items",
+          "tableTo": "days",
+          "columnsFrom": [
+            "day_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "itinerary_items_stage_id_trip_stages_id_fk": {
+          "name": "itinerary_items_stage_id_trip_stages_id_fk",
+          "tableFrom": "itinerary_items",
+          "tableTo": "trip_stages",
+          "columnsFrom": [
+            "stage_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "itinerary_items_recommendation_id_recommendations_id_fk": {
+          "name": "itinerary_items_recommendation_id_recommendations_id_fk",
+          "tableFrom": "itinerary_items",
+          "tableTo": "recommendations",
+          "columnsFrom": [
+            "recommendation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "itinerary_items_place_id_places_id_fk": {
+          "name": "itinerary_items_place_id_places_id_fk",
+          "tableFrom": "itinerary_items",
+          "tableTo": "places",
+          "columnsFrom": [
+            "place_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "itinerary_items_origin_place_id_places_id_fk": {
+          "name": "itinerary_items_origin_place_id_places_id_fk",
+          "tableFrom": "itinerary_items",
+          "tableTo": "places",
+          "columnsFrom": [
+            "origin_place_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "itinerary_items_destination_place_id_places_id_fk": {
+          "name": "itinerary_items_destination_place_id_places_id_fk",
+          "tableFrom": "itinerary_items",
+          "tableTo": "places",
+          "columnsFrom": [
+            "destination_place_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "itinerary_items_created_by_member_id_members_id_fk": {
+          "name": "itinerary_items_created_by_member_id_members_id_fk",
+          "tableFrom": "itinerary_items",
+          "tableTo": "members",
+          "columnsFrom": [
+            "created_by_member_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "itinerary_items_updated_by_member_id_members_id_fk": {
+          "name": "itinerary_items_updated_by_member_id_members_id_fk",
+          "tableFrom": "itinerary_items",
+          "tableTo": "members",
+          "columnsFrom": [
+            "updated_by_member_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "member_presence_windows": {
+      "name": "member_presence_windows",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "trip_id": {
+          "name": "trip_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "member_id": {
+          "name": "member_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "stage_id": {
+          "name": "stage_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "starts_at": {
+          "name": "starts_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ends_at": {
+          "name": "ends_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "timezone": {
+          "name": "timezone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_by_member_id": {
+          "name": "created_by_member_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updated_by_member_id": {
+          "name": "updated_by_member_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_presence_trip_member_start": {
+          "name": "idx_presence_trip_member_start",
+          "columns": [
+            "trip_id",
+            "member_id",
+            "starts_at"
+          ],
+          "isUnique": false
+        },
+        "idx_presence_trip_stage_start": {
+          "name": "idx_presence_trip_stage_start",
+          "columns": [
+            "trip_id",
+            "stage_id",
+            "starts_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "member_presence_windows_trip_id_trips_id_fk": {
+          "name": "member_presence_windows_trip_id_trips_id_fk",
+          "tableFrom": "member_presence_windows",
+          "tableTo": "trips",
+          "columnsFrom": [
+            "trip_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "member_presence_windows_member_id_members_id_fk": {
+          "name": "member_presence_windows_member_id_members_id_fk",
+          "tableFrom": "member_presence_windows",
+          "tableTo": "members",
+          "columnsFrom": [
+            "member_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "member_presence_windows_stage_id_trip_stages_id_fk": {
+          "name": "member_presence_windows_stage_id_trip_stages_id_fk",
+          "tableFrom": "member_presence_windows",
+          "tableTo": "trip_stages",
+          "columnsFrom": [
+            "stage_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "member_presence_windows_created_by_member_id_members_id_fk": {
+          "name": "member_presence_windows_created_by_member_id_members_id_fk",
+          "tableFrom": "member_presence_windows",
+          "tableTo": "members",
+          "columnsFrom": [
+            "created_by_member_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "member_presence_windows_updated_by_member_id_members_id_fk": {
+          "name": "member_presence_windows_updated_by_member_id_members_id_fk",
+          "tableFrom": "member_presence_windows",
+          "tableTo": "members",
+          "columnsFrom": [
+            "updated_by_member_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "members": {
+      "name": "members",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "avatar": {
+          "name": "avatar",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "active": {
+          "name": "active",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_members_name": {
+          "name": "idx_members_name",
+          "columns": [
+            "name"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "places": {
+      "name": "places",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "city_id": {
+          "name": "city_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "address": {
+          "name": "address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "latitude": {
+          "name": "latitude",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "longitude": {
+          "name": "longitude",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "coordinate_system": {
+          "name": "coordinate_system",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": "'manual'"
+        },
+        "provider_place_id": {
+          "name": "provider_place_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "adcode": {
+          "name": "adcode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "city_code": {
+          "name": "city_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "district": {
+          "name": "district",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "type_code": {
+          "name": "type_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "provider_updated_at": {
+          "name": "provider_updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_by_member_id": {
+          "name": "created_by_member_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updated_by_member_id": {
+          "name": "updated_by_member_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_places_city_name": {
+          "name": "idx_places_city_name",
+          "columns": [
+            "city_id",
+            "name"
+          ],
+          "isUnique": false
+        },
+        "idx_places_city_created": {
+          "name": "idx_places_city_created",
+          "columns": [
+            "city_id",
+            "created_at"
+          ],
+          "isUnique": false
+        },
+        "idx_places_provider_id": {
+          "name": "idx_places_provider_id",
+          "columns": [
+            "provider",
+            "provider_place_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "places_city_id_cities_id_fk": {
+          "name": "places_city_id_cities_id_fk",
+          "tableFrom": "places",
+          "tableTo": "cities",
+          "columnsFrom": [
+            "city_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "places_created_by_member_id_members_id_fk": {
+          "name": "places_created_by_member_id_members_id_fk",
+          "tableFrom": "places",
+          "tableTo": "members",
+          "columnsFrom": [
+            "created_by_member_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "places_updated_by_member_id_members_id_fk": {
+          "name": "places_updated_by_member_id_members_id_fk",
+          "tableFrom": "places",
+          "tableTo": "members",
+          "columnsFrom": [
+            "updated_by_member_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "recommendation_member_states": {
+      "name": "recommendation_member_states",
+      "columns": {
+        "recommendation_id": {
+          "name": "recommendation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "member_id": {
+          "name": "member_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "is_favorite": {
+          "name": "is_favorite",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_rec_member_states_member": {
+          "name": "idx_rec_member_states_member",
+          "columns": [
+            "member_id",
+            "is_favorite"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "recommendation_member_states_recommendation_id_recommendations_id_fk": {
+          "name": "recommendation_member_states_recommendation_id_recommendations_id_fk",
+          "tableFrom": "recommendation_member_states",
+          "tableTo": "recommendations",
+          "columnsFrom": [
+            "recommendation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "recommendation_member_states_member_id_members_id_fk": {
+          "name": "recommendation_member_states_member_id_members_id_fk",
+          "tableFrom": "recommendation_member_states",
+          "tableTo": "members",
+          "columnsFrom": [
+            "member_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "recommendation_member_states_recommendation_id_member_id_pk": {
+          "columns": [
+            "recommendation_id",
+            "member_id"
+          ],
+          "name": "recommendation_member_states_recommendation_id_member_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "recommendation_place_options": {
+      "name": "recommendation_place_options",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recommendation_id": {
+          "name": "recommendation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "place_id": {
+          "name": "place_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "relation_type": {
+          "name": "relation_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "option_group_key": {
+          "name": "option_group_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "is_primary": {
+          "name": "is_primary",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_rec_place_options_relation": {
+          "name": "idx_rec_place_options_relation",
+          "columns": [
+            "recommendation_id",
+            "place_id",
+            "relation_type"
+          ],
+          "isUnique": true
+        },
+        "idx_rec_place_options_order": {
+          "name": "idx_rec_place_options_order",
+          "columns": [
+            "recommendation_id",
+            "relation_type",
+            "option_group_key",
+            "sort_order"
+          ],
+          "isUnique": false
+        },
+        "idx_rec_place_options_place": {
+          "name": "idx_rec_place_options_place",
+          "columns": [
+            "place_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "recommendation_place_options_recommendation_id_recommendations_id_fk": {
+          "name": "recommendation_place_options_recommendation_id_recommendations_id_fk",
+          "tableFrom": "recommendation_place_options",
+          "tableTo": "recommendations",
+          "columnsFrom": [
+            "recommendation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "recommendation_place_options_place_id_places_id_fk": {
+          "name": "recommendation_place_options_place_id_places_id_fk",
+          "tableFrom": "recommendation_place_options",
+          "tableTo": "places",
+          "columnsFrom": [
+            "place_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "recommendations": {
+      "name": "recommendations",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "trip_id": {
+          "name": "trip_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "summary": {
+          "name": "summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "area_label": {
+          "name": "area_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "area_key": {
+          "name": "area_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "is_core": {
+          "name": "is_core",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "estimated_duration_minutes": {
+          "name": "estimated_duration_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "estimated_cost_minor": {
+          "name": "estimated_cost_minor",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "cost_basis": {
+          "name": "cost_basis",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "source_label": {
+          "name": "source_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "source_url": {
+          "name": "source_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "cover_image_url": {
+          "name": "cover_image_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_by_member_id": {
+          "name": "created_by_member_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updated_by_member_id": {
+          "name": "updated_by_member_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_recommendations_trip_category": {
+          "name": "idx_recommendations_trip_category",
+          "columns": [
+            "trip_id",
+            "deleted_at",
+            "category"
+          ],
+          "isUnique": false
+        },
+        "idx_recommendations_trip_area_core": {
+          "name": "idx_recommendations_trip_area_core",
+          "columns": [
+            "trip_id",
+            "area_key",
+            "is_core"
+          ],
+          "isUnique": false
+        },
+        "idx_recommendations_trip_created": {
+          "name": "idx_recommendations_trip_created",
+          "columns": [
+            "trip_id",
+            "created_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "recommendations_trip_id_trips_id_fk": {
+          "name": "recommendations_trip_id_trips_id_fk",
+          "tableFrom": "recommendations",
+          "tableTo": "trips",
+          "columnsFrom": [
+            "trip_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "recommendations_created_by_member_id_members_id_fk": {
+          "name": "recommendations_created_by_member_id_members_id_fk",
+          "tableFrom": "recommendations",
+          "tableTo": "members",
+          "columnsFrom": [
+            "created_by_member_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "recommendations_updated_by_member_id_members_id_fk": {
+          "name": "recommendations_updated_by_member_id_members_id_fk",
+          "tableFrom": "recommendations",
+          "tableTo": "members",
+          "columnsFrom": [
+            "updated_by_member_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "trip_cities": {
+      "name": "trip_cities",
+      "columns": {
+        "trip_id": {
+          "name": "trip_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "city_id": {
+          "name": "city_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        }
+      },
+      "indexes": {
+        "idx_trip_cities_trip_position": {
+          "name": "idx_trip_cities_trip_position",
+          "columns": [
+            "trip_id",
+            "position"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "trip_cities_trip_id_trips_id_fk": {
+          "name": "trip_cities_trip_id_trips_id_fk",
+          "tableFrom": "trip_cities",
+          "tableTo": "trips",
+          "columnsFrom": [
+            "trip_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "trip_cities_city_id_cities_id_fk": {
+          "name": "trip_cities_city_id_cities_id_fk",
+          "tableFrom": "trip_cities",
+          "tableTo": "cities",
+          "columnsFrom": [
+            "city_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "trip_cities_trip_id_city_id_pk": {
+          "columns": [
+            "trip_id",
+            "city_id"
+          ],
+          "name": "trip_cities_trip_id_city_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "trip_members": {
+      "name": "trip_members",
+      "columns": {
+        "trip_id": {
+          "name": "trip_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "member_id": {
+          "name": "member_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "presence_coverage": {
+          "name": "presence_coverage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'unknown'"
+        }
+      },
+      "indexes": {
+        "idx_trip_members_member": {
+          "name": "idx_trip_members_member",
+          "columns": [
+            "member_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "trip_members_trip_id_trips_id_fk": {
+          "name": "trip_members_trip_id_trips_id_fk",
+          "tableFrom": "trip_members",
+          "tableTo": "trips",
+          "columnsFrom": [
+            "trip_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "trip_members_member_id_members_id_fk": {
+          "name": "trip_members_member_id_members_id_fk",
+          "tableFrom": "trip_members",
+          "tableTo": "members",
+          "columnsFrom": [
+            "member_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "trip_members_trip_id_member_id_pk": {
+          "columns": [
+            "trip_id",
+            "member_id"
+          ],
+          "name": "trip_members_trip_id_member_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "trip_places": {
+      "name": "trip_places",
+      "columns": {
+        "trip_id": {
+          "name": "trip_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "place_id": {
+          "name": "place_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "plan_status": {
+          "name": "plan_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'candidate'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_trip_places_place": {
+          "name": "idx_trip_places_place",
+          "columns": [
+            "place_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "trip_places_trip_id_trips_id_fk": {
+          "name": "trip_places_trip_id_trips_id_fk",
+          "tableFrom": "trip_places",
+          "tableTo": "trips",
+          "columnsFrom": [
+            "trip_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "trip_places_place_id_places_id_fk": {
+          "name": "trip_places_place_id_places_id_fk",
+          "tableFrom": "trip_places",
+          "tableTo": "places",
+          "columnsFrom": [
+            "place_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "trip_places_trip_id_place_id_pk": {
+          "columns": [
+            "trip_id",
+            "place_id"
+          ],
+          "name": "trip_places_trip_id_place_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "trips": {
+      "name": "trips",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "start_date": {
+          "name": "start_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "end_date": {
+          "name": "end_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "people": {
+          "name": "people",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "cover": {
+          "name": "cover",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "timezone": {
+          "name": "timezone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "protected": {
+          "name": "protected",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "created_by_member_id": {
+          "name": "created_by_member_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updated_by_member_id": {
+          "name": "updated_by_member_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_trips_slug": {
+          "name": "idx_trips_slug",
+          "columns": [
+            "slug"
+          ],
+          "isUnique": true
+        },
+        "idx_trips_status_created": {
+          "name": "idx_trips_status_created",
+          "columns": [
+            "status",
+            "created_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "trips_created_by_member_id_members_id_fk": {
+          "name": "trips_created_by_member_id_members_id_fk",
+          "tableFrom": "trips",
+          "tableTo": "members",
+          "columnsFrom": [
+            "created_by_member_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "trips_updated_by_member_id_members_id_fk": {
+          "name": "trips_updated_by_member_id_members_id_fk",
+          "tableFrom": "trips",
+          "tableTo": "members",
+          "columnsFrom": [
+            "updated_by_member_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "trip_stage_members": {
+      "name": "trip_stage_members",
+      "columns": {
+        "stage_id": {
+          "name": "stage_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "member_id": {
+          "name": "member_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_trip_stage_members_member": {
+          "name": "idx_trip_stage_members_member",
+          "columns": [
+            "member_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "trip_stage_members_stage_id_trip_stages_id_fk": {
+          "name": "trip_stage_members_stage_id_trip_stages_id_fk",
+          "tableFrom": "trip_stage_members",
+          "tableTo": "trip_stages",
+          "columnsFrom": [
+            "stage_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "trip_stage_members_member_id_members_id_fk": {
+          "name": "trip_stage_members_member_id_members_id_fk",
+          "tableFrom": "trip_stage_members",
+          "tableTo": "members",
+          "columnsFrom": [
+            "member_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "trip_stage_members_stage_id_member_id_pk": {
+          "columns": [
+            "stage_id",
+            "member_id"
+          ],
+          "name": "trip_stage_members_stage_id_member_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "trip_stages": {
+      "name": "trip_stages",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "trip_id": {
+          "name": "trip_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "city_id": {
+          "name": "city_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_trip_stages_trip_order": {
+          "name": "idx_trip_stages_trip_order",
+          "columns": [
+            "trip_id",
+            "sort_order"
+          ],
+          "isUnique": true
+        },
+        "idx_trip_stages_trip": {
+          "name": "idx_trip_stages_trip",
+          "columns": [
+            "trip_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "trip_stages_trip_id_trips_id_fk": {
+          "name": "trip_stages_trip_id_trips_id_fk",
+          "tableFrom": "trip_stages",
+          "tableTo": "trips",
+          "columnsFrom": [
+            "trip_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "trip_stages_city_id_cities_id_fk": {
+          "name": "trip_stages_city_id_cities_id_fk",
+          "tableFrom": "trip_stages",
+          "tableTo": "cities",
+          "columnsFrom": [
+            "city_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

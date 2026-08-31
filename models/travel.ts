@@ -59,6 +59,7 @@ export type Day = {
   tripId: string;
   date: string | null;
   title: string;
+  updatedAt?: string | null;
   placeIds: string[];
   places?: DayPlace[];
 };
@@ -91,6 +92,7 @@ export type Trip = {
   endDate: string | null;
   people: number;
   cover: string | null;
+  timezone?: string | null;
   cities: City[];
   days: Day[];
   expenses: Expense[];

@@ -1,5 +1,5 @@
 import { drizzle } from "drizzle-orm/d1";
-import * as schema from "./schema";
+import * as schema from "./schema.ts";
 
 const testGlobal = globalThis as typeof globalThis & { __TRIP_TEST_D1__?: D1Database; __TRIP_TEST_ENV__?: Record<string, string> };
 const runtimeEnv = testGlobal.__TRIP_TEST_D1__ ? { DB: testGlobal.__TRIP_TEST_D1__, ...testGlobal.__TRIP_TEST_ENV__ } : (await import("cloudflare:workers")).env;

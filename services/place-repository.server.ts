@@ -1,6 +1,6 @@
-import { and, asc, eq, inArray, max } from "drizzle-orm";
+import { and, asc, eq, inArray, max, or } from "drizzle-orm";
 import { getDb } from "@/db";
-import { cityRecords, dayPlaceRecords, dayRecords, placeRecords, tripCityRecords, tripPlaceRecords, tripRecords, tripStageRecords } from "@/db/schema";
+import { bookingRecords, cityRecords, dayPlaceRecords, dayRecords, itineraryItemRecords, placeRecords, recommendationPlaceOptionRecords, tripCityRecords, tripPlaceRecords, tripRecords, tripStageRecords } from "@/db/schema";
 import { getAmapPoi } from "@/services/amap/amap-web-service.server";
 import type { TripPlaceStatus } from "@/models/travel";
 
@@ -123,4 +123,18 @@ export async function updateManualPlace(placeId: string, input: { name: string; 
   if (duplicate.some((item) => item.id !== placeId)) throw new Error("PLACE_DUPLICATE");
   await db.update(placeRecords).set({ name: input.name, cityId: input.cityId, address: input.address, updatedByMemberId: actorMemberId, updatedAt: new Date().toISOString() }).where(eq(placeRecords.id, placeId));
   return (await db.select().from(placeRecords).where(eq(placeRecords.id, placeId)).limit(1))[0];
+}
+
+export async function deletePlaceSafely(placeId: string) {
+  const db = getDb();
+  const [recommendationUse, itineraryUse, bookingUse, legacyDayUse, legacyTripUse] = await Promise.all([
+    db.select({ id: recommendationPlaceOptionRecords.id }).from(recommendationPlaceOptionRecords).where(eq(recommendationPlaceOptionRecords.placeId, placeId)).limit(1),
+    db.select({ id: itineraryItemRecords.id }).from(itineraryItemRecords).where(or(eq(itineraryItemRecords.placeId, placeId), eq(itineraryItemRecords.originPlaceId, placeId), eq(itineraryItemRecords.destinationPlaceId, placeId))).limit(1),
+    db.select({ id: bookingRecords.id }).from(bookingRecords).where(or(eq(bookingRecords.placeId, placeId), eq(bookingRecords.originPlaceId, placeId), eq(bookingRecords.destinationPlaceId, placeId))).limit(1),
+    db.select({ id: dayPlaceRecords.dayId }).from(dayPlaceRecords).where(eq(dayPlaceRecords.placeId, placeId)).limit(1),
+    db.select({ id: tripPlaceRecords.tripId }).from(tripPlaceRecords).where(eq(tripPlaceRecords.placeId, placeId)).limit(1),
+  ]);
+  if (recommendationUse.length || itineraryUse.length || bookingUse.length || legacyDayUse.length || legacyTripUse.length) throw new Error("PLACE_STILL_REFERENCED");
+  const deleted = await db.delete(placeRecords).where(eq(placeRecords.id, placeId)).returning({ id: placeRecords.id });
+  return deleted.length > 0;
 }

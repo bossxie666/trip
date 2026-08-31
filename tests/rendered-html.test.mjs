@@ -15,13 +15,13 @@ class TestD1Statement {
 class TestD1Database {
   constructor() { this.database = new DatabaseSync(":memory:"); this.database.exec("PRAGMA foreign_keys = ON"); }
   prepare(sql) { return new TestD1Statement(this.database, sql); }
-  async batch(statements) { const results = []; for (const statement of statements) results.push(await statement.all()); return results; }
+  async batch(statements) { this.database.exec("BEGIN IMMEDIATE"); try { const results = []; for (const statement of statements) results.push(await statement.all()); this.database.exec("COMMIT"); return results; } catch (error) { this.database.exec("ROLLBACK"); throw error; } }
 }
 
 const DB = new TestD1Database();
 globalThis.__TRIP_TEST_D1__ = DB;
 globalThis.__TRIP_TEST_ENV__ = { TRIP_SPACE_INVITE_CODE: "test-invite", TRIP_SPACE_SESSION_SECRET: "test-session-secret-at-least-32-characters", AMAP_JS_API_KEY: "test-js-key", AMAP_JS_SECURITY_CODE: "test-js-code", AMAP_WEB_SERVICE_KEY: "test-web-key" };
-for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
+for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
 
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {

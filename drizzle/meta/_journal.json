@@ -36,6 +36,20 @@
       "when": 1788179265756,
       "tag": "0004_clean_starfox",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1788196940732,
+      "tag": "0005_omniscient_la_nuit",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1788198322871,
+      "tag": "0006_right_queen_noir",
+      "breakpoints": true
     }
   ]
 }

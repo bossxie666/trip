@@ -45,6 +45,7 @@ function generateDays(tripId: string, startDate: string | null, endDate: string 
       tripId,
       date: cursor.toISOString().slice(0, 10),
       title: `Day ${number}`,
+      updatedAt: null,
       placeIds: [],
     });
     cursor = new Date(cursor.getTime() + 86_400_000);
@@ -115,6 +116,7 @@ async function hydrateTrips(rows: (typeof tripRecords.$inferSelect)[]): Promise<
       tripId: day.tripId,
       date: day.date,
       title: day.title,
+      updatedAt: day.updatedAt,
       placeIds: dayPlaceLinks.filter((link) => link.dayId === day.id).map((link) => link.placeId),
     })),
     expenses: [],
@@ -200,6 +202,7 @@ export async function createTrip(input: CreateTripInput, actorMemberId: string) 
       dayNumber: index + 1,
       date: day.date,
       title: day.title,
+      updatedAt: now,
     })));
   }
 
@@ -222,8 +225,8 @@ async function replaceCitiesAndDays(tripId: string, input: UpdateTripInput) {
   const existingDays = await db.select().from(dayRecords).where(eq(dayRecords.tripId, tripId)).orderBy(asc(dayRecords.dayNumber));
   for (const [index, day] of days.entries()) {
     const existing = existingDays[index];
-    if (existing) await db.update(dayRecords).set({ dayNumber: index + 1, date: day.date, title: day.title }).where(eq(dayRecords.id, existing.id));
-    else await db.insert(dayRecords).values({ id: day.id, tripId, dayNumber: index + 1, date: day.date, title: day.title });
+    if (existing) await db.update(dayRecords).set({ dayNumber: index + 1, date: day.date, title: day.title, updatedAt: now }).where(eq(dayRecords.id, existing.id));
+    else await db.insert(dayRecords).values({ id: day.id, tripId, dayNumber: index + 1, date: day.date, title: day.title, updatedAt: now });
   }
   for (const removed of existingDays.slice(days.length)) await db.delete(dayRecords).where(eq(dayRecords.id, removed.id));
 }
