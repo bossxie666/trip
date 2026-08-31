@@ -50,6 +50,13 @@
       "when": 1788198322871,
       "tag": "0006_right_queen_noir",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1788220800000,
+      "tag": "0007_shanghai_hangzhou_real_trip",
+      "breakpoints": true
     }
   ]
 }
