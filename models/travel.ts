@@ -1,5 +1,14 @@
 export type TripStatus = "inspiration" | "planning" | "completed";
 
+export type Member = {
+  id: string;
+  name: string;
+  displayName: string;
+  avatar: string | null;
+  active: boolean;
+  createdAt: string;
+};
+
 export type City = {
   id: string;
   slug: string;
@@ -60,4 +69,7 @@ export type Trip = {
   createdAt: string;
   updatedAt: string;
   protected?: boolean;
+  members?: Member[];
+  createdByMemberId?: string | null;
+  updatedByMemberId?: string | null;
 };

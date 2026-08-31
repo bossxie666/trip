@@ -5,6 +5,7 @@ import { findTripBySlug } from "@/services/trip-repository.server";
 import { TripDetailPage } from "@/components/trip/TripDetailPage";
 import ShanghaiHangzhouTripDetail from "@/components/trip/ShanghaiHangzhouTripDetail";
 import { GenericTripDetail } from "@/components/trip/GenericTripDetail";
+import { listActiveMembers } from "@/services/member-repository.server";
 
 export function generateStaticParams() {
   return getAllTrips().map((trip) => ({ slug: trip.slug }));
@@ -22,10 +23,11 @@ export default async function TripDetailRoute({ params }: { params: Promise<{ sl
   const { slug } = await params;
   const trip = await findTripBySlug(slug);
   if (!trip) notFound();
+  const members = slug === protectedTripSlug ? [] : await listActiveMembers();
 
   return (
     <TripDetailPage trip={trip}>
-      {slug === protectedTripSlug ? <ShanghaiHangzhouTripDetail /> : <GenericTripDetail trip={trip} />}
+      {slug === protectedTripSlug ? <ShanghaiHangzhouTripDetail /> : <GenericTripDetail trip={trip} members={members} />}
     </TripDetailPage>
   );
 }

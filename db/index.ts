@@ -1,8 +1,15 @@
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./schema";
 
-const injectedBinding = (globalThis as typeof globalThis & { __TRIP_TEST_D1__?: D1Database }).__TRIP_TEST_D1__;
-const runtimeEnv = injectedBinding ? { DB: injectedBinding } : (await import("cloudflare:workers")).env;
+const testGlobal = globalThis as typeof globalThis & { __TRIP_TEST_D1__?: D1Database; __TRIP_TEST_ENV__?: Record<string, string> };
+const runtimeEnv = testGlobal.__TRIP_TEST_D1__ ? { DB: testGlobal.__TRIP_TEST_D1__, ...testGlobal.__TRIP_TEST_ENV__ } : (await import("cloudflare:workers")).env;
+
+export function getRuntimeEnv() {
+  return runtimeEnv as typeof runtimeEnv & {
+    TRIP_SPACE_INVITE_CODE?: string;
+    TRIP_SPACE_SESSION_SECRET?: string;
+  };
+}
 
 export function getDb() {
   if (!runtimeEnv.DB) {

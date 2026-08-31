@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Trip } from "@/models/travel";
+import { EditTripForm } from "@/components/trip/EditTripForm";
 
 const statusLabels = { inspiration: "灵感", planning: "待出行", completed: "已出行" };
 
@@ -7,7 +8,7 @@ function tripDates(trip: Trip) {
   return trip.startDate && trip.endDate ? `${trip.startDate} — ${trip.endDate}` : "日期未定";
 }
 
-export function GenericTripDetail({ trip }: { trip: Trip }) {
+export function GenericTripDetail({ trip, members }: { trip: Trip; members: { id: string; displayName: string }[] }) {
   return (
     <main className="generic-trip-detail">
       <nav><Link href="/trips">返回攻略中心</Link></nav>
@@ -21,6 +22,7 @@ export function GenericTripDetail({ trip }: { trip: Trip }) {
       <section><h2>地图</h2><p>地图位置已预留，本阶段不接入地图服务。</p></section>
       <section><h2>预算</h2><p>还没有预算记录。</p></section>
       <section><h2>Checklist</h2><p>还没有待办事项。</p></section>
+      <EditTripForm trip={trip} members={members} />
     </main>
   );
 }

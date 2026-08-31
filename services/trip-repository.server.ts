@@ -1,6 +1,6 @@
 import { asc, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
-import { cityRecords, dayRecords, tripCityRecords, tripRecords } from "@/db/schema";
+import { cityRecords, dayRecords, memberRecords, tripCityRecords, tripMemberRecords, tripRecords } from "@/db/schema";
 import { getTripBySlug as getSeedTripBySlug, trips as seedTrips } from "@/data/trips";
 import type { Day, Trip, TripStatus } from "@/models/travel";
 
@@ -12,7 +12,10 @@ export type CreateTripInput = {
   endDate: string | null;
   people: number;
   cover: string | null;
+  memberIds: string[];
 };
+
+export type UpdateTripInput = Omit<CreateTripInput, "status"> & { status: TripStatus };
 
 function normalizeCityNames(names: string[]) {
   return [...new Set(names.map((name) => name.trim()).filter(Boolean))];
@@ -64,6 +67,8 @@ async function hydrateTrips(rows: (typeof tripRecords.$inferSelect)[]): Promise<
     .from(dayRecords)
     .where(inArray(dayRecords.tripId, tripIds))
     .orderBy(asc(dayRecords.dayNumber));
+  const memberLinks = await db.select({ tripId: tripMemberRecords.tripId, id: memberRecords.id, name: memberRecords.name, displayName: memberRecords.displayName, avatar: memberRecords.avatar, active: memberRecords.active, createdAt: memberRecords.createdAt })
+    .from(tripMemberRecords).innerJoin(memberRecords, eq(tripMemberRecords.memberId, memberRecords.id)).where(inArray(tripMemberRecords.tripId, tripIds));
 
   return rows.map((row) => ({
     ...row,
@@ -78,6 +83,10 @@ async function hydrateTrips(rows: (typeof tripRecords.$inferSelect)[]): Promise<
     })),
     expenses: [],
     photos: [],
+    protected: Boolean(row.protected),
+    createdByMemberId: row.createdByMemberId,
+    updatedByMemberId: row.updatedByMemberId,
+    members: memberLinks.filter((link) => link.tripId === row.id).map((member) => ({ id: member.id, name: member.name, displayName: member.displayName, avatar: member.avatar, active: Boolean(member.active), createdAt: member.createdAt })),
   }));
 }
 
@@ -115,7 +124,7 @@ async function uniqueSlug(base: string) {
   throw new Error("无法生成唯一行程地址，请稍后重试。");
 }
 
-export async function createTrip(input: CreateTripInput) {
+export async function createTrip(input: CreateTripInput, actorMemberId: string) {
   const db = getDb();
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -134,6 +143,8 @@ export async function createTrip(input: CreateTripInput) {
     cover: input.cover,
     createdAt: now,
     updatedAt: now,
+    createdByMemberId: actorMemberId,
+    updatedByMemberId: actorMemberId,
   });
 
   for (const [position, name] of cityNames.entries()) {
@@ -156,5 +167,44 @@ export async function createTrip(input: CreateTripInput) {
     })));
   }
 
+  const memberIds = [...new Set([...input.memberIds, actorMemberId])];
+  if (memberIds.length) await db.insert(tripMemberRecords).values(memberIds.map((memberId) => ({ tripId: id, memberId })));
+
   return (await findTripBySlug(slug))!;
+}
+
+async function replaceCitiesAndDays(tripId: string, input: UpdateTripInput) {
+  const db = getDb();
+  const now = new Date().toISOString();
+  await db.delete(tripCityRecords).where(eq(tripCityRecords.tripId, tripId));
+  for (const [position, name] of normalizeCityNames(input.cities).entries()) {
+    let city = (await db.select().from(cityRecords).where(eq(cityRecords.name, name)).limit(1))[0];
+    if (!city) { const id = crypto.randomUUID(); city = { id, slug: `city-${id.slice(0, 8)}`, name, createdAt: now }; await db.insert(cityRecords).values(city); }
+    await db.insert(tripCityRecords).values({ tripId, cityId: city.id, position });
+  }
+  await db.delete(dayRecords).where(eq(dayRecords.tripId, tripId));
+  const days = generateDays(tripId, input.startDate, input.endDate);
+  if (days.length) await db.insert(dayRecords).values(days.map((day, index) => ({ id: day.id, tripId, dayNumber: index + 1, date: day.date, title: day.title })));
+}
+
+export async function updateTrip(slug: string, input: UpdateTripInput, actorMemberId: string) {
+  if (getSeedTripBySlug(slug)) throw new Error("PROTECTED_TRIP");
+  const db = getDb();
+  const row = (await db.select().from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1))[0];
+  if (!row) return null;
+  await db.update(tripRecords).set({ title: input.title, status: input.status, startDate: input.startDate, endDate: input.endDate, people: input.people, cover: input.cover, updatedAt: new Date().toISOString(), updatedByMemberId: actorMemberId }).where(eq(tripRecords.id, row.id));
+  await replaceCitiesAndDays(row.id, input);
+  await db.delete(tripMemberRecords).where(eq(tripMemberRecords.tripId, row.id));
+  const memberIds = [...new Set([...input.memberIds, actorMemberId])];
+  if (memberIds.length) await db.insert(tripMemberRecords).values(memberIds.map((memberId) => ({ tripId: row.id, memberId })));
+  return findTripBySlug(slug);
+}
+
+export async function deleteTrip(slug: string) {
+  if (getSeedTripBySlug(slug)) throw new Error("PROTECTED_TRIP");
+  const db = getDb();
+  const row = (await db.select().from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1))[0];
+  if (!row) return false;
+  await db.delete(tripRecords).where(eq(tripRecords.id, row.id));
+  return true;
 }

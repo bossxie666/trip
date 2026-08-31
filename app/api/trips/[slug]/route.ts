@@ -1,0 +1,26 @@
+import { getCurrentMember } from "@/services/auth.server";
+import { deleteTrip, updateTrip, type UpdateTripInput } from "@/services/trip-repository.server";
+import type { TripStatus } from "@/models/travel";
+
+const statuses = new Set<TripStatus>(["inspiration", "planning", "completed"]);
+export async function PUT(request: Request, { params }: { params: Promise<{ slug: string }> }) {
+  try {
+    const actor = await getCurrentMember();
+    if (!actor) return Response.json({ error: "请先验证旅行成员身份。" }, { status: 401 });
+    const body = await request.json() as Partial<UpdateTripInput> & { undated?: boolean };
+    const title = body.title?.trim() || "", status = body.status || "planning";
+    const cities = Array.isArray(body.cities) ? body.cities.map(String).map((city) => city.trim()).filter(Boolean) : [];
+    const startDate = body.undated ? null : body.startDate || null, endDate = body.undated ? null : body.endDate || null;
+    if (!title || !statuses.has(status) || !cities.length) return Response.json({ error: "请完整填写行程名称、状态和城市。" }, { status: 400 });
+    if ((startDate && !endDate) || (!startDate && endDate) || (startDate && endDate && endDate < startDate)) return Response.json({ error: "请检查行程日期。" }, { status: 400 });
+    const trip = await updateTrip((await params).slug, { title, status, cities, startDate, endDate, people: Math.max(1, Math.floor(Number(body.people) || 1)), cover: body.cover?.trim() || null, memberIds: Array.isArray(body.memberIds) ? body.memberIds.map(String) : [] }, actor.id);
+    return trip ? Response.json({ trip }) : Response.json({ error: "没有找到这条行程。" }, { status: 404 });
+  } catch (error) { const protectedTrip = error instanceof Error && error.message === "PROTECTED_TRIP"; return Response.json({ error: protectedTrip ? "上海 + 杭州是受保护行程，当前阶段不能编辑或删除。" : "保存失败，请重试。" }, { status: protectedTrip ? 403 : 500 }); }
+}
+export async function DELETE(_request: Request, { params }: { params: Promise<{ slug: string }> }) {
+  try {
+    const actor = await getCurrentMember();
+    if (!actor) return Response.json({ error: "请先验证旅行成员身份。" }, { status: 401 });
+    return await deleteTrip((await params).slug) ? Response.json({ ok: true }) : Response.json({ error: "没有找到这条行程。" }, { status: 404 });
+  } catch (error) { const protectedTrip = error instanceof Error && error.message === "PROTECTED_TRIP"; return Response.json({ error: protectedTrip ? "上海 + 杭州是受保护行程，不能删除。" : "删除失败，请重试。" }, { status: protectedTrip ? 403 : 500 }); }
+}

@@ -1,10 +1,13 @@
 /** Cloudflare Worker entry point for the vinext-starter template. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
+import { readCookie, sessionCookieName, verifySessionToken } from "../services/session";
 
 interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
+  TRIP_SPACE_INVITE_CODE: string;
+  TRIP_SPACE_SESSION_SECRET: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -38,6 +41,13 @@ const worker = {
           return result.response();
         },
       }, allowedWidths);
+    }
+
+    const isPublicPath = url.pathname === "/unlock" || url.pathname === "/api/session" || url.pathname.startsWith("/_next/") || /\.[a-z0-9]+$/i.test(url.pathname);
+    if (!isPublicPath) {
+      const memberId = await verifySessionToken(readCookie(request, sessionCookieName), env.TRIP_SPACE_SESSION_SECRET);
+      const member = memberId ? await env.DB.prepare("SELECT active FROM members WHERE id = ? LIMIT 1").bind(memberId).first<{ active: number }>() : null;
+      if (!member?.active) return Response.redirect(new URL("/unlock", request.url), 302);
     }
 
     return handler.fetch(request, env, ctx);

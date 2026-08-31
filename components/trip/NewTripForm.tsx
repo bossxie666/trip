@@ -3,7 +3,8 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
-export function NewTripForm() {
+type MemberOption = { id: string; displayName: string };
+export function NewTripForm({ members, currentMemberId }: { members: MemberOption[]; currentMemberId: string }) {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [status, setStatus] = useState<"inspiration" | "planning">("planning");
@@ -13,6 +14,7 @@ export function NewTripForm() {
   const [endDate, setEndDate] = useState("");
   const [people, setPeople] = useState(1);
   const [cover, setCover] = useState("");
+  const [memberIds, setMemberIds] = useState([currentMemberId]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -28,7 +30,7 @@ export function NewTripForm() {
       const response = await fetch("/api/trips", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title, status, cities, undated, startDate, endDate, people, cover }),
+        body: JSON.stringify({ title, status, cities, undated, startDate, endDate, people, cover, memberIds }),
       });
       const payload = await response.json() as { trip?: { slug: string }; error?: string };
       if (!response.ok || !payload.trip) throw new Error(payload.error || "创建失败，请重试。");
@@ -46,6 +48,7 @@ export function NewTripForm() {
       <fieldset className="city-fields"><legend>目的地 / 城市 *</legend>{cities.map((city, index) => <div key={index}><input required value={city} onChange={(event) => updateCity(index, event.target.value)} placeholder={index ? "继续添加城市" : "例如：大阪"}/>{cities.length > 1 && <button type="button" onClick={() => setCities((current) => current.filter((_, cityIndex) => cityIndex !== index))}>移除</button>}</div>)}<button type="button" onClick={() => setCities((current) => [...current, ""])}>＋ 添加城市</button></fieldset>
       <fieldset><legend>日期</legend><label className="inline-check"><input type="checkbox" checked={undated} onChange={(event) => setUndated(event.target.checked)} />日期未定</label><div className="date-fields"><label><span>开始日期</span><input type="date" required={!undated} disabled={undated} value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label><span>结束日期</span><input type="date" required={!undated} disabled={undated} min={startDate} value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label></div></fieldset>
       <label><span>人数</span><input type="number" min="1" step="1" value={people} onChange={(event) => setPeople(Math.max(1, Number(event.target.value) || 1))} /></label>
+      <fieldset><legend>参与成员</legend>{members.map((member) => <label key={member.id}><input type="checkbox" checked={memberIds.includes(member.id)} onChange={(event) => setMemberIds((current) => event.target.checked ? [...new Set([...current, member.id])] : current.filter((id) => id !== member.id))} />{member.displayName}</label>)}</fieldset>
       <label><span>封面地址（预留，可不填）</span><input value={cover} onChange={(event) => setCover(event.target.value)} placeholder="本阶段不提供照片上传" /></label>
       {error && <p className="form-error" role="alert">{error}</p>}
       <button className="create-trip-button" type="submit" disabled={saving}>{saving ? "正在保存…" : "创建行程"}</button>

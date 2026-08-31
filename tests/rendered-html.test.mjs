@@ -20,19 +20,29 @@ class TestD1Database {
 
 const DB = new TestD1Database();
 globalThis.__TRIP_TEST_D1__ = DB;
-const migration = readFileSync(new URL("../drizzle/0000_strange_unus.sql", import.meta.url), "utf8").replaceAll("--> statement-breakpoint", "");
-DB.database.exec(migration);
+globalThis.__TRIP_TEST_ENV__ = { TRIP_SPACE_INVITE_CODE: "test-invite", TRIP_SPACE_SESSION_SECRET: "test-session-secret-at-least-32-characters" };
+for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
+
+let sessionCookie = "";
 
 async function render(pathname = "/", init = {}) {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}-${Math.random()}`);
   const { default: worker } = await import(workerUrl.href);
   const body = init.body && typeof init.body !== "string" ? JSON.stringify(init.body) : init.body;
-  const headers = { accept: "text/html", ...(body ? { "content-type": "application/json" } : {}), ...init.headers };
+  const headers = { accept: "text/html", ...(body ? { "content-type": "application/json" } : {}), ...(sessionCookie ? { cookie: sessionCookie } : {}), ...init.headers };
   return worker.fetch(new Request(`http://localhost${pathname}`, { ...init, body, headers }), {
-    DB, ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
+    DB, TRIP_SPACE_INVITE_CODE: "test-invite", TRIP_SPACE_SESSION_SECRET: "test-session-secret-at-least-32-characters", ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
   }, { waitUntil() {}, passThroughOnException() {} });
 }
+
+async function login() {
+  const response = await render("/api/session", { method: "POST", body: { memberName: "nini", code: "test-invite" } });
+  assert.equal(response.status, 200);
+  sessionCookie = response.headers.get("set-cookie").split(";")[0];
+}
+
+await login();
 
 async function createTrip(body) {
   const response = await render("/api/trips", { method: "POST", body });
@@ -85,4 +95,15 @@ test("keeps the frozen Shanghai Hangzhou detail unchanged", async () => {
   const html = await response.text();
   assert.match(html, /上海＋杭州/); assert.match(html, /我的个人消费/); assert.match(html, /同行人自助计算/); assert.match(html, /杭州东与杭州南/);
   assert.doesNotMatch(html, /Starter Project|react-loading-skeleton/);
+});
+
+test("requires a member session and supports collaborative edit and delete", async () => {
+  const saved = sessionCookie; sessionCookie = "";
+  const anonymous = await render("/trips"); assert.equal(anonymous.status, 302); assert.match(anonymous.headers.get("location"), /\/unlock$/);
+  sessionCookie = saved;
+  const trip = await createTrip({ title: "朋友旅行", status: "planning", cities: ["苏州"], undated: true, people: 2, memberIds: ["member-zhu-jingqi"] });
+  const update = await render(`/api/trips/${trip.slug}`, { method: "PUT", body: { title: "朋友旅行更新", status: "completed", cities: ["苏州", "无锡"], undated: true, people: 2, memberIds: ["member-zhu-jingqi"] } });
+  assert.equal(update.status, 200); assert.equal((await update.json()).trip.status, "completed");
+  const remove = await render(`/api/trips/${trip.slug}`, { method: "DELETE" }); assert.equal(remove.status, 200);
+  const protectedRemove = await render("/api/trips/shanghai-hangzhou-2026", { method: "DELETE" }); assert.equal(protectedRemove.status, 403);
 });
