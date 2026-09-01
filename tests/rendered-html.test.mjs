@@ -186,6 +186,24 @@ test("validates E1 URL state and renders map and budget views", async () => {
   assert.match(budget, /¥1463\.46/); assert.match(budget, /第一晚/); assert.match(budget, /¥42\.75/); assert.match(budget, /后两晚合计/); assert.match(budget, /¥116\.36/); assert.match(budget, /不代表谁实际付款/);
 });
 
+test("keeps Recommendation region and category independent from the active Day", async () => {
+  const day1 = "trip-shanghai-hangzhou-2026-day-1", day3 = "trip-shanghai-hangzhou-2026-day-3";
+  const shanghai = await (await render(`/trips/shanghai-hangzhou-2026/plan?view=planning&day=${day1}&area=shanghai&category=attraction`)).text();
+  const shanghaiLibrary = shanghai.match(/<div class="recommendation-grid">([\s\S]*?)<a class="view-all-materials"/)?.[1] || "";
+  for (const title of ["上海迪士尼", "武康大楼", "外滩", "东方明珠"]) assert.match(shanghaiLibrary, new RegExp(title));
+  assert.doesNotMatch(shanghaiLibrary, /灵隐寺/); assert.match(shanghai, new RegExp(`day=${day3}&amp;area=shanghai&amp;category=attraction`));
+
+  const hangzhouOnShanghaiDay = await (await render(`/trips/shanghai-hangzhou-2026/plan?view=planning&day=${day1}&area=hangzhou&category=attraction`)).text();
+  const hangzhouLibrary = hangzhouOnShanghaiDay.match(/<div class="recommendation-grid">([\s\S]*?)<a class="view-all-materials"/)?.[1] || "";
+  for (const title of ["灵隐寺", "财神庙", "西湖"]) assert.match(hangzhouLibrary, new RegExp(title));
+  assert.doesNotMatch(hangzhouLibrary, /上海迪士尼/); assert.match(hangzhouOnShanghaiDay, new RegExp(`day=${day3}&amp;area=hangzhou&amp;category=attraction`));
+
+  const tonglu = await (await render(`/trips/shanghai-hangzhou-2026/plan?view=planning&day=${day1}&area=tonglu&category=guide`)).text();
+  const tongluLibrary = tonglu.match(/<div class="recommendation-grid">([\s\S]*?)<a class="view-all-materials"/)?.[1] || "";
+  assert.match(tongluLibrary, /桐庐一日攻略/); assert.doesNotMatch(tongluLibrary, /西湖/); assert.match(tonglu, /桐庐(?:<!-- -->)? · (?:<!-- -->)?攻略/);
+  assert.equal(DB.database.prepare("SELECT COUNT(*) count FROM cities WHERE name = '桐庐' OR name = '桐庐市'").get().count, 0);
+});
+
 test("E1 add-to-Day writes only ItineraryItem and keeps Legacy tables frozen", async () => {
   const day5 = "trip-shanghai-hangzhou-2026-day-5";
   const legacyDayBefore = DB.database.prepare("SELECT json_group_array(json_object('day',day_id,'place',place_id,'sort',sort_order)) value FROM (SELECT * FROM day_places ORDER BY day_id, sort_order)").get().value;
