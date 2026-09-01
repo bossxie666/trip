@@ -32,10 +32,13 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
       <section className="trip-list">
         {!trips.length && <div className="trip-empty"><h2>这里还没有行程</h2><p>{activeStatus === "completed" ? "完成一次旅行后，它会出现在这里。" : "可以新建一条行程开始记录。"}</p></div>}
         {trips.map((trip) => (
-          <a key={trip.id} href={`/trips/${trip.slug}`}>
-            {trip.cover ? <img src={trip.cover} alt="" /> : <div className="trip-cover-empty">NO COVER</div>}
-            <div><span>{statusLabels[trip.status]}</span><h2>{trip.title}</h2><p>{trip.startDate && trip.endDate ? `${trip.startDate} — ${trip.endDate}` : "日期未定"}</p><p>{trip.cities.length ? trip.cities.map((city) => city.name).join("、") : "暂无城市"} · {participantSummary(trip)}</p></div>
-          </a>
+          <article className="trip-list-card" key={trip.id}>
+            <a className="trip-card-main" href={`/trips/${trip.slug}`}>
+              {trip.cover ? <img src={trip.cover} alt="" /> : <div className="trip-cover-empty">NO COVER</div>}
+              <div><span>{statusLabels[trip.status]}</span><h2>{trip.title}</h2><p>{trip.startDate && trip.endDate ? `${trip.startDate} — ${trip.endDate}` : "日期未定"}</p><p>{trip.cities.length ? trip.cities.map((city) => city.name).join("、") : "暂无城市"} · {participantSummary(trip)}</p></div>
+            </a>
+            <a className="trip-plan-link" href={`/trips/${trip.slug}/plan`}>规划行程 →</a>
+          </article>
         ))}
       </section>
     </main>

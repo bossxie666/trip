@@ -29,6 +29,7 @@ export default async function TripDetailRoute({ params }: { params: Promise<{ sl
 
   return (
     <TripDetailPage trip={trip}>
+      {slug === protectedTripSlug && <a className="legacy-plan-entry" href={`/trips/${slug}/plan`}>进入新规划工作台 →</a>}
       {slug === protectedTripSlug ? <ShanghaiHangzhouTripDetail mapWorkspace={placeWorkspace} /> : placeWorkspace ? <GenericTripDetail trip={trip} members={members} placeWorkspace={placeWorkspace} /> : null}
     </TripDetailPage>
   );
