@@ -10,6 +10,8 @@ export type PresenceCoverage = "unknown" | "complete";
 export type ItineraryItemType = "place" | "meal" | "transit" | "lodging" | "activity" | "note";
 export type ParticipantOverride = "included" | "excluded";
 export type ConstraintStrength = "soft" | "hard";
+export type BudgetCategory = "food" | "local_transport" | "entertainment" | "shopping" | "other";
+export type ExpenseScope = "personal" | "shared";
 
 export type MoneyAllocation = {
   memberId: string;

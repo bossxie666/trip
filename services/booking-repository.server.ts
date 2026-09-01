@@ -100,3 +100,67 @@ export async function deleteBooking(id: string, options: { hard?: boolean } = {}
   else await db.update(bookingRecords).set({ deletedAt: new Date().toISOString(), status: "cancelled", updatedAt: new Date().toISOString() }).where(eq(bookingRecords.id, id));
   return true;
 }
+
+export type UpdateBookingInput = {
+  title?: string;
+  provider?: string | null;
+  status?: BookingStatus;
+  startAt?: string | null;
+  endAt?: string | null;
+  startDateLocal?: string | null;
+  endDateLocal?: string | null;
+  totalAmountMinor?: number | null;
+  currency?: string | null;
+  bookingReference?: string | null;
+  notes?: string | null;
+};
+
+/**
+ * Booking is the order truth. Cost allocations are never silently changed when
+ * an order amount is edited; callers must resolve an unbalanced split first.
+ */
+export async function updateBooking(id: string, input: UpdateBookingInput, actorMemberId: string, expectedTripSlug?: string) {
+  const db = getDb();
+  const booking = (await db.select().from(bookingRecords).where(eq(bookingRecords.id, id)).limit(1))[0];
+  if (!booking) throw new Error("BOOKING_NOT_FOUND");
+  if (expectedTripSlug) {
+    const trip = (await db.select({ slug: tripRecords.slug }).from(tripRecords).where(eq(tripRecords.id, booking.tripId)).limit(1))[0];
+    if (!trip || trip.slug !== expectedTripSlug) throw new Error("BOOKING_NOT_IN_TRIP");
+  }
+  const membership = (await db.select({ memberId: tripMemberRecords.memberId }).from(tripMemberRecords).where(and(eq(tripMemberRecords.tripId, booking.tripId), eq(tripMemberRecords.memberId, actorMemberId))).limit(1))[0];
+  if (!membership) throw new Error("TRIP_MEMBER_REQUIRED");
+  const nextAmount = input.totalAmountMinor === undefined ? booking.totalAmountMinor : input.totalAmountMinor;
+  if (nextAmount != null) assertMinorAmount(nextAmount, "total_amount");
+  const nextCurrency = input.currency === undefined ? booking.currency : input.currency;
+  if (nextCurrency != null) assertCurrency(nextCurrency);
+  if (input.title !== undefined && !input.title.trim()) throw new Error("BOOKING_TITLE_REQUIRED");
+  if (input.status !== undefined && !["tentative", "confirmed", "cancelled"].includes(input.status)) throw new Error("INVALID_BOOKING_STATUS");
+  assertUtcInstant(input.startAt === undefined ? booking.startAt : input.startAt, "start_at");
+  assertUtcInstant(input.endAt === undefined ? booking.endAt : input.endAt, "end_at");
+  assertLocalDate(input.startDateLocal === undefined ? booking.startDateLocal : input.startDateLocal, "start_date");
+  assertLocalDate(input.endDateLocal === undefined ? booking.endDateLocal : input.endDateLocal, "end_date");
+  if (nextAmount !== booking.totalAmountMinor) {
+    const lines = await db.select({ line: bookingCostLineRecords, allocation: bookingCostAllocationRecords }).from(bookingCostLineRecords).leftJoin(bookingCostAllocationRecords, eq(bookingCostAllocationRecords.costLineId, bookingCostLineRecords.id)).where(eq(bookingCostLineRecords.bookingId, booking.id));
+    if (lines.length) {
+      const allocated = lines.reduce((sum, row) => sum + (row.allocation?.amountMinor || 0), 0);
+      if (allocated !== (nextAmount ?? 0)) throw new Error(`COST_ALLOCATION_UNBALANCED:${allocated}`);
+    }
+  }
+  const now = new Date().toISOString();
+  await db.update(bookingRecords).set({
+    title: input.title === undefined ? booking.title : input.title.trim(),
+    provider: input.provider === undefined ? booking.provider : input.provider,
+    status: input.status === undefined ? booking.status : input.status,
+    startAt: input.startAt === undefined ? booking.startAt : input.startAt,
+    endAt: input.endAt === undefined ? booking.endAt : input.endAt,
+    startDateLocal: input.startDateLocal === undefined ? booking.startDateLocal : input.startDateLocal,
+    endDateLocal: input.endDateLocal === undefined ? booking.endDateLocal : input.endDateLocal,
+    totalAmountMinor: nextAmount,
+    currency: nextCurrency,
+    bookingReference: input.bookingReference === undefined ? booking.bookingReference : input.bookingReference,
+    notes: input.notes === undefined ? booking.notes : input.notes,
+    updatedAt: now,
+    updatedByMemberId: actorMemberId,
+  }).where(eq(bookingRecords.id, id));
+  return (await db.select().from(bookingRecords).where(eq(bookingRecords.id, id)).limit(1))[0];
+}

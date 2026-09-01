@@ -7,13 +7,14 @@ import {
 } from "@/db/schema";
 import { findTripBySlug } from "@/services/trip-repository.server";
 import { getDayTimeline } from "@/services/day-timeline-service.server";
+import { getPersonalBudgetWorkspace } from "@/services/budget-service.server";
 
-export async function getPlanWorkspace(slug: string) {
+export async function getPlanWorkspace(slug: string, memberId?: string) {
   const trip = await findTripBySlug(slug);
   if (!trip) return null;
   const db = getDb();
   const stored = (await db.select().from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1))[0];
-  if (!stored) return { trip, days: [], recommendations: [], bookings: [], costLines: [], presenceUnknown: true };
+  if (!stored) return { trip, days: [], recommendations: [], bookings: [], costLines: [], presenceUnknown: true, budget: null, currentMemberId: memberId ?? null };
 
   const [days, recommendations, options, items, bookings, costLines, allocations, presenceRows] = await Promise.all([
     db.select().from(dayRecords).where(eq(dayRecords.tripId, stored.id)).orderBy(asc(dayRecords.dayNumber)),
@@ -32,6 +33,7 @@ export async function getPlanWorkspace(slug: string) {
     else timelineByDay.set(day.id, items.filter(({ item }) => item.dayId === day.id).map(({ item }) => ({ source: "itinerary" as const, sourceId: item.id, entryType: "itinerary-item" as const, bucket: "untimed" as const, title: item.title, timeLocal: item.startTimeLocal, sortOrder: item.sortOrder, locked: item.lockedAt != null })));
   }
 
+  const budget = memberId ? await getPersonalBudgetWorkspace(slug, memberId).catch(() => null) : null;
   return {
     trip,
     days: days.map((day) => ({ ...day, items: items.filter(({ item }) => item.dayId === day.id), timeline: timelineByDay.get(day.id) || [] })),
@@ -39,6 +41,8 @@ export async function getPlanWorkspace(slug: string) {
     bookings,
     costLines: costLines.map(({ booking_cost_lines: line, bookings: booking }) => ({ ...line, bookingTitle: booking.title, allocations: allocations.filter(({ allocation }) => allocation.costLineId === line.id) })),
     presenceUnknown: presenceRows.some((row) => row.presenceCoverage === "unknown"),
+    budget,
+    currentMemberId: memberId ?? null,
   };
 }
 

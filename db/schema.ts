@@ -246,6 +246,55 @@ export const bookingCostAllocationRecords = sqliteTable("booking_cost_allocation
   index("idx_booking_allocations_member_lookup").on(table.memberId),
 ]);
 
+export const memberBudgetPlanRecords = sqliteTable("member_budget_plans", {
+  id: text("id").primaryKey(),
+  tripId: text("trip_id").notNull().references(() => tripRecords.id, { onDelete: "cascade" }),
+  memberId: text("member_id").notNull().references(() => memberRecords.id, { onDelete: "restrict" }),
+  category: text("category", { enum: ["food", "local_transport", "entertainment", "shopping", "other"] }).notNull(),
+  plannedAmountMinor: integer("planned_amount_minor").notNull(),
+  currency: text("currency").notNull().default("CNY"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("idx_member_budget_plans_trip_member_category").on(table.tripId, table.memberId, table.category),
+  index("idx_member_budget_plans_trip_member").on(table.tripId, table.memberId),
+]);
+
+export const expenseRecords = sqliteTable("expenses", {
+  id: text("id").primaryKey(),
+  tripId: text("trip_id").notNull().references(() => tripRecords.id, { onDelete: "cascade" }),
+  dayId: text("day_id").references(() => dayRecords.id, { onDelete: "set null" }),
+  title: text("title").notNull(),
+  category: text("category", { enum: ["food", "local_transport", "entertainment", "shopping", "other"] }).notNull(),
+  amountMinor: integer("amount_minor").notNull(),
+  currency: text("currency").notNull().default("CNY"),
+  scope: text("scope", { enum: ["personal", "shared"] }).notNull(),
+  paidByMemberId: text("paid_by_member_id").references(() => memberRecords.id, { onDelete: "set null" }),
+  createdByMemberId: text("created_by_member_id").notNull().references(() => memberRecords.id, { onDelete: "restrict" }),
+  notes: text("notes"),
+  occurredAt: text("occurred_at"),
+  occurredDate: text("occurred_date"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  deletedAt: text("deleted_at"),
+}, (table) => [
+  index("idx_expenses_trip_date").on(table.tripId, table.occurredDate, table.createdAt),
+  index("idx_expenses_trip_creator").on(table.tripId, table.createdByMemberId, table.deletedAt),
+  index("idx_expenses_day").on(table.dayId),
+]);
+
+export const expenseAllocationRecords = sqliteTable("expense_allocations", {
+  id: text("id").primaryKey(),
+  expenseId: text("expense_id").notNull().references(() => expenseRecords.id, { onDelete: "cascade" }),
+  memberId: text("member_id").notNull().references(() => memberRecords.id, { onDelete: "restrict" }),
+  amountMinor: integer("amount_minor").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("idx_expense_allocations_expense_member").on(table.expenseId, table.memberId),
+  index("idx_expense_allocations_member").on(table.memberId),
+]);
+
 export const memberPresenceWindowRecords = sqliteTable("member_presence_windows", {
   id: text("id").primaryKey(),
   tripId: text("trip_id").notNull().references(() => tripRecords.id, { onDelete: "cascade" }),

@@ -21,7 +21,7 @@ class TestD1Database {
 const DB = new TestD1Database();
 globalThis.__TRIP_TEST_D1__ = DB;
 globalThis.__TRIP_TEST_ENV__ = { TRIP_SPACE_INVITE_CODE: "test-invite", TRIP_SPACE_SESSION_SECRET: "test-session-secret-at-least-32-characters", AMAP_JS_API_KEY: "test-js-key", AMAP_JS_SECURITY_CODE: "test-js-code", AMAP_WEB_SERVICE_KEY: "test-web-key" };
-for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
+for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
 
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
@@ -49,6 +49,12 @@ async function render(pathname = "/", init = {}) {
 
 async function login() {
   const response = await render("/api/session", { method: "POST", body: { memberName: "nini", code: "test-invite" } });
+  assert.equal(response.status, 200);
+  sessionCookie = response.headers.get("set-cookie").split(";")[0];
+}
+
+async function loginAs(memberName) {
+  const response = await render("/api/session", { method: "POST", body: { memberName, code: "test-invite" } });
   assert.equal(response.status, 200);
   sessionCookie = response.headers.get("set-cookie").split(";")[0];
 }
@@ -183,7 +189,7 @@ test("validates E1 URL state and renders map and budget views", async () => {
   const map = await (await render("/trips/shanghai-hangzhou-2026/plan?view=map&mode=library&day=trip-shanghai-hangzhou-2026-day-2")).text();
   assert.match(map, /攻略地图/); assert.match(map, /高德地图/); assert.match(map, /淡色 Marker/);
   const budget = await (await render("/trips/shanghai-hangzhou-2026/plan?view=budget&day=trip-shanghai-hangzhou-2026-day-3")).text();
-  assert.match(budget, /¥1463\.46/); assert.match(budget, /第一晚/); assert.match(budget, /¥42\.75/); assert.match(budget, /后两晚合计/); assert.match(budget, /¥116\.36/); assert.match(budget, /不代表谁实际付款/);
+  assert.match(budget, /我的个人预算/); assert.match(budget, /¥159\.11/); assert.match(budget, /我的费用待确认/); assert.match(budget, /订单总价不会直接算入个人费用/);
 });
 
 test("keeps Recommendation region and category independent from the active Day", async () => {
@@ -320,4 +326,70 @@ test("searches AMap POIs, persists GCJ-02 data, and plans a Day route", async ()
   assert.equal(route.status, 200); const planned = (await route.json()).route; assert.equal(planned.distanceMeters, 1200); assert.equal(planned.durationSeconds, 900); assert.equal(planned.polylines.length, 1);
   const config = await render("/api/amap/config", { headers: { accept: "application/json" } }); assert.equal(config.status, 200); const configBody = await config.json(); assert.equal(configBody.key, "test-js-key"); assert.match(configBody.serviceHost, /\/_AMapService$/);
   const geocode = await render("/api/amap/geocode", { method: "POST", body: { address: "中山东一路", cityId } }); assert.equal(geocode.status, 200); assert.equal((await geocode.json()).result.coordinateSystem, "GCJ02");
+});
+
+test("keeps budget plans, expenses, and booking edits member-scoped", async () => {
+  const legacyDayBefore = DB.database.prepare("SELECT json_group_array(json_object('day',day_id,'place',place_id,'sort',sort_order)) value FROM (SELECT * FROM day_places ORDER BY day_id, sort_order)").get().value;
+  const legacyTripBefore = DB.database.prepare("SELECT json_group_array(json_object('trip',trip_id,'place',place_id,'status',plan_status)) value FROM (SELECT * FROM trip_places ORDER BY trip_id, place_id)").get().value;
+  const day3 = "trip-shanghai-hangzhou-2026-day-3";
+
+  await loginAs("nini");
+  const initial = await (await render("/api/trips/shanghai-hangzhou-2026/budget/plans")).json();
+  assert.equal(initial.budget.totals.fixedPersonalMinor, 15911);
+  assert.equal(initial.budget.totals.plannedMinor, 0);
+  assert.equal(initial.budget.bookings.find((booking) => booking.title === "深圳 → 上海航班").ownAmountMinor, null);
+  const niniPlan = await render("/api/trips/shanghai-hangzhou-2026/budget/plans", { method: "PUT", body: { category: "food", plannedAmountMinor: 12000 } });
+  assert.equal(niniPlan.status, 200);
+
+  const personal = await render("/api/trips/shanghai-hangzhou-2026/budget/expenses", { method: "POST", body: { title: "nini 私人购物", amountMinor: 39900, category: "shopping", scope: "personal", dayId: day3 } });
+  assert.equal(personal.status, 201);
+  const personalId = (await personal.json()).expense.id;
+  assert.equal(DB.database.prepare("SELECT count(*) AS count FROM expense_allocations WHERE expense_id = ? AND member_id = 'member-nini' AND amount_minor = 39900").get(personalId).count, 1);
+
+  await loginAs("王静雯");
+  const wangPlan = await render("/api/trips/shanghai-hangzhou-2026/budget/plans", { method: "PUT", body: { category: "food", plannedAmountMinor: 5000 } });
+  assert.equal(wangPlan.status, 200);
+  const wangBudget = (await (await render("/api/trips/shanghai-hangzhou-2026/budget/plans")).json()).budget;
+  assert.equal(wangBudget.plans.find((plan) => plan.category === "food").plannedAmountMinor, 5000);
+  assert.doesNotMatch(await (await render("/trips/shanghai-hangzhou-2026/plan?view=budget")).text(), /nini 私人购物/);
+  const forbiddenPersonalEdit = await render(`/api/trips/shanghai-hangzhou-2026/budget/expenses/${personalId}`, { method: "PATCH", body: { title: "越权修改" } });
+  assert.equal(forbiddenPersonalEdit.status, 403);
+
+  await loginAs("朱婧琪");
+  const zhuBudget = (await (await render("/api/trips/shanghai-hangzhou-2026/budget/plans")).json()).budget;
+  assert.equal(zhuBudget.totals.fixedPersonalMinor, 11636);
+
+  await loginAs("nini");
+  const sharedEqual = await render("/api/trips/shanghai-hangzhou-2026/budget/expenses", { method: "POST", body: { title: "共享晚餐均摊", amountMinor: 10001, category: "food", scope: "shared", paidByMemberId: "member-zhu-jingqi", participantMemberIds: ["member-nini", "member-wang-jingwen", "member-zhu-jingqi"], dayId: day3 } });
+  assert.equal(sharedEqual.status, 201);
+  const sharedEqualId = (await sharedEqual.json()).expense.id;
+  const equalAllocations = DB.database.prepare("SELECT member_id, amount_minor FROM expense_allocations WHERE expense_id = ? ORDER BY member_id").all(sharedEqualId);
+  assert.deepEqual(equalAllocations.map((row) => ({ ...row })), [{ member_id: "member-nini", amount_minor: 3334 }, { member_id: "member-wang-jingwen", amount_minor: 3334 }, { member_id: "member-zhu-jingqi", amount_minor: 3333 }]);
+  assert.equal(equalAllocations.reduce((sum, row) => sum + row.amount_minor, 0), 10001);
+
+  const sharedCustom = await render("/api/trips/shanghai-hangzhou-2026/budget/expenses", { method: "POST", body: { title: "共享打车自定义", amountMinor: 10000, category: "local_transport", scope: "shared", paidByMemberId: "member-wang-jingwen", allocations: [{ memberId: "member-nini", amountMinor: 7000 }, { memberId: "member-wang-jingwen", amountMinor: 3000 }], dayId: day3 } });
+  assert.equal(sharedCustom.status, 201);
+  const sharedCustomId = (await sharedCustom.json()).expense.id;
+  const customUpdate = await render(`/api/trips/shanghai-hangzhou-2026/budget/expenses/${sharedCustomId}`, { method: "PATCH", body: { amountMinor: 11000, allocations: [{ memberId: "member-nini", amountMinor: 8000 }, { memberId: "member-wang-jingwen", amountMinor: 3000 }] } });
+  assert.equal(customUpdate.status, 200);
+  assert.equal(DB.database.prepare("SELECT sum(amount_minor) AS total FROM expense_allocations WHERE expense_id = ?").get(sharedCustomId).total, 11000);
+
+  const personalUpdate = await render(`/api/trips/shanghai-hangzhou-2026/budget/expenses/${personalId}`, { method: "PATCH", body: { amountMinor: 40000, title: "nini 私人购物更新" } });
+  assert.equal(personalUpdate.status, 200);
+  const personalDelete = await render(`/api/trips/shanghai-hangzhou-2026/budget/expenses/${personalId}`, { method: "DELETE" });
+  assert.equal(personalDelete.status, 200);
+  assert.equal(DB.database.prepare("SELECT deleted_at IS NOT NULL AS deleted FROM expenses WHERE id = ?").get(personalId).deleted, 1);
+
+  const bookingId = "booking-shanghai-hangzhou-hotel-hangzhou-20260924";
+  const bookingEdit = await render(`/api/trips/shanghai-hangzhou-2026/budget/bookings/${bookingId}`, { method: "PATCH", body: { title: "杭州东附近酒店", status: "confirmed" } });
+  assert.equal(bookingEdit.status, 200);
+  const unbalanced = await render(`/api/trips/shanghai-hangzhou-2026/budget/bookings/${bookingId}`, { method: "PATCH", body: { totalAmountMinor: 76000 } });
+  assert.equal(unbalanced.status, 409);
+  assert.equal(DB.database.prepare("SELECT total_amount_minor FROM bookings WHERE id = ?").get(bookingId).total_amount_minor, 75280);
+  assert.equal(DB.database.prepare("SELECT sum(amount_minor) AS total FROM booking_cost_allocations WHERE cost_line_id IN (SELECT id FROM booking_cost_lines WHERE booking_id = ?)").get(bookingId).total, 75280);
+
+  assert.equal(DB.database.prepare("SELECT json_group_array(json_object('day',day_id,'place',place_id,'sort',sort_order)) value FROM (SELECT * FROM day_places ORDER BY day_id, sort_order)").get().value, legacyDayBefore);
+  assert.equal(DB.database.prepare("SELECT json_group_array(json_object('trip',trip_id,'place',place_id,'status',plan_status)) value FROM (SELECT * FROM trip_places ORDER BY trip_id, place_id)").get().value, legacyTripBefore);
+  const finalHtml = await (await render("/trips/shanghai-hangzhou-2026/plan?view=budget")).text();
+  assert.match(finalHtml, /value="120\.00"/); assert.match(finalHtml, /共享晚餐均摊/); assert.match(finalHtml, /我的费用待确认/);
 });

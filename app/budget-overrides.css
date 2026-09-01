@@ -1,0 +1,13 @@
+@media (max-width: 680px) {
+  .budget-summary-grid { grid-template-columns: 1fr; }
+  .budget-bookings > article,
+  .budget-expenses > article { grid-template-columns: 1fr auto; }
+  .budget-bookings > article > .budget-booking-edit,
+  .budget-expenses > article > .expense-edit { grid-column: 1 / 3; }
+  .budget-form-grid,
+  .budget-custom-split { grid-template-columns: 1fr; }
+  .budget-expense-sheet { padding: 18px; }
+  .budget-bookings > header,
+  .budget-plans > header,
+  .budget-expenses > header { align-items: flex-start; flex-direction: column; }
+}
