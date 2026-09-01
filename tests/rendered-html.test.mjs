@@ -197,6 +197,40 @@ test("E1 add-to-Day writes only ItineraryItem and keeps Legacy tables frozen", a
   assert.equal(DB.database.prepare("SELECT json_group_array(json_object('trip',trip_id,'place',place_id,'status',plan_status)) value FROM (SELECT * FROM trip_places ORDER BY trip_id, place_id)").get().value, legacyTripBefore);
 });
 
+test("manages duplicate Recommendation items independently without touching Booking or Legacy", async () => {
+  const day4 = "trip-shanghai-hangzhou-2026-day-4", day5 = "trip-shanghai-hangzhou-2026-day-5", recommendationId = "recommendation-wukang-building";
+  const legacyDayBefore = DB.database.prepare("SELECT json_group_array(json_object('day',day_id,'place',place_id,'sort',sort_order)) value FROM (SELECT * FROM day_places ORDER BY day_id, sort_order)").get().value;
+  const legacyTripBefore = DB.database.prepare("SELECT json_group_array(json_object('trip',trip_id,'place',place_id,'status',plan_status)) value FROM (SELECT * FROM trip_places ORDER BY trip_id, place_id)").get().value;
+  const bookingBefore = DB.database.prepare("SELECT json_group_array(json_object('id',id,'title',title,'status',status)) value FROM (SELECT * FROM bookings ORDER BY id)").get().value;
+  const recommendationBefore = DB.database.prepare("SELECT * FROM recommendations WHERE id = ?").get(recommendationId);
+
+  const first = (await (await render("/api/trips/shanghai-hangzhou-2026/plan/items", { method: "POST", body: { recommendationId, dayId: day5 } })).json()).item;
+  const second = (await (await render("/api/trips/shanghai-hangzhou-2026/plan/items", { method: "POST", body: { recommendationId, dayId: day5 } })).json()).item;
+  assert.notEqual(first.id, second.id); assert.equal(first.dayId, day5); assert.equal(second.dayId, day5);
+  const duplicateHtml = await (await render(`/trips/shanghai-hangzhou-2026/plan?view=planning&day=${day5}`)).text();
+  assert.match(duplicateHtml, /已加入 09\/24 · 09\/27 ×2/); assert.match(duplicateHtml, /再次加入/);
+
+  const firstEdit = await render(`/api/trips/shanghai-hangzhou-2026/plan/items/${first.id}`, { method: "PATCH", body: { title: "武康大楼上午", note: "第一条", dayId: day5 } });
+  const secondEdit = await render(`/api/trips/shanghai-hangzhou-2026/plan/items/${second.id}`, { method: "PATCH", body: { title: "武康大楼傍晚", note: "第二条", dayId: day5 } });
+  assert.equal(firstEdit.status, 200); assert.equal(secondEdit.status, 200);
+  assert.equal(DB.database.prepare("SELECT title FROM itinerary_items WHERE id = ?").get(first.id).title, "武康大楼上午");
+  assert.equal(DB.database.prepare("SELECT title FROM itinerary_items WHERE id = ?").get(second.id).title, "武康大楼傍晚");
+
+  const moved = await render(`/api/trips/shanghai-hangzhou-2026/plan/items/${first.id}`, { method: "PATCH", body: { dayId: day4 } });
+  assert.equal(moved.status, 200); const movedItem = (await moved.json()).item; assert.equal(movedItem.dayId, day4);
+  const targetOrders = DB.database.prepare("SELECT sort_order FROM itinerary_items WHERE day_id = ? ORDER BY sort_order").all(day4).map((row) => row.sort_order);
+  assert.deepEqual(targetOrders, targetOrders.map((_, index) => index + 1));
+  const sourceOrders = DB.database.prepare("SELECT sort_order FROM itinerary_items WHERE day_id = ? ORDER BY sort_order").all(day5).map((row) => row.sort_order);
+  assert.deepEqual(sourceOrders, sourceOrders.map((_, index) => index + 1));
+
+  const removed = await render(`/api/trips/shanghai-hangzhou-2026/plan/items/${second.id}`, { method: "DELETE" });
+  assert.equal(removed.status, 200); assert.equal(DB.database.prepare("SELECT COUNT(*) count FROM itinerary_items WHERE id = ?").get(second.id).count, 0); assert.equal(DB.database.prepare("SELECT COUNT(*) count FROM itinerary_items WHERE id = ?").get(first.id).count, 1);
+  assert.deepEqual(DB.database.prepare("SELECT * FROM recommendations WHERE id = ?").get(recommendationId), recommendationBefore);
+  assert.equal(DB.database.prepare("SELECT json_group_array(json_object('id',id,'title',title,'status',status)) value FROM (SELECT * FROM bookings ORDER BY id)").get().value, bookingBefore);
+  assert.equal(DB.database.prepare("SELECT json_group_array(json_object('day',day_id,'place',place_id,'sort',sort_order)) value FROM (SELECT * FROM day_places ORDER BY day_id, sort_order)").get().value, legacyDayBefore);
+  assert.equal(DB.database.prepare("SELECT json_group_array(json_object('trip',trip_id,'place',place_id,'status',plan_status)) value FROM (SELECT * FROM trip_places ORDER BY trip_id, place_id)").get().value, legacyTripBefore);
+});
+
 test("protects E1 routes and gives Generic Trip an empty workspace", async () => {
   const generic = await createTrip({ title: "E1 Empty Trip", status: "planning", cities: ["苏州"], startDate: "2027-07-01", endDate: "2027-07-01", people: 1 });
   const genericHtml = await (await render(`/trips/${generic.slug}/plan`)).text();

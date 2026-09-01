@@ -21,6 +21,14 @@ export type CreateItineraryItemInput = {
   lockedAt?: string | null;
 };
 
+export type UpdateItineraryItemInput = {
+  title?: string;
+  note?: string | null;
+  startTimeLocal?: string | null;
+  durationMinutes?: number | null;
+  dayId?: string;
+};
+
 export async function createItineraryItem(input: CreateItineraryItemInput, actorMemberId: string) {
   if (!input.title.trim()) throw new Error("ITINERARY_TITLE_REQUIRED");
   assertLocalTime(input.startTimeLocal ?? null, "start_time");
@@ -63,9 +71,46 @@ export async function reorderItineraryItems(tripId: string, dayId: string, order
   return listItineraryItems(dayId);
 }
 
-export async function deleteItineraryItem(id: string) {
-  const deleted = await getDb().delete(itineraryItemRecords).where(eq(itineraryItemRecords.id, id)).returning({ id: itineraryItemRecords.id });
-  return deleted.length > 0;
+export async function updateItineraryItem(tripId: string, id: string, input: UpdateItineraryItemInput, actorMemberId: string) {
+  const db = getDb();
+  const item = (await db.select().from(itineraryItemRecords).where(and(eq(itineraryItemRecords.id, id), eq(itineraryItemRecords.tripId, tripId))).limit(1))[0];
+  if (!item) throw new Error("ITINERARY_ITEM_NOT_FOUND");
+  const title = input.title === undefined ? item.title : input.title.trim();
+  if (!title) throw new Error("ITINERARY_TITLE_REQUIRED");
+  const startTimeLocal = input.startTimeLocal === undefined ? item.startTimeLocal : input.startTimeLocal;
+  const durationMinutes = input.durationMinutes === undefined ? item.durationMinutes : input.durationMinutes;
+  assertLocalTime(startTimeLocal, "start_time");
+  if (durationMinutes != null && (!Number.isSafeInteger(durationMinutes) || durationMinutes < 0)) throw new Error("INVALID_DURATION");
+  const targetDayId = input.dayId ?? item.dayId;
+  if (!(await db.select({ id: dayRecords.id }).from(dayRecords).where(and(eq(dayRecords.id, targetDayId), eq(dayRecords.tripId, tripId))).limit(1))[0]) throw new Error("DAY_NOT_IN_TRIP");
+  const now = new Date().toISOString(), note = input.note === undefined ? item.note : input.note;
+  if (targetDayId === item.dayId) {
+    await db.update(itineraryItemRecords).set({ title, note, startTimeLocal, durationMinutes, updatedByMemberId: actorMemberId, updatedAt: now }).where(and(eq(itineraryItemRecords.id, id), eq(itineraryItemRecords.tripId, tripId)));
+  } else {
+    const [sourceItems, targetHighest] = await Promise.all([
+      db.select({ id: itineraryItemRecords.id }).from(itineraryItemRecords).where(and(eq(itineraryItemRecords.tripId, tripId), eq(itineraryItemRecords.dayId, item.dayId))).orderBy(asc(itineraryItemRecords.sortOrder), asc(itineraryItemRecords.id)),
+      db.select({ value: max(itineraryItemRecords.sortOrder) }).from(itineraryItemRecords).where(and(eq(itineraryItemRecords.tripId, tripId), eq(itineraryItemRecords.dayId, targetDayId))),
+    ]);
+    const remainingIds = sourceItems.map((row) => row.id).filter((itemId) => itemId !== id), targetSortOrder = (targetHighest[0]?.value ?? 0) + 1;
+    const d1 = getRuntimeEnv().DB, statements = [d1.prepare("UPDATE itinerary_items SET day_id = ?, sort_order = ?, title = ?, note = ?, start_time_local = ?, duration_minutes = ?, updated_by_member_id = ?, updated_at = ? WHERE id = ? AND trip_id = ?").bind(targetDayId, targetSortOrder, title, note, startTimeLocal, durationMinutes, actorMemberId, now, id, tripId)];
+    for (const [index, itemId] of remainingIds.entries()) statements.push(d1.prepare("UPDATE itinerary_items SET sort_order = ?, updated_at = ? WHERE id = ? AND day_id = ? AND trip_id = ?").bind(-(index + 1), now, itemId, item.dayId, tripId));
+    for (const [index, itemId] of remainingIds.entries()) statements.push(d1.prepare("UPDATE itinerary_items SET sort_order = ?, updated_at = ? WHERE id = ? AND day_id = ? AND trip_id = ?").bind(index + 1, now, itemId, item.dayId, tripId));
+    await d1.batch(statements);
+  }
+  return (await db.select().from(itineraryItemRecords).where(eq(itineraryItemRecords.id, id)).limit(1))[0];
+}
+
+export async function deleteItineraryItem(tripId: string, id: string) {
+  const db = getDb();
+  const item = (await db.select().from(itineraryItemRecords).where(and(eq(itineraryItemRecords.id, id), eq(itineraryItemRecords.tripId, tripId))).limit(1))[0];
+  if (!item) throw new Error("ITINERARY_ITEM_NOT_FOUND");
+  const remaining = await db.select({ id: itineraryItemRecords.id }).from(itineraryItemRecords).where(and(eq(itineraryItemRecords.tripId, tripId), eq(itineraryItemRecords.dayId, item.dayId))).orderBy(asc(itineraryItemRecords.sortOrder), asc(itineraryItemRecords.id));
+  const remainingIds = remaining.map((row) => row.id).filter((itemId) => itemId !== id), now = new Date().toISOString(), d1 = getRuntimeEnv().DB;
+  const statements = [d1.prepare("DELETE FROM itinerary_items WHERE id = ? AND trip_id = ?").bind(id, tripId)];
+  for (const [index, itemId] of remainingIds.entries()) statements.push(d1.prepare("UPDATE itinerary_items SET sort_order = ?, updated_at = ? WHERE id = ? AND day_id = ? AND trip_id = ?").bind(-(index + 1), now, itemId, item.dayId, tripId));
+  for (const [index, itemId] of remainingIds.entries()) statements.push(d1.prepare("UPDATE itinerary_items SET sort_order = ?, updated_at = ? WHERE id = ? AND day_id = ? AND trip_id = ?").bind(index + 1, now, itemId, item.dayId, tripId));
+  await d1.batch(statements);
+  return true;
 }
 
 export async function setItineraryParticipantOverride(input: { itineraryItemId: string; memberId: string; participation: "included" | "excluded"; note?: string | null }) {
