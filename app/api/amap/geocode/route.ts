@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { cityRecords } from "@/db/schema";
 import { getCurrentMember } from "@/services/auth.server";
-import { geocodeAmapAddress } from "@/services/amap/amap-web-service.server";
+import { classifyAmapError, geocodeAmapAddress } from "@/services/amap/amap-web-service.server";
 
 export async function POST(request: Request) {
   try {
@@ -14,6 +14,7 @@ export async function POST(request: Request) {
     return Response.json({ result: await geocodeAmapAddress(address, city.name) });
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
-    return Response.json({ error: code === "AMAP_GEOCODE_NOT_FOUND" ? "没有找到这个地址，请补充区县或门牌号。" : code === "AMAP_NOT_CONFIGURED" ? "地图服务尚未配置。" : "地址解析暂时不可用，请稍后重试。" }, { status: code === "AMAP_GEOCODE_NOT_FOUND" ? 404 : code === "AMAP_NOT_CONFIGURED" ? 503 : 502 });
+    const classified = classifyAmapError(error, "geocode");
+    return Response.json({ error: code === "AMAP_GEOCODE_NOT_FOUND" ? "没有找到这个地址，请补充区县或门牌号。" : classified.message, code: classified.code }, { status: code === "AMAP_GEOCODE_NOT_FOUND" ? 404 : classified.status });
   }
 }

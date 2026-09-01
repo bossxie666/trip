@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
-  bookingCostAllocationRecords, bookingCostLineRecords, bookingParticipantRecords, bookingRecords, dayRecords,
+  bookingCostAllocationRecords, bookingCostLineRecords, bookingParticipantRecords, bookingRecords, dayPresenceRecords, dayRecords,
   itineraryItemRecords, memberRecords, placeRecords, recommendationPlaceOptionRecords, itineraryItemParticipantOverrideRecords, memberPresenceWindowRecords,
   recommendationRecords, tripCityRecords, tripMemberRecords, tripRecords, tripSavedPlaceRecords, cityRecords,
   tripPlaceRecords, routePreferenceRecords,
@@ -17,7 +17,7 @@ export async function getPlanWorkspace(slug: string, memberId?: string) {
   const stored = (await db.select().from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1))[0];
   if (!stored) return { trip, days: [], recommendations: [], bookings: [], costLines: [], presenceUnknown: true, budget: null, currentMemberId: memberId ?? null };
 
-  const [days, recommendations, options, items, bookings, bookingParticipants, costLines, allocations, presenceRows, presenceWindows, participantOverrides, savedPlaceRows, routePreferences, legacyTripPlaces] = await Promise.all([
+  const [days, recommendations, options, items, bookings, bookingParticipants, costLines, allocations, presenceRows, presenceWindows, dayPresenceRows, participantOverrides, savedPlaceRows, routePreferences, legacyTripPlaces] = await Promise.all([
     db.select().from(dayRecords).where(eq(dayRecords.tripId, stored.id)).orderBy(asc(dayRecords.dayNumber)),
     db.select().from(recommendationRecords).where(and(eq(recommendationRecords.tripId, stored.id), isNull(recommendationRecords.deletedAt))).orderBy(asc(recommendationRecords.createdAt), asc(recommendationRecords.id)),
     db.select({ option: recommendationPlaceOptionRecords, place: placeRecords, recommendation: recommendationRecords }).from(recommendationPlaceOptionRecords).innerJoin(recommendationRecords, eq(recommendationRecords.id, recommendationPlaceOptionRecords.recommendationId)).innerJoin(placeRecords, eq(placeRecords.id, recommendationPlaceOptionRecords.placeId)).where(and(eq(recommendationRecords.tripId, stored.id), isNull(recommendationRecords.deletedAt))).orderBy(asc(recommendationPlaceOptionRecords.sortOrder)),
@@ -28,6 +28,7 @@ export async function getPlanWorkspace(slug: string, memberId?: string) {
     db.select({ allocation: bookingCostAllocationRecords, memberName: memberRecords.displayName }).from(bookingCostAllocationRecords).innerJoin(bookingCostLineRecords, eq(bookingCostLineRecords.id, bookingCostAllocationRecords.costLineId)).innerJoin(bookingRecords, eq(bookingRecords.id, bookingCostLineRecords.bookingId)).innerJoin(memberRecords, eq(memberRecords.id, bookingCostAllocationRecords.memberId)).where(and(eq(bookingRecords.tripId, stored.id), isNull(bookingRecords.deletedAt))).orderBy(asc(bookingCostAllocationRecords.memberId)),
     db.select().from(tripMemberRecords).where(eq(tripMemberRecords.tripId, stored.id)),
     db.select().from(memberPresenceWindowRecords).where(eq(memberPresenceWindowRecords.tripId, stored.id)).orderBy(asc(memberPresenceWindowRecords.startsAt)),
+    db.select().from(dayPresenceRecords).where(eq(dayPresenceRecords.tripId, stored.id)),
     db.select().from(itineraryItemParticipantOverrideRecords).innerJoin(itineraryItemRecords, eq(itineraryItemRecords.id, itineraryItemParticipantOverrideRecords.itineraryItemId)).where(eq(itineraryItemRecords.tripId, stored.id)),
     db.select({ saved: tripSavedPlaceRecords, place: placeRecords, city: cityRecords }).from(tripSavedPlaceRecords).innerJoin(placeRecords, eq(placeRecords.id, tripSavedPlaceRecords.placeId)).innerJoin(cityRecords, eq(cityRecords.id, placeRecords.cityId)).where(eq(tripSavedPlaceRecords.tripId, stored.id)).orderBy(asc(tripSavedPlaceRecords.createdAt)),
     db.select().from(routePreferenceRecords).where(eq(routePreferenceRecords.tripId, stored.id)).orderBy(asc(routePreferenceRecords.updatedAt), asc(routePreferenceRecords.id)),
@@ -69,7 +70,7 @@ export async function getPlanWorkspace(slug: string, memberId?: string) {
     const planStatus = formalItems.some(({ item }) => item.lockedAt != null) ? "locked" as const : formal ? "selected" as const : "candidate" as const;
     return { place, kind: formal ? "itinerary" as const : booking ? "booking" as const : saved ? "saved" as const : recommendation ? "recommendation" as const : "candidate" as const, planStatus, category: recommendationMeta?.category || null, areaKey: recommendationMeta?.areaKey || null, recommendationTitle: recommendationMeta?.title || null };
   });
-  type RouteStop = { id: string; source: "itinerary" | "booking"; title: string; place: typeof placeRecords.$inferSelect; sortOrder: number; memberStates?: Record<string, "present" | "absent" | "unknown"> };
+  type RouteStop = { id: string; source: "itinerary" | "booking"; title: string; place: typeof placeRecords.$inferSelect; sortOrder: number; memberStates?: Record<string, "present" | "absent" | "partial" | "unknown"> };
   const routeStopsByDay = new Map<string, RouteStop[]>();
   const memberIds = presenceRows.map((member) => member.memberId);
   const timezoneOffset = stored.timezone === "Asia/Shanghai" ? "+08:00" : stored.timezone === "Asia/Tokyo" ? "+09:00" : "+00:00";
@@ -77,7 +78,10 @@ export async function getPlanWorkspace(slug: string, memberId?: string) {
     const start = new Date(`${date}T00:00:00${timezoneOffset}`);
     return { start: start.getTime(), end: start.getTime() + 86_400_000 };
   };
-  const dayPresenceState = (dayDate: string | null, memberId: string) => {
+  const dayPresenceDetail = (dayId: string, memberId: string) => dayPresenceRows.find((row) => row.dayId === dayId && row.memberId === memberId) || null;
+  const dayPresenceState = (dayId: string, dayDate: string | null, memberId: string) => {
+    const explicit = dayPresenceDetail(dayId, memberId);
+    if (explicit) return explicit.state as "present" | "absent" | "partial";
     const coverage = presenceRows.find((row) => row.memberId === memberId)?.presenceCoverage;
     if (coverage !== "complete" || !dayDate || !stored.timezone) return "unknown" as const;
     const { start, end } = dayBounds(dayDate);
@@ -87,7 +91,7 @@ export async function getPlanWorkspace(slug: string, memberId?: string) {
     return "absent" as const;
   };
   const itemOverrides = (itemId: string) => Object.fromEntries(participantOverrides.filter(({ itinerary_item_participant_overrides: entry }) => entry.itineraryItemId === itemId).map(({ itinerary_item_participant_overrides: entry }) => [entry.memberId, entry.participation])) as Record<string, "included" | "excluded">;
-  const itemStates = (item: typeof itineraryItemRecords.$inferSelect, dayDate: string | null) => Object.fromEntries(memberIds.map((memberId) => [memberId, item.startTimeLocal ? presenceState(item, memberId, dayDate) : dayPresenceState(dayDate, memberId)])) as Record<string, "present" | "absent" | "unknown">;
+  const itemStates = (item: typeof itineraryItemRecords.$inferSelect, dayDate: string | null) => Object.fromEntries(memberIds.map((memberId) => [memberId, item.startTimeLocal ? presenceState(item, memberId, dayDate) : dayPresenceState(item.dayId, dayDate, memberId)])) as Record<string, "present" | "absent" | "partial" | "unknown">;
   const bookingMemberStates = (bookingId: string) => {
     const participants = bookingParticipants.filter(({ booking_participants: participant }) => participant.bookingId === bookingId).map(({ booking_participants: participant }) => participant.memberId);
     return Object.fromEntries(presenceRows.map((member) => [member.memberId, participants.length ? (participants.includes(member.memberId) ? "present" : "absent") : "unknown"])) as Record<string, "present" | "absent" | "unknown">;
@@ -96,6 +100,16 @@ export async function getPlanWorkspace(slug: string, memberId?: string) {
     const override = participantOverrides.find(({ itinerary_item_participant_overrides: entry }) => entry.itineraryItemId === item.id && entry.memberId === memberId)?.itinerary_item_participant_overrides;
     if (override) return override.participation === "included" ? "present" : "absent";
     const coverage = presenceRows.find((row) => row.memberId === memberId)?.presenceCoverage;
+    const explicit = dayPresenceDetail(item.dayId, memberId);
+    if (explicit) {
+      if (explicit.state === "present") return "present";
+      if (explicit.state === "absent") return "absent";
+      if (!item.startTimeLocal || !dayDate || (!explicit.startsAt && !explicit.endsAt)) return "unknown";
+      const instant = Date.parse(`${dayDate}T${item.startTimeLocal}:00${timezoneOffset}`);
+      const starts = explicit.startsAt ? Date.parse(explicit.startsAt) : Number.NEGATIVE_INFINITY;
+      const ends = explicit.endsAt ? Date.parse(explicit.endsAt) : Number.POSITIVE_INFINITY;
+      return Number.isFinite(instant) && starts <= instant && instant < ends ? "present" : "absent";
+    }
     if (coverage !== "complete" || !item.startTimeLocal || !dayDate) return "unknown";
     const instant = Date.parse(`${dayDate}T${item.startTimeLocal}:00${timezoneOffset}`);
     if (!Number.isFinite(instant)) return "unknown";
@@ -131,8 +145,9 @@ export async function getPlanWorkspace(slug: string, memberId?: string) {
     recommendations: recommendations.map((recommendation) => ({ ...recommendation, options: options.filter(({ option }) => option.recommendationId === recommendation.id), addedDays: items.filter(({ item }) => item.recommendationId === recommendation.id).map(({ item }) => item.dayId), locked: items.some(({ item }) => item.recommendationId === recommendation.id && item.lockedAt != null) })),
     bookings,
     costLines: costLines.map(({ booking_cost_lines: line, bookings: booking }) => ({ ...line, bookingTitle: booking.title, allocations: allocations.filter(({ allocation }) => allocation.costLineId === line.id) })),
-    presenceUnknown: presenceRows.some((row) => row.presenceCoverage === "unknown"),
-    dayPresenceByDay: Object.fromEntries(days.map((day) => [day.id, Object.fromEntries(memberIds.map((memberId) => [memberId, dayPresenceState(day.date, memberId)]))])),
+    presenceUnknown: days.some((day) => memberIds.some((memberId) => dayPresenceState(day.id, day.date, memberId) === "unknown" || dayPresenceState(day.id, day.date, memberId) === "partial")),
+    dayPresenceByDay: Object.fromEntries(days.map((day) => [day.id, Object.fromEntries(memberIds.map((memberId) => [memberId, dayPresenceState(day.id, day.date, memberId)]))])),
+    dayPresenceDetailsByDay: Object.fromEntries(days.map((day) => [day.id, Object.fromEntries(memberIds.map((memberId) => { const value = dayPresenceDetail(day.id, memberId); return [memberId, value ? { state: value.state, startsAt: value.startsAt, endsAt: value.endsAt } : { state: dayPresenceState(day.id, day.date, memberId), startsAt: null, endsAt: null }]; }))])),
     budget,
     currentMemberId: memberId ?? null,
     savedPlaces,

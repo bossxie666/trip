@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 
-type PresenceState = "present" | "absent" | "unknown";
+type PresenceState = "present" | "absent" | "partial" | "unknown";
 type Member = { id: string; displayName: string };
 type Item = { id: string; title: string; note: string | null; startTimeLocal: string | null; durationMinutes: number | null; dayId: string };
 

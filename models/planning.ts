@@ -6,6 +6,7 @@ export type BookingStatus = "tentative" | "confirmed" | "cancelled";
 export type BookingTemporalKind = "instant" | "interval" | "date_range";
 export type AllocationMode = "equal" | "custom";
 export type PresenceState = "present" | "absent" | "unknown";
+export type DayPresenceState = "present" | "absent" | "partial" | "unknown";
 export type PresenceCoverage = "unknown" | "complete";
 export type ItineraryItemType = "place" | "meal" | "transit" | "lodging" | "activity" | "note";
 export type ParticipantOverride = "included" | "excluded";
@@ -82,4 +83,13 @@ export type DayTimelineEntry = {
   sortOrder: number | null;
   anchorKind?: "start" | "stay" | "end" | "timed";
   locked: boolean;
+  placementOrder?: number | null;
+};
+
+export type DayTimelinePlacement = {
+  dayId: string;
+  sourceType: "itinerary_item" | "booking_anchor";
+  sourceId: string;
+  anchorType?: "departure" | "arrival" | "hotel_checkin" | "hotel_checkout" | "stay" | "other" | null;
+  sortOrder: number;
 };

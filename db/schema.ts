@@ -313,6 +313,27 @@ export const memberPresenceWindowRecords = sqliteTable("member_presence_windows"
   index("idx_presence_trip_stage_start").on(table.tripId, table.stageId, table.startsAt),
 ]);
 
+/** Explicit day-level presence decisions.  A missing row means the day has
+ * not been confirmed yet; it is never interpreted as absent or present.  The
+ * interval columns are only used for partial-day presence and remain separate
+ * from the actual MemberPresenceWindow facts. */
+export const dayPresenceRecords = sqliteTable("day_member_presence", {
+  id: text("id").primaryKey(),
+  tripId: text("trip_id").notNull().references(() => tripRecords.id, { onDelete: "cascade" }),
+  dayId: text("day_id").notNull().references(() => dayRecords.id, { onDelete: "cascade" }),
+  memberId: text("member_id").notNull().references(() => memberRecords.id, { onDelete: "restrict" }),
+  state: text("state", { enum: ["present", "absent", "partial"] }).notNull(),
+  startsAt: text("starts_at"),
+  endsAt: text("ends_at"),
+  createdByMemberId: text("created_by_member_id").references(() => memberRecords.id, { onDelete: "set null" }),
+  updatedByMemberId: text("updated_by_member_id").references(() => memberRecords.id, { onDelete: "set null" }),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("idx_day_member_presence_unique").on(table.dayId, table.memberId),
+  index("idx_day_member_presence_trip_day").on(table.tripId, table.dayId),
+]);
+
 export const itineraryItemRecords = sqliteTable("itinerary_items", {
   id: text("id").primaryKey(),
   tripId: text("trip_id").notNull().references(() => tripRecords.id, { onDelete: "cascade" }),
@@ -408,6 +429,26 @@ export const routePreferenceRecords = sqliteTable("route_preferences", {
 }, (table) => [
   uniqueIndex("idx_route_preferences_segment_member").on(table.tripId, table.dayId, table.fromSource, table.fromId, table.toSource, table.toId, table.memberId),
   index("idx_route_preferences_day").on(table.tripId, table.dayId),
+]);
+
+/** Placement for mixing immutable Booking facts with mutable itinerary items.
+ * It stores only display order, never a copy of booking timing or amount. */
+export const dayTimelinePositionRecords = sqliteTable("day_timeline_positions", {
+  id: text("id").primaryKey(),
+  tripId: text("trip_id").notNull().references(() => tripRecords.id, { onDelete: "cascade" }),
+  dayId: text("day_id").notNull().references(() => dayRecords.id, { onDelete: "cascade" }),
+  sourceType: text("source_type", { enum: ["itinerary_item", "booking_anchor"] }).notNull(),
+  sourceId: text("source_id").notNull(),
+  anchorType: text("anchor_type", { enum: ["departure", "arrival", "hotel_checkin", "hotel_checkout", "stay", "other"] }),
+  sortOrder: integer("sort_order").notNull(),
+  createdByMemberId: text("created_by_member_id").references(() => memberRecords.id, { onDelete: "set null" }),
+  updatedByMemberId: text("updated_by_member_id").references(() => memberRecords.id, { onDelete: "set null" }),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("idx_day_timeline_position_source").on(table.dayId, table.sourceType, table.sourceId, table.anchorType),
+  uniqueIndex("idx_day_timeline_position_order").on(table.dayId, table.sortOrder),
+  index("idx_day_timeline_position_trip_day").on(table.tripId, table.dayId),
 ]);
 
 export const dayPlaceRecords = sqliteTable("day_places", {

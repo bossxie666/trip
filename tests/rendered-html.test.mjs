@@ -21,7 +21,7 @@ class TestD1Database {
 const DB = new TestD1Database();
 globalThis.__TRIP_TEST_D1__ = DB;
 globalThis.__TRIP_TEST_ENV__ = { TRIP_SPACE_INVITE_CODE: "test-invite", TRIP_SPACE_SESSION_SECRET: "test-session-secret-at-least-32-characters", AMAP_JS_API_KEY: "test-js-key", AMAP_JS_SECURITY_CODE: "test-js-code", AMAP_WEB_SERVICE_KEY: "test-web-key" };
-for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
+for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql", "0011_v2_1_stability.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
 
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
@@ -127,7 +127,7 @@ test("keeps the generic map fit guard and candidate marker semantics", () => {
   assert.match(planMap, /markerObjects/);
   assert.match(planMap, /lastFitSignature/);
   assert.match(planMap, /setFitView\(markerObjects\.current\)/);
-  assert.match(planMap, /参与成员待确认/);
+  assert.match(planMap, /当天成员尚未设置/);
   assert.match(map, /setMapReady\(true\)/);
   assert.match(map, /lastFitSignature/);
   assert.match(map, /place\.planStatus === "candidate" \? 0\.48 : 1/);
@@ -176,7 +176,7 @@ test("renders the E1 planning workspace from Booking, Recommendation and Itinera
   assert.match(html, /TRIP CONSOLE/); assert.match(html, /2026\.09\.23 — 09\.27/); assert.match(html, /上海4人 · 杭州5人/);
   assert.match(html, /06:35–08:55/); assert.match(html, /¥480/); assert.match(html, /上海南酒店/); assert.match(html, /杭州东酒店/); assert.match(html, /上海→杭州/); assert.match(html, /待确认/);
   for (const label of ["09/23", "09/24", "09/25", "09/26", "09/27"]) assert.match(html, new RegExp(label));
-  assert.match(html, /攻略素材/); assert.match(html, /上海迪士尼/); assert.match(html, /已加入 09\/23/); assert.match(html, /Booking Anchor/); assert.match(html, /成员在场信息待补充/);
+  assert.match(html, /攻略素材/); assert.match(html, /上海迪士尼/); assert.match(html, /已加入 09\/23/); assert.match(html, /Booking Anchor/); assert.match(html, /当天成员尚未设置/);
   assert.doesNotMatch(html, /SZX-SHA-HGH|开始做选择|跳进地理书的旅行/);
 
   const day2Html = await (await render(`/trips/shanghai-hangzhou-2026/plan?view=planning&day=${day2}`)).text();
@@ -212,6 +212,19 @@ test("keeps Recommendation region and category independent from the active Day",
   const tongluLibrary = tonglu.match(/<div class="recommendation-grid">([\s\S]*?)<a class="view-all-materials"/)?.[1] || "";
   assert.match(tongluLibrary, /桐庐一日攻略/); assert.doesNotMatch(tongluLibrary, /西湖/); assert.match(tonglu, /桐庐(?:<!-- -->)? · (?:<!-- -->)?攻略/);
   assert.equal(DB.database.prepare("SELECT COUNT(*) count FROM cities WHERE name = '桐庐' OR name = '桐庐市'").get().count, 0);
+});
+
+test("opens the full Recommendation Library without coupling it to the active Day", async () => {
+  const response = await render("/trips/shanghai-hangzhou-2026/plan?view=planning&library=all&day=trip-shanghai-hangzhou-2026-day-1&area=hangzhou&category=food&q=杭帮菜");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /TRIP LIBRARY/);
+  assert.match(html, /攻略资料库/);
+  assert.match(html, /杭州/);
+  assert.match(html, /美食/);
+  assert.match(html, /杭帮菜/);
+  assert.match(html, /← 返回规划/);
+  assert.match(html, /library=all/);
 });
 
 test("E1 add-to-Day writes only ItineraryItem and keeps Legacy tables frozen", async () => {

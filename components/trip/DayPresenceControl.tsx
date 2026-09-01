@@ -1,46 +1,63 @@
-/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-type PresenceState = "present" | "absent" | "unknown";
+type PresenceState = "present" | "absent" | "partial" | "unknown";
 type Member = { id: string; displayName: string };
+type PresenceDetail = { state: PresenceState; startsAt?: string | null; endsAt?: string | null };
+type PresenceChoice = Exclude<PresenceState, "unknown">;
+type Draft = { state: PresenceChoice | null; startsAt: string; endsAt: string };
 
-export function DayPresenceControl({ slug: providedSlug, dayId: providedDayId, dayLabel: providedDayLabel, members: providedMembers, initialStates: providedStates }: { slug?: string; dayId?: string; dayLabel?: string; members?: Member[]; initialStates?: Record<string, PresenceState> }) {
-  const [context, setContext] = useState<{ slug: string; dayId: string; dayLabel: string; members: Member[]; states: Record<string, PresenceState> }>(() => ({ slug: providedSlug || "", dayId: providedDayId || "", dayLabel: providedDayLabel || "当天行程", members: providedMembers || [], states: providedStates || {} }));
-  const { slug, dayId, dayLabel, members, states: initialStates } = context;
+function timeValue(value: string | null | undefined) {
+  if (!value) return "";
+  const match = value.match(/T(\d{2}:\d{2})/);
+  return match?.[1] || (value.match(/^(\d{2}:\d{2})$/)?.[1] || "");
+}
+
+export function DayPresenceControl({ slug: providedSlug, dayId: providedDayId, dayLabel: providedDayLabel, members: providedMembers, initialStates: providedStates, initialDetails: providedDetails }: { slug?: string; dayId?: string; dayLabel?: string; members?: Member[]; initialStates?: Record<string, PresenceState>; initialDetails?: Record<string, PresenceDetail> }) {
+  const [context, setContext] = useState<{ slug: string; dayId: string; dayLabel: string; members: Member[]; states: Record<string, PresenceState>; details: Record<string, PresenceDetail> }>(() => ({ slug: providedSlug || "", dayId: providedDayId || "", dayLabel: providedDayLabel || "当天行程", members: providedMembers || [], states: providedStates || {}, details: providedDetails || {} }));
+  const { slug, dayId, dayLabel, members, states } = context;
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<string[]>(() => members.filter((member) => initialStates?.[member.id] === "present").map((member) => member.id));
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const hasUnknown = members.some((member) => !initialStates?.[member.id] || initialStates[member.id] === "unknown");
+  const [drafts, setDrafts] = useState<Record<string, Draft>>(() => Object.fromEntries((providedMembers || []).map((member) => {
+    const detail = providedDetails?.[member.id];
+    const state = (providedStates?.[member.id] === "partial" ? "partial" : providedStates?.[member.id] === "absent" ? "absent" : providedStates?.[member.id] === "present" ? "present" : null) as Draft["state"];
+    return [member.id, { state, startsAt: timeValue(detail?.startsAt), endsAt: timeValue(detail?.endsAt) }];
+  })));
+  const [saving, setSaving] = useState(false), [error, setError] = useState("");
+  const hasUnknown = useMemo(() => members.some((member) => !states[member.id] || states[member.id] === "unknown"), [members, states]);
+
+  function setDraft(memberId: string, patch: Partial<Draft>) {
+    setDrafts((current) => ({ ...current, [memberId]: { ...(current[memberId] || { state: null, startsAt: "", endsAt: "" }), ...patch } }));
+  }
 
   useEffect(() => {
     if (!context.slug || !context.dayId) {
       const pathParts = window.location.pathname.split("/").filter(Boolean);
-      const slugFromPath = pathParts[1] === "trips" ? pathParts[2] : "";
+      const slugFromPath = pathParts[0] === "trips" ? pathParts[1] : "";
       const dayFromQuery = new URLSearchParams(window.location.search).get("day") || "";
       if (slugFromPath && dayFromQuery) {
         fetch(`/api/trips/${encodeURIComponent(slugFromPath)}/plan/presence?dayId=${encodeURIComponent(dayFromQuery)}`).then(async (response) => {
           if (!response.ok) return null;
-          const payload = await response.json() as { day?: { id: string; title: string | null }; members?: Member[]; states?: Record<string, PresenceState> };
+          const payload = await response.json() as { day?: { id: string; title: string | null }; members?: Member[]; states?: Record<string, PresenceState>; details?: Record<string, PresenceDetail> };
           if (!payload.day) return null;
-          setContext({ slug: slugFromPath, dayId: payload.day.id, dayLabel: payload.day.title || "当天行程", members: payload.members || [], states: payload.states || {} });
-          setSelected((payload.members || []).filter((member) => payload.states?.[member.id] === "present").map((member) => member.id));
+          const nextMembers = payload.members || [];
+          setContext({ slug: slugFromPath, dayId: payload.day.id, dayLabel: payload.day.title || "当天行程", members: nextMembers, states: payload.states || {}, details: payload.details || {} });
+          setDrafts(Object.fromEntries(nextMembers.map((member) => { const detail = payload.details?.[member.id]; const state = payload.states?.[member.id] === "absent" ? "absent" : payload.states?.[member.id] === "partial" ? "partial" : payload.states?.[member.id] === "present" ? "present" : null; return [member.id, { state, startsAt: timeValue(detail?.startsAt), endsAt: timeValue(detail?.endsAt) }]; })));
           return null;
         }).catch(() => undefined);
       }
     }
-    if (window.location.hash === `#day-presence-${dayId}`) setOpen(true);
+    const openFromHash = () => { if (window.location.hash === `#day-presence-${dayId}`) setOpen(true); };
+    window.addEventListener("hashchange", openFromHash);
+    openFromHash();
+    return () => window.removeEventListener("hashchange", openFromHash);
   }, [context.dayId, context.slug, dayId]);
-
-  function toggle(memberId: string) {
-    setSelected((current) => current.includes(memberId) ? current.filter((id) => id !== memberId) : [...current, memberId]);
-  }
 
   async function save() {
     setSaving(true); setError("");
     try {
-      const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/plan/presence`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ dayId, memberIds: selected }) });
+      if (members.some((member) => !drafts[member.id]?.state)) throw new Error("请先为每位成员选择在场状态。");
+      const body = { dayId, members: members.map((member) => { const draft = drafts[member.id] || { state: null, startsAt: "", endsAt: "" }; const state = draft.state || "absent"; return { memberId: member.id, state, startsAt: state === "partial" ? (draft.startsAt || null) : null, endsAt: state === "partial" ? (draft.endsAt || null) : null }; }) };
+      const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/plan/presence`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const payload = await response.json() as { error?: string };
       if (!response.ok) throw new Error(payload.error || "当天成员保存失败");
       location.assign(`/trips/${encodeURIComponent(slug)}/plan?view=planning&day=${encodeURIComponent(dayId)}`);
@@ -48,12 +65,12 @@ export function DayPresenceControl({ slug: providedSlug, dayId: providedDayId, d
   }
 
   return <div id={`day-presence-${dayId}`} className="day-presence-control">
-    <button type="button" className="day-presence-trigger" onClick={() => setOpen((current) => !current)}>{hasUnknown ? "当天成员 / 确认成员" : "当天成员 / 已确认"}</button>
+    <button type="button" className="day-presence-trigger" onClick={() => setOpen((current) => !current)}>{hasUnknown ? "当天成员尚未设置 · 确认成员" : "当天成员 · 已确认"}</button>
     {open && <div className="day-presence-panel" role="dialog" aria-label={`${dayLabel}当天成员`}>
       <header><div><span>DAY PRESENCE</span><b>{dayLabel}</b></div><button type="button" onClick={() => setOpen(false)} aria-label="关闭">×</button></header>
-      <p>勾选表示这一天在场；未勾选表示不在场。保存后写入明确的全天在场区间。</p>
-      <div className="presence-member-list">{members.map((member) => <label key={member.id}><input type="checkbox" checked={selected.includes(member.id)} onChange={() => toggle(member.id)} /><span>{member.displayName}</span><small>{initialStates?.[member.id] === "unknown" || !initialStates?.[member.id] ? "待确认" : initialStates[member.id] === "present" ? "已在场" : "不在场"}</small></label>)}</div>
-      <div className="presence-actions"><button type="button" onClick={() => setSelected(members.map((member) => member.id))}>全员参与</button><button type="button" onClick={save} disabled={saving}>{saving ? "保存中…" : "保存当天成员"}</button></div>
+      <p>这里确认这一天谁实际在场。部分在场可以只填抵达或离开时间；未填写的成员不会被默认为在场。</p>
+      <div className="presence-member-list">{members.map((member) => { const draft = drafts[member.id] || { state: null, startsAt: "", endsAt: "" }; const currentState = states[member.id] || "unknown"; return <fieldset key={member.id} className="presence-member-row"><legend>{member.displayName}<small>{currentState === "unknown" ? "当天成员尚未设置" : currentState === "partial" ? "部分在场" : currentState === "present" ? "在场" : "不在场"}</small></legend><div className="presence-state-options"><label><input type="radio" name={`presence-${member.id}`} checked={draft.state === "present"} onChange={() => setDraft(member.id, { state: "present" })}/>在场</label><label><input type="radio" name={`presence-${member.id}`} checked={draft.state === "absent"} onChange={() => setDraft(member.id, { state: "absent" })}/>不在场</label><label><input type="radio" name={`presence-${member.id}`} checked={draft.state === "partial"} onChange={() => setDraft(member.id, { state: "partial" })}/>部分在场</label></div>{draft.state === "partial" && <div className="presence-time-fields"><label>开始时间<input type="time" value={draft.startsAt} onChange={(event) => setDraft(member.id, { startsAt: event.target.value })}/></label><label>结束时间<input type="time" value={draft.endsAt} onChange={(event) => setDraft(member.id, { endsAt: event.target.value })}/></label></div>}</fieldset>; })}</div>
+      <div className="presence-actions"><button type="button" onClick={() => setDrafts(Object.fromEntries(members.map((member) => [member.id, { state: "present" as const, startsAt: "", endsAt: "" }]))) }>全员参与</button><button type="button" onClick={() => setDrafts(Object.fromEntries(members.map((member) => [member.id, { state: "absent" as const, startsAt: "", endsAt: "" }]))) }>全员不在场</button><button type="button" onClick={save} disabled={saving}>{saving ? "保存中…" : "保存当天成员"}</button></div>
       {error && <small className="form-error" role="alert">{error}</small>}
     </div>}
   </div>;

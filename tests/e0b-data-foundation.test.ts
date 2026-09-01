@@ -39,7 +39,7 @@ class TestD1Database {
 
 const DB = new TestD1Database();
 (globalThis as typeof globalThis & { __TRIP_TEST_D1__?: unknown; __TRIP_TEST_ENV__?: Record<string, string> }).__TRIP_TEST_D1__ = DB;
-for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql"]) {
+for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0011_v2_1_stability.sql"]) {
   DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
 }
 
@@ -70,6 +70,8 @@ const bookingRepo = await import("../services/booking-repository.server.ts");
 const itineraryRepo = await import("../services/itinerary-repository.server.ts");
 const presenceRepo = await import("../services/presence-repository.server.ts");
 const timelineService = await import("../services/day-timeline-service.server.ts");
+const timelinePlacementRepo = await import("../services/timeline-placement-repository.server.ts");
+const transitSteps = await import("../services/amap/transit-steps.ts");
 const domain = await import("../services/planning-domain.mjs");
 
 test("E0B data foundation", async (t) => {
@@ -138,6 +140,19 @@ test("E0B data foundation", async (t) => {
     assert.equal(participants.find((entry) => entry.memberId === "member-wang-jingwen")?.state, "unknown");
   });
 
+  await t.test("keeps explicit Day presence scoped to its Day and supports partial presence", async () => {
+    await presenceRepo.replaceDayPresence({ tripId: "trip-e0b-a", dayId: "e0b-a-day-1", members: [
+      { memberId: "member-nini", state: "present" },
+      { memberId: "member-zhu-jingqi", state: "absent" },
+      { memberId: "member-wang-jingwen", state: "partial", startsAt: "12:00", endsAt: null },
+    ], actorMemberId: "member-nini" });
+    assert.equal(await presenceRepo.getPresenceState("trip-e0b-a", "member-zhu-jingqi", "2027-01-01T08:00:00.000Z"), "absent");
+    // A Day 1 absence must not leak into Day 2, where the existing window is active.
+    assert.equal(await presenceRepo.getPresenceState("trip-e0b-a", "member-zhu-jingqi", "2027-01-02T03:00:00.000Z"), "present");
+    assert.equal(await presenceRepo.getPresenceState("trip-e0b-a", "member-wang-jingwen", "2027-01-01T03:00:00.000Z"), "absent");
+    assert.equal(await presenceRepo.getPresenceState("trip-e0b-a", "member-wang-jingwen", "2027-01-01T05:00:00.000Z"), "present");
+  });
+
   await t.test("reorders atomically without touching day_places", async () => {
     const item2 = await itineraryRepo.createItineraryItem({ tripId: "trip-e0b-a", dayId: "e0b-a-day-1", itemType: "note", title: "二" }, "member-nini");
     const item3 = await itineraryRepo.createItineraryItem({ tripId: "trip-e0b-a", dayId: "e0b-a-day-1", itemType: "note", title: "三" }, "member-nini");
@@ -168,6 +183,27 @@ test("E0B data foundation", async (t) => {
     assert.equal(day2[0].anchorKind, "stay");
     const day3 = await timelineService.getDayTimeline("trip-e0b-a", "e0b-a-day-3");
     assert.equal(day3.at(-1)?.anchorKind, "end");
+  });
+
+  await t.test("persists mixed Booking Anchor placement without changing Booking facts", async () => {
+    const beforeBooking = DB.database.prepare("SELECT start_at, end_at, total_amount_minor FROM bookings WHERE title = '08点列车'").get();
+    const baseline = await timelineService.getDayTimeline("trip-e0b-a", "e0b-a-day-1");
+    const requested = [...baseline].reverse().map((entry) => ({ source: entry.source, sourceId: entry.sourceId, anchorKind: entry.anchorKind }));
+    const placed = await timelinePlacementRepo.replaceDayTimelinePositions({ tripId: "trip-e0b-a", dayId: "e0b-a-day-1", entries: requested, actorMemberId: "member-nini" });
+    assert.deepEqual(placed.map((entry) => `${entry.source}:${entry.sourceId}:${entry.anchorKind || ""}`), requested.map((entry) => `${entry.source}:${entry.sourceId}:${entry.anchorKind || ""}`));
+    assert.deepEqual(DB.database.prepare("SELECT start_at, end_at, total_amount_minor FROM bookings WHERE title = '08点列车'").get(), beforeBooking);
+  });
+
+  await t.test("aggregates transit legs and removes empty station steps", () => {
+    const result = transitSteps.aggregateTransitSteps([
+      { mode: "walking", instruction: "起点", lineName: null, direction: null, stationCount: null, fromStation: null, toStation: "首站", transfer: null, durationSeconds: 120, distanceMeters: 180, polyline: [] },
+      { mode: "subway", instruction: null, lineName: "2号线", direction: "徐泾东方向", stationCount: 3, fromStation: "首站", toStation: "世纪大道", transfer: null, durationSeconds: 600, distanceMeters: 2600, polyline: [] },
+      { mode: "subway", instruction: null, lineName: "2号线", direction: "徐泾东方向", stationCount: 2, fromStation: "世纪大道", toStation: "人民广场", transfer: null, durationSeconds: 360, distanceMeters: 1500, polyline: [] },
+      { mode: "bus", instruction: null, lineName: "", direction: null, stationCount: 0, fromStation: null, toStation: null, transfer: null, durationSeconds: 0, distanceMeters: 0, polyline: [] },
+      { mode: "walking", instruction: "下车后", lineName: null, direction: null, stationCount: null, fromStation: null, toStation: "终点", transfer: null, durationSeconds: 180, distanceMeters: 260, polyline: [] },
+    ]);
+    assert.deepEqual(result.map((step) => [step.mode, step.lineName, step.stationCount]), [["walking", null, null], ["subway", "2号线", 5], ["walking", null, null]]);
+    assert.equal(result.some((step) => step.stationCount === 0), false);
   });
 
   await t.test("domain validation rejects floats and preserves stable tie breaks", () => {

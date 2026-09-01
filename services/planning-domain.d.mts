@@ -10,4 +10,4 @@ export function stableEqualSplit(amountMinor: number, memberIds: string[]): Mone
 export function validateCustomAllocations(amountMinor: number, allocations: MoneyAllocation[]): MoneyAllocation[];
 export function assertNoPresenceOverlap(existing: PresenceWindow[], candidate: Omit<PresenceWindow, "id">, ignoreId?: string | null): void;
 export function resolvePresence(windows: PresenceWindow[], at: string, coverage: PresenceCoverage): PresenceState;
-export function buildDayTimeline(input: { dayDate: string; timezone: string; bookings: TimelineBooking[]; items: TimelineItineraryItem[] }): DayTimelineEntry[];
+export function buildDayTimeline(input: { dayDate: string; timezone: string; bookings: TimelineBooking[]; items: TimelineItineraryItem[]; placements?: Array<{ sourceType: "itinerary_item" | "booking_anchor"; sourceId: string; anchorType?: string | null; sortOrder: number }> }): DayTimelineEntry[];

@@ -83,7 +83,7 @@ function utcToLocalTime(instant, timezone) {
   return new Intl.DateTimeFormat("en-GB", { timeZone: timezone, hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(instant));
 }
 
-export function buildDayTimeline({ dayDate, timezone, bookings, items }) {
+export function buildDayTimeline({ dayDate, timezone, bookings, items, placements = [] }) {
   assertLocalDate(dayDate, "day_date");
   assertTimezone(timezone);
   const entries = [];
@@ -99,7 +99,18 @@ export function buildDayTimeline({ dayDate, timezone, bookings, items }) {
   }
   for (const item of items) entries.push({ source: "itinerary", sourceId: item.id, entryType: "itinerary-item", bucket: item.startTimeLocal ? "timed" : "untimed", title: item.title, timeLocal: item.startTimeLocal, sortOrder: item.sortOrder, locked: item.lockedAt != null });
   const bucketOrder = { "start-of-day": 0, timed: 1, untimed: 2, "end-of-day": 3 };
+  const placementByKey = new Map((placements || []).map((placement) => [`${placement.sourceType === "itinerary_item" ? "itinerary" : "booking"}:${placement.sourceId}:${placement.anchorType || ""}`, placement.sortOrder]));
+  for (const entry of entries) {
+    const anchorTypes = entry.source === "itinerary" ? ["", "other"] : entry.anchorKind === "start" ? [entry.title.includes("酒店") ? "hotel_checkin" : "departure", "departure"] : entry.anchorKind === "end" ? [entry.title.includes("酒店") ? "hotel_checkout" : "arrival", "arrival"] : entry.anchorKind === "stay" ? ["stay"] : ["other"];
+    entry.placementOrder = anchorTypes.map((anchorType) => placementByKey.get(`${entry.source}:${entry.sourceId}:${anchorType}`)).find((value) => value != null) ?? null;
+  }
   return entries.sort((a, b) => {
+    const aPlacement = a.placementOrder, bPlacement = b.placementOrder;
+    if (aPlacement != null || bPlacement != null) {
+      if (aPlacement == null) return 1;
+      if (bPlacement == null) return -1;
+      if (aPlacement !== bPlacement) return aPlacement - bPlacement;
+    }
     const bucket = bucketOrder[a.bucket] - bucketOrder[b.bucket];
     if (bucket) return bucket;
     if (a.bucket === "timed") {

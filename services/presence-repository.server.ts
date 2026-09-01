@@ -1,6 +1,6 @@
 import { and, asc, eq } from "drizzle-orm";
-import { getDb } from "../db/index.ts";
-import { dayRecords, itineraryItemParticipantOverrideRecords, itineraryItemRecords, memberPresenceWindowRecords, tripMemberRecords, tripRecords, tripStageRecords } from "../db/schema.ts";
+import { getDb, getRuntimeEnv } from "../db/index.ts";
+import { dayPresenceRecords, dayRecords, itineraryItemParticipantOverrideRecords, itineraryItemRecords, memberPresenceWindowRecords, tripMemberRecords, tripRecords, tripStageRecords } from "../db/schema.ts";
 import { assertNoPresenceOverlap, assertTimezone, assertUtcInstant, resolvePresence } from "./planning-domain.mjs";
 import type { PresenceCoverage, PresenceState } from "../models/planning.ts";
 
@@ -27,6 +27,25 @@ export async function getPresenceState(tripId: string, memberId: string, at: str
   const db = getDb();
   const membership = (await db.select({ coverage: tripMemberRecords.presenceCoverage }).from(tripMemberRecords).where(and(eq(tripMemberRecords.tripId, tripId), eq(tripMemberRecords.memberId, memberId))).limit(1))[0];
   if (!membership) return "unknown";
+  const point = Date.parse(at);
+  const explicit = await db.select({ state: dayPresenceRecords.state, startsAt: dayPresenceRecords.startsAt, endsAt: dayPresenceRecords.endsAt, dayDate: dayRecords.date, timezone: tripRecords.timezone }).from(dayPresenceRecords).innerJoin(dayRecords, eq(dayRecords.id, dayPresenceRecords.dayId)).innerJoin(tripRecords, eq(tripRecords.id, dayPresenceRecords.tripId)).where(and(eq(dayPresenceRecords.tripId, tripId), eq(dayPresenceRecords.memberId, memberId)));
+  if (Number.isFinite(point)) {
+    const explicitState = explicit.find((entry) => {
+      if (!entry.dayDate) return false;
+      const offset = entry.timezone === "Asia/Shanghai" ? "+08:00" : entry.timezone === "Asia/Tokyo" ? "+09:00" : "+00:00";
+      const dayStart = new Date(`${entry.dayDate}T00:00:00${offset}`).getTime();
+      return point >= dayStart && point < dayStart + 86_400_000;
+    });
+    if (explicitState) {
+      if (explicitState.state === "present") return "present";
+      if (explicitState.state === "absent") return "absent";
+      const offset = explicitState.timezone === "Asia/Shanghai" ? "+08:00" : explicitState.timezone === "Asia/Tokyo" ? "+09:00" : "+00:00";
+      const dayStart = explicitState.dayDate ? new Date(`${explicitState.dayDate}T00:00:00${offset}`).getTime() : Number.NaN;
+      const starts = explicitState.startsAt ? Date.parse(explicitState.startsAt) : dayStart;
+      const ends = explicitState.endsAt ? Date.parse(explicitState.endsAt) : dayStart + 86_400_000;
+      return Number.isFinite(starts) && Number.isFinite(ends) && starts <= point && point < ends ? "present" : "absent";
+    }
+  }
   const windows = await db.select({ id: memberPresenceWindowRecords.id, startsAt: memberPresenceWindowRecords.startsAt, endsAt: memberPresenceWindowRecords.endsAt }).from(memberPresenceWindowRecords).where(and(eq(memberPresenceWindowRecords.tripId, tripId), eq(memberPresenceWindowRecords.memberId, memberId))).orderBy(asc(memberPresenceWindowRecords.startsAt));
   return resolvePresence(windows, at, membership.coverage);
 }
@@ -65,7 +84,16 @@ function localDayBounds(date: string, timezone: string) {
  * non-day-aligned windows are left intact and cause an overlap error instead
  * of being silently destroyed.
  */
-export async function replaceDayPresence(input: { tripId: string; dayId: string; memberIds: string[]; actorMemberId: string }) {
+export type DayPresenceUpdate = { memberId: string; state: "present" | "absent" | "partial"; startsAt?: string | null; endsAt?: string | null };
+
+function localTimeToUtc(dayDate: string, localTime: string | null | undefined, timezone: string, fallback: "start" | "end") {
+  if (!localTime) return new Date(`${dayDate}T${fallback === "start" ? "00:00" : "23:59"}:00${timezone === "Asia/Shanghai" ? "+08:00" : timezone === "Asia/Tokyo" ? "+09:00" : "+00:00"}`).toISOString();
+  if (/Z$/.test(localTime)) return new Date(localTime).toISOString();
+  if (!/^\d{2}:\d{2}$/.test(localTime)) throw new Error("INVALID_PRESENCE_TIME");
+  return new Date(`${dayDate}T${localTime}:00${timezone === "Asia/Shanghai" ? "+08:00" : timezone === "Asia/Tokyo" ? "+09:00" : "+00:00"}`).toISOString();
+}
+
+export async function replaceDayPresence(input: { tripId: string; dayId: string; memberIds?: string[]; members?: DayPresenceUpdate[]; actorMemberId: string }) {
   const db = getDb();
   await (async () => {
     if (!(await db.select({ memberId: tripMemberRecords.memberId }).from(tripMemberRecords).where(and(eq(tripMemberRecords.tripId, input.tripId), eq(tripMemberRecords.memberId, input.actorMemberId))).limit(1))[0]) throw new Error("MEMBER_NOT_IN_TRIP");
@@ -74,16 +102,22 @@ export async function replaceDayPresence(input: { tripId: string; dayId: string;
   if (!day?.date || !day.timezone) throw new Error("DAY_CONTEXT_INCOMPLETE");
   const members = await db.select({ memberId: tripMemberRecords.memberId }).from(tripMemberRecords).where(eq(tripMemberRecords.tripId, input.tripId));
   const memberSet = new Set(members.map((member) => member.memberId));
-  const selected = new Set(input.memberIds.map(String));
-  if ([...selected].some((memberId) => !memberSet.has(memberId))) throw new Error("MEMBER_NOT_IN_TRIP");
+  const legacySelected = new Set((input.memberIds || []).map(String));
+  const updates: DayPresenceUpdate[] = input.members?.length ? input.members.map((entry) => ({ memberId: String(entry.memberId), state: entry.state, startsAt: entry.startsAt ?? null, endsAt: entry.endsAt ?? null })) : members.map((member) => ({ memberId: member.memberId, state: legacySelected.has(member.memberId) ? "present" as const : "absent" as const }));
+  if (updates.length !== members.length || new Set(updates.map((entry) => entry.memberId)).size !== members.length || updates.some((entry) => !memberSet.has(entry.memberId) || !["present", "absent", "partial"].includes(entry.state))) throw new Error("INVALID_PRESENCE_STATE");
   const { start, end } = localDayBounds(day.date, day.timezone);
   const now = new Date().toISOString(), d1 = getRuntimeEnv().DB;
   const statements = [] as D1PreparedStatement[];
-  for (const member of members) {
-    statements.push(d1.prepare("DELETE FROM member_presence_windows WHERE trip_id = ? AND member_id = ? AND starts_at = ? AND ends_at = ?").bind(input.tripId, member.memberId, start, end));
-    if (selected.has(member.memberId)) statements.push(d1.prepare("INSERT INTO member_presence_windows (id, trip_id, member_id, stage_id, starts_at, ends_at, timezone, note, created_by_member_id, updated_by_member_id, created_at, updated_at) VALUES (?, ?, ?, NULL, ?, ?, ?, NULL, ?, ?, ?, ?)").bind(crypto.randomUUID(), input.tripId, member.memberId, start, end, day.timezone, input.actorMemberId, input.actorMemberId, now, now));
-    statements.push(d1.prepare("UPDATE trip_members SET presence_coverage = 'complete' WHERE trip_id = ? AND member_id = ?").bind(input.tripId, member.memberId));
+  for (const update of updates) {
+    let startsAt: string | null = null, endsAt: string | null = null;
+    if (update.state === "present") { startsAt = start; endsAt = end; }
+    if (update.state === "partial") {
+      startsAt = localTimeToUtc(day.date, update.startsAt, day.timezone, "start");
+      endsAt = localTimeToUtc(day.date, update.endsAt, day.timezone, "end");
+      if (Date.parse(endsAt) <= Date.parse(startsAt)) throw new Error("INVALID_PRESENCE_RANGE");
+    }
+    statements.push(d1.prepare("INSERT INTO day_member_presence (id, trip_id, day_id, member_id, state, starts_at, ends_at, created_by_member_id, updated_by_member_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(day_id, member_id) DO UPDATE SET state = excluded.state, starts_at = excluded.starts_at, ends_at = excluded.ends_at, updated_by_member_id = excluded.updated_by_member_id, updated_at = excluded.updated_at").bind(crypto.randomUUID(), input.tripId, input.dayId, update.memberId, update.state, startsAt, endsAt, input.actorMemberId, input.actorMemberId, now, now));
   }
   await d1.batch(statements);
-  return { dayId: input.dayId, memberIds: [...selected], startsAt: start, endsAt: end };
+  return { dayId: input.dayId, members: updates, startsAt: start, endsAt: end };
 }

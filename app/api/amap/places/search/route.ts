@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { cityRecords, tripCityRecords, tripMemberRecords, tripRecords } from "@/db/schema";
 import { getCurrentMember } from "@/services/auth.server";
-import { searchAmapPois } from "@/services/amap/amap-web-service.server";
+import { classifyAmapError, searchAmapPois } from "@/services/amap/amap-web-service.server";
 
 export async function GET(request: Request) {
   try {
@@ -21,7 +21,8 @@ export async function GET(request: Request) {
     return Response.json({ pois: await searchAmapPois(keywords, requestedRegion || city.name, rectangle || undefined) });
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
-    console.error("amap place search failed", { code, keywordLength: new URL(request.url).searchParams.get("keywords")?.trim().length || 0 });
-    return Response.json({ error: code === "AMAP_NOT_CONFIGURED" ? "地图服务尚未配置。" : "高德地点搜索暂时不可用，请稍后重试。" }, { status: code === "AMAP_NOT_CONFIGURED" ? 503 : 502 });
+    const classified = classifyAmapError(error, "poi");
+    console.error("amap place search failed", { requestType: "poi-search", code, keywordLength: new URL(request.url).searchParams.get("keywords")?.trim().length || 0, classifiedCode: classified.code });
+    return Response.json({ error: classified.message, code: classified.code }, { status: classified.status });
   }
 }

@@ -1,6 +1,6 @@
 import { getCurrentMember } from "@/services/auth.server";
 import { getNewPlanRoutePlaces } from "@/services/plan-workspace-service.server";
-import { planAmapRoute } from "@/services/amap/amap-web-service.server";
+import { classifyAmapError, planAmapRoute } from "@/services/amap/amap-web-service.server";
 import type { AMapRouteMode } from "@/services/amap/amap-types";
 import { getDb } from "@/db";
 import { and, eq } from "drizzle-orm";
@@ -22,7 +22,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     return Response.json({ route });
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
+    const classified = classifyAmapError(error, "route");
     const status = code === "TRIP_NOT_FOUND" || code === "PLACE_NOT_IN_TRIP" ? 404 : code === "MEMBER_NOT_IN_TRIP" ? 403 : code === "PLACE_MISSING_COORDINATES" ? 409 : code === "AMAP_NOT_CONFIGURED" ? 503 : 502;
-    return Response.json({ error: status === 409 ? "起点或终点还没有高德坐标。" : status === 404 ? "行程或地点不存在。" : status === 403 ? "你不是这条行程的成员。" : status === 503 ? "地图服务尚未配置。" : "路线规划暂时不可用。" }, { status });
+    const message = status === 409 ? "起点或终点还没有高德坐标。" : status === 404 ? "行程或地点不存在。" : status === 403 ? "你不是这条行程的成员。" : status === 503 && code === "AMAP_NOT_CONFIGURED" ? "地图服务配置异常，请联系管理员。" : classified.message;
+    return Response.json({ error: message, code: classified.code }, { status: status === 502 ? classified.status : status });
   }
 }

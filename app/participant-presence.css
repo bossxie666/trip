@@ -13,6 +13,10 @@
 .presence-actions{display:flex;gap:7px;flex-wrap:wrap}
 .presence-actions button{padding:8px 10px;border:1px solid var(--ink);background:var(--ink);color:#fff;cursor:pointer;font-size:10px;font-weight:800}
 .presence-actions button:first-child{background:var(--paper);color:var(--ink)}
+/* The V2.1 panel is an anchored dialog; keep the legacy rules from turning it
+ * into a normal-flow block when this stylesheet is loaded after globals.css. */
+.day-presence-panel{position:absolute;z-index:40}
+@media(max-width:680px){.day-presence-panel{position:fixed}}
 .item-participant-control{grid-column:1/3;margin:2px 0 0;padding:10px;border:1px solid var(--line)}
 .item-participant-control legend{padding:0 4px;color:var(--clay);font-size:10px;font-weight:800}
 .item-participant-control p{margin:0 0 8px;color:var(--muted);font-size:9px}
