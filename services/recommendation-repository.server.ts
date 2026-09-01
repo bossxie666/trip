@@ -1,7 +1,7 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { getDb } from "../db/index.ts";
 import { placeRecords, recommendationMemberStateRecords, recommendationPlaceOptionRecords, recommendationRecords, tripCityRecords, tripMemberRecords, tripRecords } from "../db/schema.ts";
-import { assertMinorAmount } from "./planning-domain.mjs";
+import { assertCurrency, assertMinorAmount } from "./planning-domain.mjs";
 import type { RecommendationCategory, RecommendationKind, RecommendationPlaceRelation } from "../models/planning.ts";
 
 export type CreateRecommendationInput = {
@@ -16,6 +16,10 @@ export type CreateRecommendationInput = {
   estimatedDurationMinutes?: number | null;
   estimatedCostMinor?: number | null;
   costBasis?: string | null;
+  priceMinMinor?: number | null;
+  priceMaxMinor?: number | null;
+  priceCurrency?: string | null;
+  priceBasis?: "per_person" | "per_group" | "per_item" | "free" | "unknown" | null;
   sourceLabel?: string | null;
   sourceUrl?: string | null;
   coverImageUrl?: string | null;
@@ -25,6 +29,12 @@ export async function createRecommendation(input: CreateRecommendationInput, act
   if (!input.title.trim()) throw new Error("RECOMMENDATION_TITLE_REQUIRED");
   if (input.estimatedDurationMinutes != null && (!Number.isSafeInteger(input.estimatedDurationMinutes) || input.estimatedDurationMinutes < 0)) throw new Error("INVALID_DURATION");
   if (input.estimatedCostMinor != null) assertMinorAmount(input.estimatedCostMinor, "estimated_cost");
+  if (input.priceMinMinor != null) assertMinorAmount(input.priceMinMinor, "price_min");
+  if (input.priceMaxMinor != null) assertMinorAmount(input.priceMaxMinor, "price_max");
+  if (input.priceMinMinor != null && input.priceMaxMinor != null && input.priceMaxMinor < input.priceMinMinor) throw new Error("INVALID_PRICE_RANGE");
+  if ((input.priceMinMinor != null || input.priceMaxMinor != null) && !input.priceCurrency) throw new Error("PRICE_CURRENCY_REQUIRED");
+  if (input.priceCurrency != null) assertCurrency(input.priceCurrency);
+  if (input.priceBasis != null && !["per_person", "per_group", "per_item", "free", "unknown"].includes(input.priceBasis)) throw new Error("INVALID_PRICE_BASIS");
   const db = getDb();
   const trip = (await db.select({ id: tripRecords.id }).from(tripRecords).where(eq(tripRecords.id, input.tripId)).limit(1))[0];
   if (!trip) throw new Error("TRIP_NOT_FOUND");

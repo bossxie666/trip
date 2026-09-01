@@ -10,7 +10,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     const actor = await getCurrentMember();
     if (!actor) return Response.json({ error: "请先验证旅行成员身份。" }, { status: 401 });
     const { slug } = await params;
-    const body = await request.json() as { recommendationId?: string; dayId?: string; placeId?: string; providerPlaceId?: string; cityId?: string; title?: string; itemType?: "place" | "meal" | "transit" | "lodging" | "activity" | "note"; note?: string | null; startTimeLocal?: string | null; durationMinutes?: number | null; participantMemberIds?: string[] | null };
+    const body = await request.json() as { recommendationId?: string; dayId?: string; placeId?: string; providerPlaceId?: string; cityId?: string; title?: string; itemType?: "place" | "meal" | "transit" | "lodging" | "activity" | "note"; note?: string | null; startTimeLocal?: string | null; endTimeLocal?: string | null; timeMode?: "untimed" | "start_only" | "range" | "all_day" | "opening_hours"; openingHoursNote?: string | null; durationMinutes?: number | null; participantMemberIds?: string[] | null };
     const db = getDb();
     const trip = (await db.select({ id: tripRecords.id }).from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1))[0];
     if (!trip || !body.dayId) return Response.json({ error: "行程或日期不存在。" }, { status: 404 });
@@ -32,7 +32,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     }
     if (!placeId && !title) return Response.json({ error: "请填写事项名称或选择地点。" }, { status: 400 });
     if (placeId && !title) title = (await db.select({ name: placeRecords.name }).from(placeRecords).where(eq(placeRecords.id, placeId)).limit(1))[0]?.name || "未命名地点";
-    const item = await createItineraryItem({ tripId: trip.id, dayId: body.dayId, recommendationId, placeId, itemType, title, note: body.note ?? null, startTimeLocal: body.startTimeLocal ?? null, durationMinutes: body.durationMinutes ?? null, lockedAt: null }, actor.id);
+    const item = await createItineraryItem({ tripId: trip.id, dayId: body.dayId, recommendationId, placeId, itemType, title, note: body.note ?? null, startTimeLocal: body.startTimeLocal ?? null, endTimeLocal: body.endTimeLocal ?? null, timeMode: body.timeMode, openingHoursNote: body.openingHoursNote ?? null, durationMinutes: body.durationMinutes ?? null, lockedAt: null }, actor.id);
     if (Object.prototype.hasOwnProperty.call(body, "participantMemberIds")) await replaceItineraryParticipantOverrides({ tripId: trip.id, itineraryItemId: item.id, memberIds: body.participantMemberIds == null ? null : [...new Set(body.participantMemberIds.map(String))], actorMemberId: actor.id });
     return Response.json({ item }, { status: 201 });
   } catch (error) {

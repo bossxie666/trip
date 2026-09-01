@@ -5,7 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { tripMemberRecords, tripRecords } from "@/db/schema";
 
-const modes = new Set<RoutePreferenceMode>(["walking", "subway", "bus", "mixed_transit", "taxi"]);
+const modes = new Set<RoutePreferenceMode>(["walking", "transit", "subway", "bus", "mixed_transit", "taxi", "bicycling"]);
 const sources = new Set<RouteSource>(["itinerary", "booking"]);
 
 export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {

@@ -116,6 +116,10 @@ export type UpdateBookingInput = {
   placeId?: string | null;
   originPlaceId?: string | null;
   destinationPlaceId?: string | null;
+  /** Replace the people who use this order; this is independent of cost allocations. */
+  participantMemberIds?: string[];
+  /** Replace one or more cost-line splits. Equal lines accept memberIds; custom lines accept allocations. */
+  costLineAllocations?: Array<{ costLineId: string; memberIds?: string[]; allocations?: MoneyAllocation[] }>;
 };
 
 /**
@@ -136,6 +140,7 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
   if (nextAmount != null) assertMinorAmount(nextAmount, "total_amount");
   const nextCurrency = input.currency === undefined ? booking.currency : input.currency;
   if (nextCurrency != null) assertCurrency(nextCurrency);
+  if ((nextAmount == null) !== (nextCurrency == null)) throw new Error("BOOKING_MONEY_INCOMPLETE");
   if (input.title !== undefined && !input.title.trim()) throw new Error("BOOKING_TITLE_REQUIRED");
   if (input.status !== undefined && !["tentative", "confirmed", "cancelled"].includes(input.status)) throw new Error("INVALID_BOOKING_STATUS");
   assertUtcInstant(input.startAt === undefined ? booking.startAt : input.startAt, "start_at");
@@ -150,31 +155,54 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
     const valid = await db.select({ id: placeRecords.id }).from(placeRecords).innerJoin(tripCityRecords, and(eq(tripCityRecords.cityId, placeRecords.cityId), eq(tripCityRecords.tripId, booking.tripId))).where(inArray(placeRecords.id, placeIds));
     if (valid.length !== placeIds.length) throw new Error("BOOKING_PLACE_NOT_IN_TRIP_CITY");
   }
-  if (nextAmount !== booking.totalAmountMinor) {
-    const lines = await db.select({ line: bookingCostLineRecords, allocation: bookingCostAllocationRecords }).from(bookingCostLineRecords).leftJoin(bookingCostAllocationRecords, eq(bookingCostAllocationRecords.costLineId, bookingCostLineRecords.id)).where(eq(bookingCostLineRecords.bookingId, booking.id));
-    if (lines.length) {
-      const allocated = lines.reduce((sum, row) => sum + (row.allocation?.amountMinor || 0), 0);
-      if (allocated !== (nextAmount ?? 0)) throw new Error(`COST_ALLOCATION_UNBALANCED:${allocated}`);
+  let nextParticipantIds: string[] | undefined;
+  if (input.participantMemberIds !== undefined) {
+    nextParticipantIds = [...new Set(input.participantMemberIds.map(String))];
+    if (nextParticipantIds.length) {
+      const valid = await db.select({ id: tripMemberRecords.memberId }).from(tripMemberRecords).where(and(eq(tripMemberRecords.tripId, booking.tripId), inArray(tripMemberRecords.memberId, nextParticipantIds)));
+      if (valid.length !== nextParticipantIds.length) throw new Error("BOOKING_PARTICIPANT_NOT_IN_TRIP");
     }
   }
+  const lineRows = await db.select({ line: bookingCostLineRecords, allocation: bookingCostAllocationRecords }).from(bookingCostLineRecords).leftJoin(bookingCostAllocationRecords, eq(bookingCostAllocationRecords.costLineId, bookingCostLineRecords.id)).where(eq(bookingCostLineRecords.bookingId, booking.id));
+  const linesById = new Map<string, { line: typeof bookingCostLineRecords.$inferSelect; allocations: MoneyAllocation[] }>();
+  for (const row of lineRows) {
+    const current = linesById.get(row.line.id) || { line: row.line, allocations: [] };
+    if (row.allocation) current.allocations.push({ memberId: row.allocation.memberId, amountMinor: row.allocation.amountMinor, notes: row.allocation.notes });
+    linesById.set(row.line.id, current);
+  }
+  const normalizedCostUpdates = new Map<string, MoneyAllocation[]>();
+  if (input.costLineAllocations !== undefined) {
+    const seen = new Set<string>();
+    for (const update of input.costLineAllocations) {
+      if (!update || typeof update.costLineId !== "string" || seen.has(update.costLineId)) throw new Error("INVALID_COST_LINE_ALLOCATION_INPUT");
+      seen.add(update.costLineId);
+      const storedLine = linesById.get(update.costLineId);
+      if (!storedLine) throw new Error("COST_LINE_NOT_IN_BOOKING");
+      const allocations = storedLine.line.allocationMode === "equal"
+        ? stableEqualSplit(storedLine.line.amountMinor, [...new Set((update.memberIds || []).map(String))])
+        : validateCustomAllocations(storedLine.line.amountMinor, (update.allocations || []).map((allocation) => ({ memberId: String(allocation.memberId), amountMinor: allocation.amountMinor, notes: allocation.notes })));
+      const memberIds = allocations.map((allocation) => allocation.memberId);
+      const valid = memberIds.length ? await db.select({ id: tripMemberRecords.memberId }).from(tripMemberRecords).where(and(eq(tripMemberRecords.tripId, booking.tripId), inArray(tripMemberRecords.memberId, memberIds))) : [];
+      if (valid.length !== memberIds.length) throw new Error("ALLOCATION_MEMBER_NOT_IN_TRIP");
+      normalizedCostUpdates.set(update.costLineId, allocations);
+    }
+  }
+  if (nextAmount !== booking.totalAmountMinor || normalizedCostUpdates.size) {
+    const allocated = [...linesById.entries()].reduce((sum, [lineId, row]) => sum + (normalizedCostUpdates.get(lineId) || row.allocations).reduce((lineSum, allocation) => lineSum + allocation.amountMinor, 0), 0);
+    if (lineRows.length && allocated !== (nextAmount ?? 0)) throw new Error(`COST_ALLOCATION_UNBALANCED:${allocated}`);
+  }
   const now = new Date().toISOString();
-  await db.update(bookingRecords).set({
-    title: input.title === undefined ? booking.title : input.title.trim(),
-    provider: input.provider === undefined ? booking.provider : input.provider,
-    status: input.status === undefined ? booking.status : input.status,
-    startAt: input.startAt === undefined ? booking.startAt : input.startAt,
-    endAt: input.endAt === undefined ? booking.endAt : input.endAt,
-    startDateLocal: input.startDateLocal === undefined ? booking.startDateLocal : input.startDateLocal,
-    endDateLocal: input.endDateLocal === undefined ? booking.endDateLocal : input.endDateLocal,
-    totalAmountMinor: nextAmount,
-    currency: nextCurrency,
-    bookingReference: input.bookingReference === undefined ? booking.bookingReference : input.bookingReference,
-    notes: input.notes === undefined ? booking.notes : input.notes,
-    placeId: nextPlaceId,
-    originPlaceId: nextOriginPlaceId,
-    destinationPlaceId: nextDestinationPlaceId,
-    updatedAt: now,
-    updatedByMemberId: actorMemberId,
-  }).where(eq(bookingRecords.id, id));
+  const d1 = getRuntimeEnv().DB;
+  const statements = [d1.prepare("UPDATE bookings SET title = ?, provider = ?, status = ?, start_at = ?, end_at = ?, start_date_local = ?, end_date_local = ?, total_amount_minor = ?, currency = ?, booking_reference = ?, notes = ?, place_id = ?, origin_place_id = ?, destination_place_id = ?, updated_at = ?, updated_by_member_id = ? WHERE id = ?").bind(
+    input.title === undefined ? booking.title : input.title.trim(), input.provider === undefined ? booking.provider : input.provider, input.status === undefined ? booking.status : input.status, input.startAt === undefined ? booking.startAt : input.startAt, input.endAt === undefined ? booking.endAt : input.endAt, input.startDateLocal === undefined ? booking.startDateLocal : input.startDateLocal, input.endDateLocal === undefined ? booking.endDateLocal : input.endDateLocal, nextAmount, nextCurrency, input.bookingReference === undefined ? booking.bookingReference : input.bookingReference, input.notes === undefined ? booking.notes : input.notes, nextPlaceId, nextOriginPlaceId, nextDestinationPlaceId, now, actorMemberId, id)];
+  if (nextParticipantIds !== undefined) {
+    statements.push(d1.prepare("DELETE FROM booking_participants WHERE booking_id = ?").bind(id));
+    for (const memberId of nextParticipantIds) statements.push(d1.prepare("INSERT INTO booking_participants (booking_id, member_id, role, created_at) VALUES (?, ?, 'covered', ?)").bind(id, memberId, now));
+  }
+  for (const [costLineId, allocations] of normalizedCostUpdates) {
+    statements.push(d1.prepare("DELETE FROM booking_cost_allocations WHERE cost_line_id = ?").bind(costLineId));
+    for (const allocation of allocations) statements.push(d1.prepare("INSERT INTO booking_cost_allocations (id, cost_line_id, member_id, amount_minor, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), costLineId, allocation.memberId, allocation.amountMinor, allocation.notes ?? null, now, now));
+  }
+  await d1.batch(statements);
   return (await db.select().from(bookingRecords).where(eq(bookingRecords.id, id)).limit(1))[0];
 }

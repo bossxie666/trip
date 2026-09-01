@@ -11,5 +11,5 @@ export function TimelinePlacementControl({ slug, dayId, entries, index }: { slug
     const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/plan/timeline`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ dayId, entries: next }) });
     if (response.ok) location.reload();
   };
-  return <span className="timeline-placement-controls" aria-label="调整 Booking Anchor 位置"><button type="button" onClick={() => move(-1)} disabled={index === 0} aria-label="Booking Anchor 上移">↑</button><button type="button" onClick={() => move(1)} disabled={index === entries.length - 1} aria-label="Booking Anchor 下移">↓</button></span>;
+  return <span className="timeline-placement-controls" aria-label="调整预订位置"><button type="button" onClick={() => move(-1)} disabled={index === 0} aria-label="预订上移">↑</button><button type="button" onClick={() => move(1)} disabled={index === entries.length - 1} aria-label="预订下移">↓</button></span>;
 }

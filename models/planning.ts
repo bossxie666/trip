@@ -13,7 +13,7 @@ export type ParticipantOverride = "included" | "excluded";
 export type ConstraintStrength = "soft" | "hard";
 export type BudgetCategory = "food" | "local_transport" | "entertainment" | "shopping" | "other";
 export type ExpenseScope = "personal" | "shared";
-export type RoutePreferenceMode = "walking" | "subway" | "bus" | "mixed_transit" | "taxi";
+export type RoutePreferenceMode = "walking" | "transit" | "subway" | "bus" | "mixed_transit" | "taxi" | "bicycling";
 export type RouteSource = "itinerary" | "booking";
 
 export type TripSavedPlace = {
@@ -69,6 +69,8 @@ export type TimelineItineraryItem = {
   id: string;
   title: string;
   startTimeLocal: string | null;
+  endTimeLocal?: string | null;
+  timeMode?: "untimed" | "start_only" | "range" | "all_day" | "opening_hours";
   sortOrder: number;
   lockedAt: string | null;
 };
@@ -80,6 +82,8 @@ export type DayTimelineEntry = {
   bucket: "start-of-day" | "timed" | "untimed" | "end-of-day";
   title: string;
   timeLocal: string | null;
+  endTimeLocal?: string | null;
+  timeMode?: "untimed" | "start_only" | "range" | "all_day" | "opening_hours";
   sortOrder: number | null;
   anchorKind?: "start" | "stay" | "end" | "timed";
   locked: boolean;

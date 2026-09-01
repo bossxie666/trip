@@ -2,7 +2,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AMapRouteMode, AMapRouteResult } from "@/services/amap/amap-types";
-import { totalWalkingDistance } from "@/services/amap/transit-steps";
 
 type Place = { id: string; name: string; cityId: string; address: string | null; latitude: number | null; longitude: number | null; district?: string | null; providerPlaceId?: string | null };
 type Day = { id: string; dayNumber: number; date: string | null; title: string; items: { item: { id: string; title: string; dayId: string; sortOrder: number; lockedAt: string | null; placeId: string | null }; place: Place | null }[] };
@@ -36,7 +35,6 @@ async function loadAMap() {
 }
 
 const modeLabels: Record<AMapRouteMode, string> = { walking: "步行", subway: "公共交通", bus: "公共交通", mixed_transit: "公共交通", taxi: "打车", driving: "驾车", bicycling: "骑行", transit: "公共交通" };
-const stepModeLabels = { walking: "步行", subway: "地铁", bus: "公交", taxi: "打车", other: "换乘" } as const;
 const categoryLabels = [{ key: "all", label: "全部" }, { key: "attraction", label: "景点" }, { key: "food", label: "美食" }, { key: "cafe", label: "咖啡" }, { key: "shopping", label: "购物" }, { key: "guide", label: "攻略" }, { key: "other", label: "其他" }];
 function minutes(seconds: number | null) { return seconds == null ? "时间待确认" : `${Math.max(1, Math.round(seconds / 60))} 分钟`; }
 function distance(meters: number | null) { return meters == null ? "距离待确认" : meters < 1000 ? `${Math.round(meters)} 米` : `${(meters / 1000).toFixed(1)} 公里`; }
@@ -48,19 +46,11 @@ function segmentParticipantSummary(segment: Segment, members: { id: string }[] =
   if (!memberIds.length || memberIds.some((memberId) => !segment.from.memberStates?.[memberId] || !segment.to.memberStates?.[memberId] || segment.from.memberStates[memberId] === "unknown" || segment.to.memberStates[memberId] === "unknown" || segment.from.memberStates[memberId] === "partial" || segment.to.memberStates[memberId] === "partial")) return { unknown: true, count: null };
   return { unknown: false, count: memberIds.filter((memberId) => segment.from.memberStates?.[memberId] === "present" && segment.to.memberStates?.[memberId] === "present").length };
 }
-function stepSummary(step: NonNullable<AMapRouteResult["steps"]>[number]) {
-  const duration = step.durationSeconds != null ? ` · ${minutes(step.durationSeconds)}` : "";
-  const distanceText = step.distanceMeters != null ? ` · ${distance(step.distanceMeters)}` : "";
-  if (step.mode === "walking") return `${step.fromStation ? `${step.fromStation} → ` : ""}${step.toStation || "步行"}${distanceText}${duration}`;
-  if (step.mode === "subway" || step.mode === "bus") return `${step.mode === "subway" ? "地铁" : "公交"} ${step.lineName || "线路待确认"}${step.direction ? ` · ${step.direction}` : ""}${step.stationCount != null ? ` · ${step.stationCount}站` : ""}${duration}`;
-  if (step.mode === "taxi") return `打车${duration}${distanceText}`;
-  return step.transfer || step.instruction || "换乘";
-}
 
 export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "day" }: { slug: string; places?: { id: string; name: string; latitude: number | null; longitude: number | null; candidate: boolean; order: number | null }[]; workspace?: Workspace; activeDayId?: string; mapMode?: "day" | "library" }) {
   const container = useRef<HTMLDivElement>(null), mapRef = useRef<AMapObject | null>(null), overlays = useRef<unknown[]>([]), markerObjects = useRef<AMapMarker[]>([]), lastFitSignature = useRef(""), fitContextRef = useRef(""), userHasInteractedWithMap = useRef(false), searchAbortRef = useRef<AbortController | null>(null), searchRequestRef = useRef(0), routeAbortRef = useRef<AbortController | null>(null), routeRequestRef = useRef(0);
   const defaultRouteKey = useRef("");
-  const [ready, setReady] = useState(false), [error, setError] = useState(""), [search, setSearch] = useState(""), [searching, setSearching] = useState(false), [searchResults, setSearchResults] = useState<{ id: string; name: string; address: string | null; district: string | null; longitude: number; latitude: number }[]>([]), [selectedSearch, setSelectedSearch] = useState<string | null>(null), [selectedMapEntryId, setSelectedMapEntryId] = useState<string | null>(null), [bindingBookingId, setBindingBookingId] = useState(""), [area, setArea] = useState("all"), [category, setCategory] = useState("all"), [dayFilter, setDayFilter] = useState("all"), [memberFilter, setMemberFilter] = useState("all"), [targetDayId, setTargetDayId] = useState(activeDayId || ""), [routeResults, setRouteResults] = useState<Record<string, AMapRouteResult>>({}), [routeComparisons, setRouteComparisons] = useState<Record<string, Partial<Record<AMapRouteMode, AMapRouteResult>>>>({}), [routeStale, setRouteStale] = useState<Record<string, boolean>>({}), [routing, setRouting] = useState<string | null>(null), [selectedRoute, setSelectedRoute] = useState<string | null>(null), [viewport, setViewport] = useState<{ south: number; west: number; north: number; east: number } | null>(null), [manualPoint, setManualPoint] = useState<{ longitude: number; latitude: number } | null>(null), [manualName, setManualName] = useState(""), [manualAddress, setManualAddress] = useState(""), [manualBookingId, setManualBookingId] = useState("");
+  const [ready, setReady] = useState(false), [error, setError] = useState(""), [search, setSearch] = useState(""), [searching, setSearching] = useState(false), [searchResults, setSearchResults] = useState<{ id: string; name: string; address: string | null; district: string | null; longitude: number; latitude: number }[]>([]), [selectedSearch, setSelectedSearch] = useState<string | null>(null), [selectedMapEntryId, setSelectedMapEntryId] = useState<string | null>(null), [bindingBookingId, setBindingBookingId] = useState(""), [area, setArea] = useState("all"), [category, setCategory] = useState("all"), [dayFilter, setDayFilter] = useState("all"), [memberFilter, setMemberFilter] = useState("all"), [targetDayId, setTargetDayId] = useState(activeDayId || ""), [routeResults, setRouteResults] = useState<Record<string, AMapRouteResult>>({}), [routeComparisons, setRouteComparisons] = useState<Record<string, Partial<Record<AMapRouteMode, AMapRouteResult>>>>({}), [routeStale, setRouteStale] = useState<Record<string, boolean>>({}), [routing, setRouting] = useState<string | null>(null), [viewport, setViewport] = useState<{ south: number; west: number; north: number; east: number } | null>(null), [manualPoint, setManualPoint] = useState<{ longitude: number; latitude: number } | null>(null), [manualName, setManualName] = useState(""), [manualAddress, setManualAddress] = useState(""), [manualBookingId, setManualBookingId] = useState("");
   const activeDay = workspace?.days.find((day) => day.id === activeDayId) || workspace?.days[0];
   const allDayStops = activeDay && workspace?.routeStopsByDay?.[activeDay.id] ? workspace.routeStopsByDay[activeDay.id] : [];
   const dayStops = memberFilter === "all" ? allDayStops : allDayStops.filter((stop) => stop.memberStates?.[memberFilter] !== "absent");
@@ -125,7 +115,7 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
     map.setFitView(markerObjects.current);
   }, [fitContext, fitSignature, ready]);
   useEffect(() => { if (!ready || !mapRef.current?.setCenter || !searchResults.length) return; const poi = searchResults.find((item) => item.id === selectedSearch) || searchResults[0]; mapRef.current.setCenter?.([poi.longitude, poi.latitude]); }, [ready, searchResults, selectedSearch]);
-  useEffect(() => { if (!workspace || mapMode !== "day") return; setRouteResults({}); setRouteComparisons({}); setRouteStale({}); setSelectedRoute(null); setTargetDayId(activeDayId || workspace.days[0]?.id || ""); }, [activeDayId, mapMode, memberFilter, workspace]);
+  useEffect(() => { if (!workspace || mapMode !== "day") return; setRouteResults({}); setRouteComparisons({}); setRouteStale({}); setTargetDayId(activeDayId || workspace.days[0]?.id || ""); }, [activeDayId, mapMode, memberFilter, workspace]);
   useEffect(() => {
     searchAbortRef.current?.abort();
     if (!search.trim() || !searchCity) { setSearchResults([]); setSearching(false); return; }
@@ -146,11 +136,11 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
     }, 320);
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [search, searchCity, searchRegion, slug]);
-  function preferredFor(segment: Segment) { return workspace?.routePreferences?.find((preference) => preference.dayId === activeDay?.id && preference.fromId === segment.from.id && preference.toId === segment.to.id && (preference.memberId === memberFilter || (memberFilter === "all" && preference.memberId === (workspace.currentMemberId || null))))?.preferredMode || "subway"; }
+  function preferredFor(segment: Segment) { return workspace?.routePreferences?.find((preference) => preference.dayId === activeDay?.id && preference.fromId === segment.from.id && preference.toId === segment.to.id && (preference.memberId === memberFilter || (memberFilter === "all" && preference.memberId === (workspace.currentMemberId || null))))?.preferredMode || "transit"; }
   async function planSegment(segment: Segment, mode: AMapRouteMode, persistPreference = true) {
     const cached = routeComparisons[segment.id]?.[mode];
     if (cached) {
-      setRouteResults((current) => ({ ...current, [segment.id]: cached })); setRouteStale((current) => ({ ...current, [segment.id]: false })); setSelectedRoute(segment.id);
+      setRouteResults((current) => ({ ...current, [segment.id]: cached })); setRouteStale((current) => ({ ...current, [segment.id]: false }));
       if (!persistPreference) return;
     }
     routeAbortRef.current?.abort();
@@ -167,7 +157,7 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
         setRouteResults((current) => ({ ...current, [segment.id]: route! }));
         setRouteComparisons((current) => ({ ...current, [segment.id]: { ...(current[segment.id] || {}), [mode]: route! } }));
         setRouteStale((current) => ({ ...current, [segment.id]: false }));
-        setSelectedRoute(segment.id);
+
       }
       if (persistPreference && requestId === routeRequestRef.current) {
         const preference = await fetch(`/api/trips/${encodeURIComponent(slug)}/plan/preferences`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ dayId: activeDay?.id, fromSource: segment.from.source, fromId: segment.from.id, toSource: segment.to.source, toId: segment.to.id, preferredMode: mode }), signal: controller.signal });
@@ -223,13 +213,143 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
   }
   async function searchThisArea() { if (!workspace || !searchCity) return; setSearching(true); setError(""); try { const params = new URLSearchParams({ keywords: search.trim() || (area === "tonglu" ? "桐庐 景点" : "景点"), cityId: searchCity.id, tripSlug: slug }); if (searchRegion) params.set("region", searchRegion); if (viewport) params.set("rectangle", `${viewport.west},${viewport.south};${viewport.east},${viewport.north}`); const response = await fetch(`/api/amap/places/search?${params}`); const payload = await response.json() as { pois?: typeof searchResults; error?: string }; if (!response.ok) throw new Error(payload.error || "区域搜索失败"); setSearchResults(payload.pois || []); setSelectedSearch(null); } catch (caught) { setError(caught instanceof Error ? caught.message : "区域搜索失败"); } finally { setSearching(false); } }
   async function createManualPoint() { if (!manualPoint || !manualName.trim() || !searchCity || !workspace) return; setSearching(true); setError(""); try { const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/plan/places`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: manualName.trim(), address: manualAddress.trim() || null, cityId: searchCity.id, longitude: manualPoint.longitude, latitude: manualPoint.latitude }) }); const payload = await response.json() as { place?: { id: string }; error?: string }; if (!response.ok || !payload.place) throw new Error(payload.error || "手动地点保存失败"); if (manualBookingId) { const bookingResponse = await fetch(`/api/trips/${encodeURIComponent(slug)}/budget/bookings/${encodeURIComponent(manualBookingId)}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ placeId: payload.place.id }) }); if (!bookingResponse.ok) { const bookingPayload = await bookingResponse.json() as { error?: string }; throw new Error(bookingPayload.error || "订单绑定失败"); } } setManualPoint(null); setManualName(""); setManualAddress(""); setManualBookingId(""); location.reload(); } catch (caught) { setError(caught instanceof Error ? caught.message : "手动地点保存失败"); setSearching(false); } }
-  return <div className={`plan-map-surface ${mapMode === "library" ? "library-map" : "route-map"}`}>
+  function renderRouteDirectory() {
+    if (mapMode !== "day" || !workspace) return null;
+    return (
+      <section className="route-directory">
+        <header>
+          <div>
+            <span>ROUTE</span>
+            <h3>{activeDay ? `${shortDate(activeDay.date)} · 下一站怎么走` : "当天路线"}</h3>
+          </div>
+          <small>
+            只显示相邻地点之间的简洁路线摘要
+            {memberFilter !== "all" &&
+            dayStops.some(
+              (stop) =>
+                stop.memberStates?.[memberFilter] === "unknown" ||
+                stop.memberStates?.[memberFilter] === "partial",
+            )
+              ? " · 当天成员尚未设置"
+              : ""}
+          </small>
+        </header>
+        {dayStops.length < 2 ? (
+          <p className="map-empty">这一天至少需要两个带坐标的地点，才可以生成路线段。</p>
+        ) : null}
+        {daySegments.map((segment, index) => {
+          const route = routeResults[segment.id];
+          const mode = route?.mode || preferredFor(segment);
+          const alternatives = routeComparisons[segment.id] || {};
+          const participantSummary = segmentParticipantSummary(segment, workspace.members || []);
+          return (
+            <article className="route-segment-card" key={segment.id}>
+              <div className="route-segment-head">
+                <b>{index + 1}. {segment.from.title}</b>
+                <span>→</span>
+                <b>{segment.to.title}</b>
+              </div>
+              <div className="route-participant-summary">
+                {participantSummary.unknown ? (
+                  <a href={`/trips/${encodeURIComponent(slug)}/plan?view=planning&day=${encodeURIComponent(activeDay?.id || "")}#day-presence-${encodeURIComponent(activeDay?.id || "")}`}>
+                    当天成员尚未设置 ›
+                  </a>
+                ) : (
+                  <span>参与人数 {participantSummary.count} 人（由相邻节点推导）</span>
+                )}
+              </div>
+              {segment.crossCity ? (
+                <p className="cross-city-note">
+                  跨城市交通不在市内路线估算中，请在订单或行程中确认长途交通。
+                </p>
+              ) : (
+                <>
+                  <div className="route-choice">
+                    <span>
+                      {modeLabels[mode]}
+                      {route
+                        ? ` · ${minutes(route.durationSeconds)} · ${distance(route.distanceMeters)}`
+                        : " · 推荐方案"}
+                    </span>
+                    <details>
+                      <summary>比较路线</summary>
+                      <div className="route-compare-buttons">
+                        {(["transit", "taxi", "walking", "bicycling"] as AMapRouteMode[]).map((value) => (
+                          <button
+                            type="button"
+                            key={value}
+                            onClick={() => void planSegment(segment, value, value !== "bicycling")}
+                            disabled={routing === segment.id}
+                          >
+                            {modeLabels[value]}
+                          </button>
+                        ))}
+                      </div>
+                    </details>
+                  </div>
+                  {route ? (
+                    <div className="route-detail">
+                      <span>{modeLabels[route.mode]}</span>
+                      {routeStale[segment.id] ? <b className="route-stale-label">上次查询结果</b> : null}
+                      <span>{distance(route.distanceMeters)}</span>
+                      <span>{minutes(route.durationSeconds)}</span>
+                      {route.transitCost != null ? (
+                        <span>票价约 ¥{route.transitCost}/人</span>
+                      ) : route.mode === "walking" || route.mode === "bicycling" ? (
+                        <span>票价 ¥0</span>
+                      ) : route.mode === "taxi" ? (
+                        <span>车费待确认</span>
+                      ) : (
+                        <span>票价待确认</span>
+                      )}
+                      {route.taxiCost != null ? <span>约 ¥{route.taxiCost}/车</span> : null}
+                      {routeStale[segment.id] ? (
+                        <button
+                          type="button"
+                          onClick={() => void planSegment(segment, route.mode, false)}
+                          disabled={routing === segment.id}
+                        >
+                          重新刷新
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {Object.keys(alternatives).length > 1 ? (
+                    <div className="route-alternatives">
+                      {Object.entries(alternatives).map(([alternativeMode, alternative]) =>
+                        alternative ? (
+                          <button
+                            type="button"
+                            key={alternativeMode}
+                            className={alternativeMode === mode ? "active" : ""}
+                            onClick={() => void planSegment(segment, alternativeMode as AMapRouteMode)}
+                          >
+                            <b>{modeLabels[alternativeMode as AMapRouteMode]}</b>
+                            <small>
+                              {minutes(alternative.durationSeconds)} · {distance(alternative.distanceMeters)}
+                            </small>
+                          </button>
+                        ) : null,
+                      )}
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </article>
+          );
+        })}
+      </section>
+    );
+  }
+
+
+    return <div className={`plan-map-surface ${mapMode === "library" ? "library-map" : "route-map"}`}>
     {workspace && <div className="map-filter-bar"><div className="map-search"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索地点、餐厅、酒店…" aria-label="地图搜索地点"/><button type="button" onClick={() => setSearch(search.trim())} disabled={searching}>{searching ? "搜索中…" : "搜索"}</button></div><div className="map-target-day"><label>加入目标 Day<select value={targetDayId || activeDay?.id || ""} onChange={(event) => setTargetDayId(event.target.value)}>{workspace.days.map((day) => <option key={day.id} value={day.id}>{shortDate(day.date)} · {day.title}</option>)}</select></label>{mapMode === "library" && <button type="button" onClick={searchThisArea} disabled={searching}>{searching ? "搜索中…" : "搜索此区域"}</button>}<button type="button" onClick={() => setError("请点击地图上的准确位置来创建手动地点。")}>在地图上选点</button><button type="button" onClick={() => { userHasInteractedWithMap.current = false; lastFitSignature.current = ""; mapRef.current?.setFitView(markerObjects.current); }} disabled={!ready}>适配视野</button></div>{mapMode === "library" && <><div className="map-filter-row"><span>地域</span>{[{ key: "all", label: "全部" }, { key: "shanghai", label: "上海" }, { key: "hangzhou", label: "杭州" }, { key: "tonglu", label: "桐庐" }].map((item) => <button type="button" className={area === item.key ? "active" : ""} key={item.key} onClick={() => setArea(item.key)}>{item.label}</button>)}</div><div className="map-filter-row"><span>分类</span>{categoryLabels.map((item) => <button type="button" className={category === item.key ? "active" : ""} key={item.key} onClick={() => setCategory(item.key)}>{item.label}</button>)}</div><div className="map-filter-row"><span>Day</span><button type="button" className={dayFilter === "all" ? "active" : ""} onClick={() => setDayFilter("all")}>全部</button>{workspace.days.map((day) => <button type="button" className={dayFilter === day.id ? "active" : ""} key={day.id} onClick={() => setDayFilter(day.id)}>{shortDate(day.date)}</button>)}</div></>}{mapMode === "day" && <div className="map-filter-row"><span>路线成员</span><button type="button" className={memberFilter === "all" ? "active" : ""} onClick={() => setMemberFilter("all")}>全体</button>{(workspace.members || []).map((member) => <button type="button" className={memberFilter === member.id ? "active" : ""} key={member.id} onClick={() => setMemberFilter(member.id)}>{member.displayName}</button>)}</div>}</div>}
     {searchResults.length > 0 && <div className="map-search-results"><b>搜索结果 · 选择后可加入或暂存</b>{searchResults.map((poi) => <article key={poi.id} className={selectedSearch === poi.id ? "selected" : ""} onClick={() => setSelectedSearch(poi.id)}><div><strong>{poi.name}</strong><small>{[poi.district, poi.address].filter(Boolean).join(" · ") || "暂无地址"}</small></div>{selectedSearch === poi.id && <div className="map-search-actions"><button type="button" onClick={() => saveSearch("add")} disabled={!targetDayId}>加入 {shortDate((workspace?.days.find((day) => day.id === targetDayId) || activeDay)?.date || null)}</button><button type="button" onClick={() => saveSearch("save")}>暂存</button><button type="button" onClick={() => saveSearch("recommendation")}>收藏攻略</button>{workspace?.bookings?.length ? <div className="map-binding-actions"><select aria-label="选择要绑定的订单" value={bindingBookingId} onChange={(event) => setBindingBookingId(event.target.value)}><option value="">绑定到订单…</option>{workspace.bookings.map((booking) => <option key={booking.id} value={booking.id}>{booking.title}</option>)}</select><button type="button" onClick={bindSearchToBooking} disabled={!bindingBookingId}>确认绑定地点</button></div> : null}</div>}</article>)}</div>}
     {selectedMapEntryId && mapMode === "library" && (() => { const entry = entries.find((candidate) => candidate.place.id === selectedMapEntryId); if (!entry) return null; const canAdd = entry.kind !== "booking"; return <section className="map-entry-actions"><div><b>{entry.place.name}</b><small>{entry.place.address || "已在旅行地点库中"}</small></div><div><button type="button" onClick={() => saveMapEntry("add")} disabled={!canAdd || !targetDayId}>{canAdd ? `加入 ${shortDate((workspace?.days.find((day) => day.id === targetDayId) || activeDay)?.date || null)}` : "Booking 地点"}</button>{entry.kind !== "saved" && <button type="button" onClick={() => saveMapEntry("save")}>暂存</button>}{entry.kind !== "recommendation" && <button type="button" onClick={() => saveMapEntry("recommendation")}>收藏攻略</button>}<button type="button" className="map-entry-dismiss" onClick={() => setSelectedMapEntryId(null)}>关闭</button></div></section>; })()}
     {manualPoint && workspace && <div className="map-manual-point" role="dialog" aria-label="手动地图选点"><b>手动地点 · {manualPoint.longitude.toFixed(5)}, {manualPoint.latitude.toFixed(5)}</b><label>名称<input value={manualName} onChange={(event) => setManualName(event.target.value)} placeholder="例如：集合点" autoFocus /></label><label>地址或备注<input value={manualAddress} onChange={(event) => setManualAddress(event.target.value)} placeholder="可选" /></label>{workspace.bookings?.length ? <label>同时绑定订单（可选）<select value={manualBookingId} onChange={(event) => setManualBookingId(event.target.value)}><option value="">不绑定订单</option>{workspace.bookings.map((booking) => <option key={booking.id} value={booking.id}>{booking.title}</option>)}</select></label> : null}<div><button type="button" onClick={createManualPoint} disabled={searching || !manualName.trim()}>保存地点</button><button type="button" onClick={() => setManualPoint(null)}>取消</button></div></div>}
     {mapMode === "library" && workspace?.savedPlaces?.length ? <section className="saved-place-list"><header><b>暂存地点</b><small>不属于正式行程，选择后再加入目标 Day</small></header>{workspace.savedPlaces.map((saved) => <article key={saved.id}><div><strong>{saved.place.name}</strong><small>{saved.place.address || saved.note || "暂存地点"}</small></div><div><button type="button" onClick={async () => { const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/plan/items`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ dayId: targetDayId || activeDay?.id, placeId: saved.place.id, itemType: "place" }) }); if (response.ok) location.reload(); }}>加入 Day</button><button type="button" onClick={() => saveSavedAsRecommendation(saved)} disabled={searching}>收藏攻略</button><button type="button" onClick={async () => { const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/saved-places?id=${encodeURIComponent(saved.id)}`, { method: "DELETE" }); if (response.ok) location.reload(); }}>删除</button></div></article>)}</section> : null}
-    {mapMode === "day" && workspace && <section className="route-directory"><header><div><span>ROUTE</span><h3>{activeDay ? `${shortDate(activeDay.date)} · 下一站怎么走` : "当天路线"}</h3></div><small>默认只查推荐方案，点击比较再加载其他方式{memberFilter !== "all" && dayStops.some((stop) => stop.memberStates?.[memberFilter] === "unknown" || stop.memberStates?.[memberFilter] === "partial") ? " · 当天成员尚未设置" : ""}</small></header>{dayStops.length < 2 && <p className="map-empty">这一天至少需要两个带坐标的地点，才可以生成路线段。</p>}{daySegments.map((segment, index) => { const route = routeResults[segment.id], mode = route?.mode || preferredFor(segment), alternatives = routeComparisons[segment.id] || {}, participantSummary = segmentParticipantSummary(segment, workspace.members || []); return <article className="route-segment-card" key={segment.id}><div className="route-segment-head"><b>{index + 1}. {segment.from.title}</b><span>→</span><b>{segment.to.title}</b></div><div className="route-participant-summary">{participantSummary.unknown ? <a href={`/trips/${encodeURIComponent(slug)}/plan?view=planning&day=${encodeURIComponent(activeDay?.id || "")}#day-presence-${encodeURIComponent(activeDay?.id || "")}`}>当天成员尚未设置 ›</a> : <span>参与人数 {participantSummary.count} 人（由相邻节点推导）</span>}</div>{segment.crossCity ? <p className="cross-city-note">跨城市 Anchor：不绘制普通市内路线，请在订单/行程中确认长途交通。</p> : <><div className="route-choice"><span>↓ {modeLabels[mode]}{route ? ` · ${minutes(route.durationSeconds)} · ${distance(route.distanceMeters)}` : " · 推荐方案"}</span><button type="button" onClick={() => planSegment(segment, mode, false)} disabled={routing === segment.id}>{routing === segment.id ? "查询中…" : "详情"}</button><details><summary>比较</summary><div className="route-compare-buttons">{(["subway", "taxi", "walking", "driving"] as AMapRouteMode[]).map((value) => <button type="button" key={value} onClick={() => planSegment(segment, value, value !== "driving")} disabled={routing === segment.id}>{modeLabels[value]}</button>)}</div></details></div>{route && <div className="route-detail"><span>{modeLabels[route.mode]}</span>{routeStale[segment.id] && <b className="route-stale-label">上次查询结果</b>}<span>{distance(route.distanceMeters)}</span><span>{minutes(route.durationSeconds)}</span>{totalWalkingDistance(route.steps || []) > 0 && <span>总步行约 {distance(totalWalkingDistance(route.steps || []))}</span>}{route.transitCost != null ? <span>票价约 ¥{route.transitCost}/人</span> : route.mode === "walking" ? <span>票价 ¥0</span> : route.mode === "taxi" ? <span>车费待确认</span> : <span>票价待确认</span>}{route.taxiCost != null && <span>约 ¥{route.taxiCost}/车</span>}{routeStale[segment.id] && <button type="button" onClick={() => void planSegment(segment, route.mode, false)} disabled={routing === segment.id}>重新刷新</button>}<button type="button" onClick={() => setSelectedRoute(selectedRoute === segment.id ? null : segment.id)}>完整步骤</button></div>}{Object.keys(alternatives).length > 1 && <div className="route-alternatives">{Object.entries(alternatives).map(([alternativeMode, alternative]) => <button type="button" key={alternativeMode} className={alternativeMode === mode ? "active" : ""} onClick={() => void planSegment(segment, alternativeMode as AMapRouteMode)}><b>{modeLabels[alternativeMode as AMapRouteMode]}</b><small>{minutes(alternative.durationSeconds)} · {distance(alternative.distanceMeters)}</small></button>)}</div>}{selectedRoute === segment.id && route?.steps?.length ? <ol className="route-steps">{route.steps.map((step, stepIndex) => <li key={`${segment.id}-${stepIndex}`}><b>{stepModeLabels[step.mode]}</b><span>{stepSummary(step)}</span>{step.fromStation && step.mode !== "walking" && <small>{step.fromStation} 上车</small>}{step.toStation && step.mode !== "walking" && <small>{step.toStation} 下车</small>}{step.transfer && <small>{step.transfer}</small>}</li>)}</ol> : null}</>}</article>; })}</section>}
+    {renderRouteDirectory()}
     <div className="plan-map-canvas-wrap"><div ref={container} className="plan-map-canvas" aria-label="高德地图" />{!ready && !error && <p>地图加载中…</p>}{ready && !visible.length && <p>当前视图还没有带坐标的地点。</p>}</div>
     {mapMode === "library" && <p className="map-hint">攻略地图默认展示整趟旅行的地点分布。正式行程、Booking、攻略素材、暂存地点和候选点会用不同透明度区分（候选点为淡色 Marker）；拖动后点击“搜索此区域”才会请求候选 POI。</p>}
     {error && <p className="form-error" role="alert">{error}</p>}

@@ -95,9 +95,13 @@ export function buildDayTimeline({ dayDate, timezone, bookings, items, placement
       continue;
     }
     const localDate = booking.startAt ? new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(booking.startAt)) : null;
-    if (localDate === dayDate) entries.push({ source: "booking", sourceId: booking.id, entryType: "booking-anchor", bucket: "timed", title: booking.title, timeLocal: utcToLocalTime(booking.startAt, timezone), sortOrder: null, anchorKind: "timed", locked: true });
+    if (localDate === dayDate) entries.push({ source: "booking", sourceId: booking.id, entryType: "booking-anchor", bucket: "timed", title: booking.title, timeLocal: utcToLocalTime(booking.startAt, timezone), endTimeLocal: utcToLocalTime(booking.endAt, timezone), timeMode: booking.endAt ? "range" : "start_only", sortOrder: null, anchorKind: "timed", locked: true });
   }
-  for (const item of items) entries.push({ source: "itinerary", sourceId: item.id, entryType: "itinerary-item", bucket: item.startTimeLocal ? "timed" : "untimed", title: item.title, timeLocal: item.startTimeLocal, sortOrder: item.sortOrder, locked: item.lockedAt != null });
+  for (const item of items) {
+    const timeMode = item.timeMode || (item.startTimeLocal ? "start_only" : "untimed");
+    const timed = timeMode === "start_only" || timeMode === "range";
+    entries.push({ source: "itinerary", sourceId: item.id, entryType: "itinerary-item", bucket: timed ? "timed" : "untimed", title: item.title, timeLocal: item.startTimeLocal || null, endTimeLocal: item.endTimeLocal || null, timeMode, sortOrder: item.sortOrder, locked: item.lockedAt != null });
+  }
   const bucketOrder = { "start-of-day": 0, timed: 1, untimed: 2, "end-of-day": 3 };
   const placementByKey = new Map((placements || []).map((placement) => [`${placement.sourceType === "itinerary_item" ? "itinerary" : "booking"}:${placement.sourceId}:${placement.anchorType || ""}`, placement.sortOrder]));
   for (const entry of entries) {

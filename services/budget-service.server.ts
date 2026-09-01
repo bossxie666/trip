@@ -3,12 +3,17 @@ import { getDb, getRuntimeEnv } from "@/db";
 import {
   bookingCostAllocationRecords,
   bookingCostLineRecords,
+  bookingParticipantRecords,
   bookingRecords,
   dayRecords,
+  dayPresenceRecords,
   expenseAllocationRecords,
   expenseRecords,
+  itineraryItemParticipantOverrideRecords,
+  itineraryItemRecords,
   memberBudgetPlanRecords,
   memberRecords,
+  recommendationRecords,
   tripMemberRecords,
   tripRecords,
 } from "@/db/schema";
@@ -34,6 +39,8 @@ export type PersonalBudgetWorkspace = {
     currency: string | null;
     ownAmountMinor: number | null;
     pending: boolean;
+    participants: Array<{ memberId: string; displayName: string }>;
+    costLines: Array<{ id: string; title: string; amountMinor: number; currency: string; allocationMode: "equal" | "custom"; allocations: MoneyAllocation[] }>;
   }>;
   expenses: Array<ExpenseRow & { ownAmountMinor: number | null; payerName: string | null }>;
   totals: {
@@ -43,7 +50,10 @@ export type PersonalBudgetWorkspace = {
     expectedMinor: number;
     confirmedMinor: number;
     remainingMinor: number;
+    estimatedRecommendationMinor: number;
+    estimatedTransportMinor: number;
   };
+  expectedUnknownCount: number;
 };
 
 function inputError(code: string): never { throw new Error(code); }
@@ -60,13 +70,18 @@ async function getTripAndMember(slug: string, memberId: string) {
 export async function getPersonalBudgetWorkspace(slug: string, memberId: string): Promise<PersonalBudgetWorkspace> {
   const trip = await getTripAndMember(slug, memberId);
   const db = getDb();
-  const [plans, bookings, allocations, expenses, expenseAllocations, members] = await Promise.all([
+  const [plans, bookings, allocations, expenses, expenseAllocations, members, bookingParticipants, costLines, itineraryRows, itemOverrides, dayPresence] = await Promise.all([
     db.select().from(memberBudgetPlanRecords).where(and(eq(memberBudgetPlanRecords.tripId, trip.id), eq(memberBudgetPlanRecords.memberId, memberId))).orderBy(asc(memberBudgetPlanRecords.category)),
     db.select().from(bookingRecords).where(and(eq(bookingRecords.tripId, trip.id), eq(bookingRecords.status, "confirmed"), isNull(bookingRecords.deletedAt))).orderBy(asc(bookingRecords.startAt), asc(bookingRecords.startDateLocal), asc(bookingRecords.id)),
     db.select().from(bookingCostAllocationRecords).innerJoin(bookingCostLineRecords, eq(bookingCostLineRecords.id, bookingCostAllocationRecords.costLineId)).innerJoin(bookingRecords, eq(bookingRecords.id, bookingCostLineRecords.bookingId)).where(and(eq(bookingRecords.tripId, trip.id), isNull(bookingRecords.deletedAt))),
     db.select().from(expenseRecords).where(and(eq(expenseRecords.tripId, trip.id), isNull(expenseRecords.deletedAt))).orderBy(desc(expenseRecords.occurredDate), desc(expenseRecords.createdAt)),
     db.select().from(expenseAllocationRecords).innerJoin(expenseRecords, eq(expenseRecords.id, expenseAllocationRecords.expenseId)).where(and(eq(expenseRecords.tripId, trip.id), isNull(expenseRecords.deletedAt))),
     db.select({ id: memberRecords.id, displayName: memberRecords.displayName }).from(memberRecords),
+    db.select().from(bookingParticipantRecords).innerJoin(bookingRecords, eq(bookingRecords.id, bookingParticipantRecords.bookingId)).where(and(eq(bookingRecords.tripId, trip.id), isNull(bookingRecords.deletedAt))),
+    db.select({ line: bookingCostLineRecords, allocation: bookingCostAllocationRecords }).from(bookingCostLineRecords).innerJoin(bookingRecords, eq(bookingRecords.id, bookingCostLineRecords.bookingId)).leftJoin(bookingCostAllocationRecords, eq(bookingCostAllocationRecords.costLineId, bookingCostLineRecords.id)).where(and(eq(bookingRecords.tripId, trip.id), isNull(bookingRecords.deletedAt))).orderBy(asc(bookingCostLineRecords.sortOrder)),
+    db.select({ item: itineraryItemRecords, recommendation: recommendationRecords }).from(itineraryItemRecords).leftJoin(recommendationRecords, eq(recommendationRecords.id, itineraryItemRecords.recommendationId)).where(eq(itineraryItemRecords.tripId, trip.id)),
+    db.select().from(itineraryItemParticipantOverrideRecords).innerJoin(itineraryItemRecords, eq(itineraryItemRecords.id, itineraryItemParticipantOverrideRecords.itineraryItemId)).where(eq(itineraryItemRecords.tripId, trip.id)),
+    db.select().from(dayPresenceRecords).where(eq(dayPresenceRecords.tripId, trip.id)),
   ]);
 
   const ownBookingAmounts = new Map<string, number>();
@@ -77,16 +92,34 @@ export async function getPersonalBudgetWorkspace(slug: string, memberId: string)
     ownBookingAmounts.set(bookingId, (ownBookingAmounts.get(bookingId) || 0) + row.booking_cost_allocations.amountMinor);
     bookingHasOwnAllocation.add(bookingId);
   }
+  const memberNames = new Map(members.map((member) => [member.id, member.displayName]));
+  const participantsByBooking = new Map<string, Array<{ memberId: string; displayName: string }>>();
+  for (const row of bookingParticipants) {
+    const participant = row.booking_participants;
+    const list = participantsByBooking.get(participant.bookingId) || [];
+    list.push({ memberId: participant.memberId, displayName: memberNames.get(participant.memberId) || participant.memberId });
+    participantsByBooking.set(participant.bookingId, list);
+  }
+  const costLinesByBooking = new Map<string, Array<{ id: string; title: string; amountMinor: number; currency: string; allocationMode: "equal" | "custom"; allocations: MoneyAllocation[] }>>();
+  for (const row of costLines) {
+    const line = row.line;
+    const list = costLinesByBooking.get(line.bookingId) || [];
+    const existing = list.find((candidate) => candidate.id === line.id);
+    if (!existing) {
+      list.push({ id: line.id, title: line.title, amountMinor: line.amountMinor, currency: line.currency, allocationMode: line.allocationMode, allocations: [] });
+    }
+    if (row.allocation) list.find((candidate) => candidate.id === line.id)?.allocations.push({ memberId: row.allocation.memberId, amountMinor: row.allocation.amountMinor, notes: row.allocation.notes });
+    costLinesByBooking.set(line.bookingId, list);
+  }
   const bookingView = bookings.map((booking) => {
     const ownAmountMinor = bookingHasOwnAllocation.has(booking.id) ? ownBookingAmounts.get(booking.id) || 0 : null;
-    return { id: booking.id, title: booking.title, type: booking.type, status: booking.status, totalAmountMinor: booking.totalAmountMinor, currency: booking.currency, ownAmountMinor, pending: ownAmountMinor == null };
+    return { id: booking.id, title: booking.title, type: booking.type, status: booking.status, totalAmountMinor: booking.totalAmountMinor, currency: booking.currency, ownAmountMinor, pending: ownAmountMinor == null, participants: participantsByBooking.get(booking.id) || [], costLines: costLinesByBooking.get(booking.id) || [] };
   });
 
   const ownExpenses = new Map<string, number>();
   for (const row of expenseAllocations) {
     if (row.expense_allocations.memberId === memberId) ownExpenses.set(row.expenses.id, row.expense_allocations.amountMinor);
   }
-  const memberNames = new Map(members.map((member) => [member.id, member.displayName]));
   const expenseView = expenses
     .filter((expense) => expense.scope === "shared" ? ownExpenses.has(expense.id) || expense.createdByMemberId === memberId : expense.createdByMemberId === memberId)
     .map((expense) => ({ ...expense, ownAmountMinor: expense.scope === "personal" ? expense.amountMinor : ownExpenses.get(expense.id) ?? null, payerName: expense.paidByMemberId ? memberNames.get(expense.paidByMemberId) || null : null }));
@@ -94,6 +127,28 @@ export async function getPersonalBudgetWorkspace(slug: string, memberId: string)
   const fixedPersonalMinor = bookingView.reduce((sum, booking) => sum + (booking.ownAmountMinor ?? 0), 0);
   const plannedMinor = plans.reduce((sum, plan) => sum + plan.plannedAmountMinor, 0);
   const actualMinor = expenseView.reduce((sum, expense) => sum + (expense.ownAmountMinor ?? 0), 0);
+  let estimatedRecommendationMinor = 0;
+  let expectedUnknownCount = 0;
+  for (const row of itineraryRows) {
+    const recommendation = row.recommendation;
+    if (!recommendation || recommendation.deletedAt) continue;
+    const override = itemOverrides.find(({ itinerary_item_participant_overrides: entry }) => entry.itineraryItemId === row.item.id && entry.memberId === memberId)?.itinerary_item_participant_overrides;
+    const presence = dayPresence.find((entry) => entry.dayId === row.item.dayId && entry.memberId === memberId);
+    const included = override?.participation === "included" || (!override && presence?.state === "present");
+    const excluded = override?.participation === "excluded" || (!override && presence?.state === "absent");
+    if (excluded) continue;
+    if (!included) { expectedUnknownCount += 1; continue; }
+    const basis = recommendation.priceBasis || (recommendation.estimatedCostMinor != null ? "per_person" : "unknown");
+    const amount = recommendation.priceMinMinor ?? recommendation.estimatedCostMinor;
+    if (basis === "free") continue;
+    if ((basis === "per_person" || basis === "per_item") && amount != null) { estimatedRecommendationMinor += amount; continue; }
+    if (basis === "per_group" && amount != null) {
+      const knownMembers = dayPresence.filter((entry) => entry.dayId === row.item.dayId && entry.state === "present").length;
+      if (knownMembers > 0) { estimatedRecommendationMinor += Math.ceil(amount / knownMembers); continue; }
+    }
+    expectedUnknownCount += 1;
+  }
+  const estimatedTransportMinor = 0;
   return {
     memberId,
     plans,
@@ -103,10 +158,13 @@ export async function getPersonalBudgetWorkspace(slug: string, memberId: string)
       fixedPersonalMinor,
       plannedMinor,
       actualMinor,
-      expectedMinor: fixedPersonalMinor + plannedMinor,
+      expectedMinor: fixedPersonalMinor + plannedMinor + estimatedRecommendationMinor + estimatedTransportMinor,
       confirmedMinor: fixedPersonalMinor + actualMinor,
       remainingMinor: plannedMinor - actualMinor,
+      estimatedRecommendationMinor,
+      estimatedTransportMinor,
     },
+    expectedUnknownCount,
   };
 }
 

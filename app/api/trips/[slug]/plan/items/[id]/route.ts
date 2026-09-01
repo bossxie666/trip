@@ -56,7 +56,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ sl
     const { slug, id } = await params, tripId = await tripIdForSlug(slug);
     if (!tripId) return Response.json({ error: "行程不存在。" }, { status: 404 });
     if (!(await getDb().select({ memberId: tripMemberRecords.memberId }).from(tripMemberRecords).where(and(eq(tripMemberRecords.tripId, tripId), eq(tripMemberRecords.memberId, actor.id))).limit(1))[0]) return Response.json({ error: "你不是这条行程的成员。" }, { status: 403 });
-    const body = await request.json() as { title?: string; note?: string | null; startTimeLocal?: string | null; durationMinutes?: number | null; dayId?: string; participantMemberIds?: string[] | null };
+    const body = await request.json() as { title?: string; note?: string | null; startTimeLocal?: string | null; endTimeLocal?: string | null; timeMode?: "untimed" | "start_only" | "range" | "all_day" | "opening_hours"; openingHoursNote?: string | null; durationMinutes?: number | null; dayId?: string; participantMemberIds?: string[] | null };
     const item = await updateItineraryItem(tripId, id, body, actor.id);
     if (Object.prototype.hasOwnProperty.call(body, "participantMemberIds")) await replaceItineraryParticipantOverrides({ tripId, itineraryItemId: id, memberIds: body.participantMemberIds == null ? null : [...new Set(body.participantMemberIds.map(String))], actorMemberId: actor.id });
     return Response.json({ item });
