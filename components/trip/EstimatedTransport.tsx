@@ -8,7 +8,7 @@ type Segment = { id: string; from: Stop; to: Stop; crossCity: boolean };
 type Day = { id: string; label: string };
 type Preference = { dayId: string; fromId: string; toId: string; memberId: string | null; preferredMode: AMapRouteMode };
 
-const modeLabels: Record<AMapRouteMode, string> = { walking: "步行", subway: "地铁", bus: "公交", mixed_transit: "地铁 + 公交", taxi: "打车", driving: "驾车", bicycling: "骑行", transit: "公共交通" };
+const modeLabels: Record<AMapRouteMode, string> = { walking: "步行", subway: "公共交通", bus: "公共交通", mixed_transit: "公共交通", taxi: "打车", driving: "驾车", bicycling: "骑行", transit: "公共交通" };
 const minutes = (seconds: number | null) => seconds == null ? "时间待确认" : `${Math.max(1, Math.round(seconds / 60))} 分钟`;
 const distance = (meters: number | null) => meters == null ? "距离待确认" : meters < 1000 ? `${Math.round(meters)} 米` : `${(meters / 1000).toFixed(1)} 公里`;
 function estimatedMinor(route: AMapRouteResult, segment: Segment, memberId: string | null | undefined) {
@@ -27,7 +27,7 @@ export function EstimatedTransport({ slug, days, segmentsByDay, preferences, cur
   const [results, setResults] = useState<Record<string, AMapRouteResult>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const preferenceFor = (dayId: string, segment: Segment) => preferences?.find((preference) => preference.dayId === dayId && preference.fromId === segment.from.id && preference.toId === segment.to.id && (preference.memberId === currentMemberId || (preference.memberId == null && currentMemberId == null)))?.preferredMode || "subway";
+  const preferenceFor = (dayId: string, segment: Segment) => preferences?.find((preference) => preference.dayId === dayId && preference.fromId === segment.from.id && preference.toId === segment.to.id && (preference.memberId === currentMemberId || (preference.memberId == null && currentMemberId == null)))?.preferredMode || "transit";
   async function loadEstimates() {
     if (!segments.length || loading) return;
     setLoading(true); setError("");

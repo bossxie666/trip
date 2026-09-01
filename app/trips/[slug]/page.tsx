@@ -1,9 +1,8 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getAllTrips, protectedTripSlug } from "@/data/trips";
 import { findTripBySlug } from "@/services/trip-repository.server";
 import { TripDetailPage } from "@/components/trip/TripDetailPage";
-import ShanghaiHangzhouTripDetail from "@/components/trip/ShanghaiHangzhouTripDetail";
 import { GenericTripDetail } from "@/components/trip/GenericTripDetail";
 import { listActiveMembers } from "@/services/member-repository.server";
 import { getPlaceWorkspace } from "@/services/place-repository.server";
@@ -22,15 +21,17 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 export default async function TripDetailRoute({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
+  // The dedicated Shanghai/Hangzhou page has been retired. Keep the old URL
+  // as a stable compatibility link while the planning workspace is canonical.
+  if (slug === protectedTripSlug) redirect(`/trips/${slug}/plan`);
   const trip = await findTripBySlug(slug);
   if (!trip) notFound();
-  const members = slug === protectedTripSlug ? [] : await listActiveMembers();
+  const members = await listActiveMembers();
   const placeWorkspace = await getPlaceWorkspace(slug);
 
   return (
     <TripDetailPage trip={trip}>
-      {slug === protectedTripSlug && <a className="legacy-plan-entry" href={`/trips/${slug}/plan`}>进入新规划工作台 →</a>}
-      {slug === protectedTripSlug ? <ShanghaiHangzhouTripDetail mapWorkspace={placeWorkspace} /> : placeWorkspace ? <GenericTripDetail trip={trip} members={members} placeWorkspace={placeWorkspace} /> : null}
+      {placeWorkspace ? <GenericTripDetail trip={trip} members={members} placeWorkspace={placeWorkspace} /> : null}
     </TripDetailPage>
   );
 }

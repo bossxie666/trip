@@ -21,6 +21,7 @@ export async function GET(request: Request) {
     return Response.json({ pois: await searchAmapPois(keywords, requestedRegion || city.name, rectangle || undefined) });
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
+    console.error("amap place search failed", { code, keywordLength: new URL(request.url).searchParams.get("keywords")?.trim().length || 0 });
     return Response.json({ error: code === "AMAP_NOT_CONFIGURED" ? "地图服务尚未配置。" : "高德地点搜索暂时不可用，请稍后重试。" }, { status: code === "AMAP_NOT_CONFIGURED" ? 503 : 502 });
   }
 }

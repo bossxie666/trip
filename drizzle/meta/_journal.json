@@ -71,6 +71,13 @@
       "when": 1788238455502,
       "tag": "0009_supreme_loa",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1788240000000,
+      "tag": "0010_retire_shanghai_legacy",
+      "breakpoints": true
     }
   ]
 }

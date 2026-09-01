@@ -4,6 +4,20 @@ import type { AMapPoiCandidate, AMapRouteMode, AMapRouteResult, AMapRouteStep } 
 const base = "https://restapi.amap.com";
 const routeCache = new Map<string, { expiresAt: number; result: AMapRouteResult }>();
 
+export class AMapUpstreamError extends Error {
+  readonly kind: "http" | "api";
+  readonly endpoint: string;
+  readonly infocode: string | null;
+
+  constructor(kind: "http" | "api", endpoint: string, infocode: string | null = null) {
+    super(kind === "http" ? "AMAP_UPSTREAM_HTTP" : "AMAP_UPSTREAM_API");
+    this.name = "AMapUpstreamError";
+    this.kind = kind;
+    this.endpoint = endpoint;
+    this.infocode = infocode;
+  }
+}
+
 function requiredKey() {
   const key = getRuntimeEnv().AMAP_WEB_SERVICE_KEY;
   if (!key) throw new Error("AMAP_NOT_CONFIGURED");
@@ -16,9 +30,9 @@ async function amapFetch(path: string, params: Record<string, string | undefined
   url.searchParams.set("output", "json");
   for (const [name, value] of Object.entries(params)) if (value) url.searchParams.set(name, value);
   const response = await fetch(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(8_000) });
-  if (!response.ok) throw new Error("AMAP_UPSTREAM_FAILED");
+  if (!response.ok) throw new AMapUpstreamError("http", path);
   const data = await response.json() as Record<string, unknown>;
-  if (String(data.status) !== "1") throw new Error(`AMAP_${String(data.infocode || "FAILED")}`);
+  if (String(data.status) !== "1") throw new AMapUpstreamError("api", path, scalar(data.infocode) || null);
   return data;
 }
 
@@ -45,15 +59,40 @@ function mapPoi(value: unknown): AMapPoiCandidate | null {
 }
 
 export async function searchAmapPois(keywords: string, region: string, rectangle?: string) {
-  const data = await amapFetch("/v5/place/text", { keywords, region, rectangle, city_limit: "true", page_size: "12", show_fields: "business" });
-  return (Array.isArray(data.pois) ? data.pois : []).map(mapPoi).filter((item): item is AMapPoiCandidate => Boolean(item));
+  try {
+    const data = await amapFetch("/v5/place/text", { keywords, region, rectangle, city_limit: "true", page_size: "12", show_fields: "business" });
+    return (Array.isArray(data.pois) ? data.pois : []).map(mapPoi).filter((item): item is AMapPoiCandidate => Boolean(item));
+  } catch (error) {
+    const upstream = error instanceof AMapUpstreamError ? error : null;
+    console.error("amap poi search upstream failure", { endpoint: upstream?.endpoint || "/v5/place/text", kind: upstream?.kind || "unknown", infocode: upstream?.infocode || null, region, keywordLength: keywords.length });
+    try {
+      // v3 remains a compatibility fallback for regions/keywords rejected by
+      // the v5 endpoint. It uses the same server-side key and never returns it
+      // to the browser.
+      const fallback = await amapFetch("/v3/place/text", { keywords, city: region, citylimit: "true", offset: "12", page: "1", extensions: "all", rectangle });
+      return (Array.isArray(fallback.pois) ? fallback.pois : []).map(mapPoi).filter((item): item is AMapPoiCandidate => Boolean(item));
+    } catch (fallbackError) {
+      const fallback = fallbackError instanceof AMapUpstreamError ? fallbackError : null;
+      console.error("amap poi search fallback failure", { endpoint: fallback?.endpoint || "/v3/place/text", kind: fallback?.kind || "unknown", infocode: fallback?.infocode || null, region, keywordLength: keywords.length });
+      throw fallbackError;
+    }
+  }
 }
 
 export async function getAmapPoi(id: string) {
-  const data = await amapFetch("/v5/place/detail", { id, show_fields: "business" });
-  const poi = (Array.isArray(data.pois) ? data.pois : []).map(mapPoi).find(Boolean);
-  if (!poi) throw new Error("AMAP_POI_NOT_FOUND");
-  return poi;
+  try {
+    const data = await amapFetch("/v5/place/detail", { id, show_fields: "business" });
+    const poi = (Array.isArray(data.pois) ? data.pois : []).map(mapPoi).find(Boolean);
+    if (!poi) throw new Error("AMAP_POI_NOT_FOUND");
+    return poi;
+  } catch (error) {
+    const upstream = error instanceof AMapUpstreamError ? error : null;
+    console.error("amap poi detail upstream failure", { endpoint: upstream?.endpoint || "/v5/place/detail", kind: upstream?.kind || "unknown", infocode: upstream?.infocode || null });
+    const fallback = await amapFetch("/v3/place/detail", { id, extensions: "all" });
+    const poi = (Array.isArray(fallback.pois) ? fallback.pois : []).map(mapPoi).find(Boolean);
+    if (!poi) throw new Error("AMAP_POI_NOT_FOUND");
+    return poi;
+  }
 }
 
 export async function geocodeAmapAddress(address: string, city: string) {
@@ -84,12 +123,66 @@ function normalizedStep(modeValue: unknown): AMapRouteStep["mode"] {
   return mode.includes("walk") ? "walking" : mode.includes("subway") || mode.includes("metro") || mode.includes("rail") ? "subway" : mode.includes("bus") ? "bus" : mode.includes("taxi") || mode.includes("drive") ? "taxi" : "other";
 }
 
-function mapRouteStep(value: Record<string, unknown>, modeValue?: unknown): AMapRouteStep {
-  const mode = normalizedStep(modeValue ?? value.mode ?? value.type ?? "");
-  return { mode, instruction: scalar(value.instruction) || scalar(value.step) || null, lineName: scalar(value.route_name || value.line_name || value.name) || null, direction: scalar(value.direction || value.exit || value.trip) || null, stationCount: numberOrNull(value.station_count || value.via_num), durationSeconds: numberOrNull(value.duration), distanceMeters: numberOrNull(value.distance), polyline: polylinesFrom(value)[0] || [] };
+function objectValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
-function transitSteps(value: Record<string, unknown>): AMapRouteStep[] {
+function firstText(...values: unknown[]) {
+  for (const value of values) {
+    const text = scalar(value).trim();
+    if (text) return text;
+  }
+  return null;
+}
+
+function stationText(value: unknown) {
+  const object = objectValue(value);
+  return object ? firstText(object.name, object.station_name, object.stationName, object.stopname, object.stop_name) : firstText(value);
+}
+
+function positiveNumber(...values: unknown[]) {
+  for (const value of values) {
+    const number = numberOrNull(value);
+    if (number != null && number > 0) return Math.round(number);
+  }
+  return null;
+}
+
+function mapRouteStep(value: Record<string, unknown>, modeValue?: unknown): AMapRouteStep {
+  const mode = normalizedStep(modeValue ?? value.mode ?? value.type ?? "");
+  const departure = value.departure_stop ?? value.departureStop ?? value.from_station ?? value.fromStation ?? value.from;
+  const arrival = value.arrival_stop ?? value.arrivalStop ?? value.to_station ?? value.toStation ?? value.to;
+  const viaStops = Array.isArray(value.via_stops) ? value.via_stops : Array.isArray(value.viaStops) ? value.viaStops : [];
+  return {
+    mode,
+    instruction: firstText(value.instruction, value.step, value.description),
+    lineName: firstText(value.route_name, value.routeName, value.line_name, value.lineName, value.name),
+    direction: firstText(value.direction, value.exit, value.trip, value.destination),
+    stationCount: positiveNumber(value.station_count, value.stationCount, value.via_num, value.viaNum, viaStops.length),
+    fromStation: stationText(departure),
+    toStation: stationText(arrival),
+    transfer: firstText(value.transfer, value.transfer_info, value.transferInfo),
+    durationSeconds: numberOrNull(value.duration),
+    distanceMeters: numberOrNull(value.distance),
+    polyline: polylinesFrom(value)[0] || [],
+  };
+}
+
+function dedupeTransitSteps(steps: AMapRouteStep[]) {
+  const result: AMapRouteStep[] = [];
+  for (const step of steps) {
+    if ((step.mode === "subway" || step.mode === "bus") && !step.lineName && !step.fromStation && !step.toStation) continue;
+    if (step.stationCount === 0) continue;
+    const previous = result.at(-1);
+    if (previous?.mode === "walking" && step.mode === "walking" && previous.fromStation === step.fromStation && previous.toStation === step.toStation && previous.instruction === step.instruction) continue;
+    result.push(step);
+  }
+  return result;
+}
+
+/** Convert the ordered segments returned by AMap integrated transit into
+ * readable walking/subway/bus/transfer legs. Exported for parser tests. */
+export function normalizeTransitSteps(value: Record<string, unknown>): AMapRouteStep[] {
   const steps: AMapRouteStep[] = [];
   const walking = value.walking && typeof value.walking === "object" ? value.walking as Record<string, unknown> : null;
   if (walking) {
@@ -103,12 +196,15 @@ function transitSteps(value: Record<string, unknown>): AMapRouteStep[] {
   }
   const railway = value.railway && typeof value.railway === "object" ? value.railway as Record<string, unknown> : null;
   if (railway) {
-    const lines = Array.isArray(railway.spaces) ? railway.spaces : [railway];
+    const lines = Array.isArray(railway.spaces) ? railway.spaces : Array.isArray(railway.lines) ? railway.lines : [railway];
     for (const line of lines) if (line && typeof line === "object") steps.push(mapRouteStep(line as Record<string, unknown>, "subway"));
   }
+  const transfer = value.transfer || value.transfers;
+  if (Array.isArray(transfer)) for (const entry of transfer) if (entry && typeof entry === "object") steps.push({ ...mapRouteStep(entry as Record<string, unknown>, "other"), transfer: firstText((entry as Record<string, unknown>).name, (entry as Record<string, unknown>).instruction, (entry as Record<string, unknown>).description) });
+  else if (transfer) steps.push({ mode: "other", instruction: firstText(transfer), lineName: null, direction: null, stationCount: null, fromStation: null, toStation: null, transfer: firstText(transfer), durationSeconds: null, distanceMeters: null, polyline: [] });
   const taxi = value.taxi && typeof value.taxi === "object" ? value.taxi as Record<string, unknown> : null;
   if (taxi) steps.push(mapRouteStep(taxi, "taxi"));
-  return steps;
+  return dedupeTransitSteps(steps);
 }
 
 export async function planAmapRoute(input: { mode: AMapRouteMode; origin: { longitude: number; latitude: number; providerPlaceId: string | null; cityCode: string | null }; destination: { longitude: number; latitude: number; providerPlaceId: string | null; cityCode: string | null } }): Promise<AMapRouteResult> {
@@ -126,7 +222,7 @@ export async function planAmapRoute(input: { mode: AMapRouteMode; origin: { long
   const steps: AMapRouteStep[] = rawSteps.flatMap((step) => {
     if (!step || typeof step !== "object") return [];
     const value = step as Record<string, unknown>;
-    const structured = transitSteps(value);
+    const structured = normalizeTransitSteps(value);
     if (structured.length) return structured;
     const transitInfo = value.transit && typeof value.transit === "object" ? value.transit as Record<string, unknown> : value;
     return [mapRouteStep({ ...value, route_name: transitInfo.route_name || transitInfo.line_name || transitInfo.name, direction: transitInfo.direction || transitInfo.exit, station_count: transitInfo.station_count || transitInfo.via_num }, value.mode || value.type)];

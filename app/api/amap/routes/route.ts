@@ -22,6 +22,7 @@ export async function POST(request: Request) {
     return Response.json({ route });
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
+    console.error("amap route planning failed", { code });
     const status = code === "TRIP_NOT_FOUND" || code === "PLACE_NOT_IN_TRIP" ? 404 : code === "MEMBER_NOT_IN_TRIP" ? 403 : code === "PLACE_MISSING_COORDINATES" ? 409 : code === "AMAP_NOT_CONFIGURED" ? 503 : 502;
     const message = code === "PLACE_MISSING_COORDINATES" ? "起点或终点还没有高德坐标。" : status === 404 ? "行程或地点不存在。" : status === 403 ? "你不是这条行程的成员。" : status === 503 ? "地图服务尚未配置。" : "路线规划暂时不可用，请稍后重试。";
     return Response.json({ error: message }, { status });

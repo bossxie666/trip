@@ -21,7 +21,7 @@ class TestD1Database {
 const DB = new TestD1Database();
 globalThis.__TRIP_TEST_D1__ = DB;
 globalThis.__TRIP_TEST_ENV__ = { TRIP_SPACE_INVITE_CODE: "test-invite", TRIP_SPACE_SESSION_SECRET: "test-session-secret-at-least-32-characters", AMAP_JS_API_KEY: "test-js-key", AMAP_JS_SECURITY_CODE: "test-js-code", AMAP_WEB_SERVICE_KEY: "test-web-key" };
-for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
+for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
 
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
@@ -86,7 +86,7 @@ test("filters the protected Shanghai Hangzhou trip correctly", async () => {
   assert.doesNotMatch(await inspiration.text(), /上海 \+ 杭州/);
 });
 
-test("hydrates Shanghai Hangzhou from D1 with stage participation and candidate places", async () => {
+test("hydrates Shanghai Hangzhou from D1 with stage participation after retiring legacy planning rows", async () => {
   const trip = DB.database.prepare("SELECT id, slug, title, status, start_date, end_date, people, protected FROM trips WHERE slug = ?").get("shanghai-hangzhou-2026");
   assert.deepEqual({ ...trip }, { id: "trip-shanghai-hangzhou-2026", slug: "shanghai-hangzhou-2026", title: "上海 + 杭州", status: "planning", start_date: "2026-09-23", end_date: "2026-09-27", people: 4, protected: 1 });
   assert.equal(DB.database.prepare("SELECT count(*) AS count FROM trip_members WHERE trip_id = ?").get(trip.id).count, 5);
@@ -104,31 +104,32 @@ test("hydrates Shanghai Hangzhou from D1 with stage participation and candidate 
     { title: "杭州阶段", member_id: "member-wang-jingwen" },
     { title: "杭州阶段", member_id: "member-zhu-jingqi" },
   ]);
-  assert.equal(DB.database.prepare("SELECT count(*) AS count FROM trip_places WHERE trip_id = ? AND plan_status = 'candidate'").get(trip.id).count, 6);
-  assert.equal(DB.database.prepare("SELECT count(*) AS count FROM trip_places WHERE trip_id = ? AND plan_status != 'candidate'").get(trip.id).count, 0);
+  assert.equal(DB.database.prepare("SELECT count(*) AS count FROM trip_places WHERE trip_id = ?").get(trip.id).count, 0);
+  assert.equal(DB.database.prepare("SELECT count(*) AS count FROM day_places WHERE day_id IN (SELECT id FROM days WHERE trip_id = ?)").get(trip.id).count, 0);
   assert.equal(DB.database.prepare("SELECT count(*) AS count FROM places WHERE id IN ('place-pvg-t2','place-shanghai-south','place-shanghai-disney','place-oriental-pearl','place-the-bund','place-hangzhou-east') AND coordinate_system = 'GCJ02' AND latitude IS NOT NULL AND longitude IS NOT NULL").get().count, 6);
   const page = await render("/trips");
   assert.match(await page.text(), /上海4人 · 杭州5人/);
   const detail = await render("/trips/shanghai-hangzhou-2026");
-  assert.equal(detail.status, 200);
-  const detailHtml = await detail.text();
-  assert.match(detailHtml, /地图地点读取自这趟旅行的 Day \/ Place 数据/);
-  assert.match(detailHtml, /高德真实地图/);
-  assert.match(detailHtml, /详细离线图/);
-  assert.match(detailHtml, /上海→杭州铁路候选预算/);
-  assert.match(detailHtml, /2 DAYS · SHANGHAI 4 · HANGZHOU 5/);
-  assert.doesNotMatch(detailHtml, /简单方位图/);
-  assert.doesNotMatch(detailHtml, /active-candidate/);
+  assert.equal(detail.status, 307);
+  assert.equal(new URL(detail.headers.get("location"), "http://localhost").pathname, "/trips/shanghai-hangzhou-2026/plan");
+  const plan = await render("/trips/shanghai-hangzhou-2026/plan?view=planning");
+  assert.equal(plan.status, 200);
+  const planHtml = await plan.text();
+  assert.match(planHtml, /TRIP CONSOLE/);
+  assert.match(planHtml, /攻略素材/);
+  assert.doesNotMatch(planHtml, /简单方位图/);
+  assert.doesNotMatch(planHtml, /active-candidate/);
 });
 
-test("scopes the Shanghai Hangzhou AMap to its active Stage and reruns fitView after loading", () => {
-  const adapter = readFileSync(new URL("../components/trip/ShanghaiHangzhouMapDesk.tsx", import.meta.url), "utf8");
+test("keeps the generic map fit guard and candidate marker semantics", () => {
+  const planMap = readFileSync(new URL("../components/trip/PlanMap.tsx", import.meta.url), "utf8");
   const map = readFileSync(new URL("../components/trip/GenericTripMap.tsx", import.meta.url), "utf8");
-  assert.match(adapter, /currentStage = initial\.stages\.find/);
-  assert.match(adapter, /day\.places\.filter\(\(item\) => item\.place\.cityId === activeCityId\)/);
-  assert.match(adapter, /杭州: \[120\.1551, 30\.2741\]/);
+  assert.match(planMap, /markerObjects/);
+  assert.match(planMap, /lastFitSignature/);
+  assert.match(planMap, /setFitView\(markerObjects\.current\)/);
+  assert.match(planMap, /参与成员待确认/);
   assert.match(map, /setMapReady\(true\)/);
-  assert.match(map, /\[allPlaces, mapReady, route\]/);
+  assert.match(map, /lastFitSignature/);
   assert.match(map, /place\.planStatus === "candidate" \? 0\.48 : 1/);
 });
 
@@ -157,12 +158,15 @@ test("returns a normal Not Found page for an unknown trip", async () => {
   assert.equal(response.status, 404); assert.match(await response.text(), /没有找到这条行程/);
 });
 
-test("keeps the frozen Shanghai Hangzhou detail unchanged", async () => {
+test("retires the old Shanghai Hangzhou detail behind the planning workspace", async () => {
   const response = await render("/trips/shanghai-hangzhou-2026");
-  assert.equal(response.status, 200);
-  const html = await response.text();
-  assert.match(html, /上海＋杭州/); assert.match(html, /我的个人消费/); assert.match(html, /同行人自助计算/); assert.match(html, /杭州东与杭州南/);
-  assert.doesNotMatch(html, /Starter Project|react-loading-skeleton/);
+  assert.equal(response.status, 307);
+  assert.equal(new URL(response.headers.get("location"), "http://localhost").pathname, "/trips/shanghai-hangzhou-2026/plan");
+  const plan = await render("/trips/shanghai-hangzhou-2026/plan?view=planning");
+  assert.equal(plan.status, 200);
+  const html = await plan.text();
+  assert.match(html, /TRIP CONSOLE/); assert.match(html, /上海迪士尼/); assert.match(html, /参与成员/);
+  assert.doesNotMatch(html, /Starter Project|react-loading-skeleton|简单方位图/);
 });
 
 test("renders the E1 planning workspace from Booking, Recommendation and ItineraryItem truth", async () => {

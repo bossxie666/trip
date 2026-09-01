@@ -18,6 +18,9 @@ export type AMapRouteStep = {
   lineName: string | null;
   direction: string | null;
   stationCount: number | null;
+  fromStation?: string | null;
+  toStation?: string | null;
+  transfer?: string | null;
   durationSeconds: number | null;
   distanceMeters: number | null;
   polyline: [number, number][];

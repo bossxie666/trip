@@ -71,6 +71,23 @@ export async function getPlanWorkspace(slug: string, memberId?: string) {
   });
   type RouteStop = { id: string; source: "itinerary" | "booking"; title: string; place: typeof placeRecords.$inferSelect; sortOrder: number; memberStates?: Record<string, "present" | "absent" | "unknown"> };
   const routeStopsByDay = new Map<string, RouteStop[]>();
+  const memberIds = presenceRows.map((member) => member.memberId);
+  const timezoneOffset = stored.timezone === "Asia/Shanghai" ? "+08:00" : stored.timezone === "Asia/Tokyo" ? "+09:00" : "+00:00";
+  const dayBounds = (date: string) => {
+    const start = new Date(`${date}T00:00:00${timezoneOffset}`);
+    return { start: start.getTime(), end: start.getTime() + 86_400_000 };
+  };
+  const dayPresenceState = (dayDate: string | null, memberId: string) => {
+    const coverage = presenceRows.find((row) => row.memberId === memberId)?.presenceCoverage;
+    if (coverage !== "complete" || !dayDate || !stored.timezone) return "unknown" as const;
+    const { start, end } = dayBounds(dayDate);
+    const windows = presenceWindows.filter((window) => window.memberId === memberId).map((window) => ({ start: Date.parse(window.startsAt), end: window.endsAt == null ? Number.POSITIVE_INFINITY : Date.parse(window.endsAt) }));
+    if (windows.some((window) => window.start <= start && end <= window.end)) return "present" as const;
+    if (windows.some((window) => window.start < end && window.end > start)) return "unknown" as const;
+    return "absent" as const;
+  };
+  const itemOverrides = (itemId: string) => Object.fromEntries(participantOverrides.filter(({ itinerary_item_participant_overrides: entry }) => entry.itineraryItemId === itemId).map(({ itinerary_item_participant_overrides: entry }) => [entry.memberId, entry.participation])) as Record<string, "included" | "excluded">;
+  const itemStates = (item: typeof itineraryItemRecords.$inferSelect, dayDate: string | null) => Object.fromEntries(memberIds.map((memberId) => [memberId, item.startTimeLocal ? presenceState(item, memberId, dayDate) : dayPresenceState(dayDate, memberId)])) as Record<string, "present" | "absent" | "unknown">;
   const bookingMemberStates = (bookingId: string) => {
     const participants = bookingParticipants.filter(({ booking_participants: participant }) => participant.bookingId === bookingId).map(({ booking_participants: participant }) => participant.memberId);
     return Object.fromEntries(presenceRows.map((member) => [member.memberId, participants.length ? (participants.includes(member.memberId) ? "present" : "absent") : "unknown"])) as Record<string, "present" | "absent" | "unknown">;
@@ -80,13 +97,13 @@ export async function getPlanWorkspace(slug: string, memberId?: string) {
     if (override) return override.participation === "included" ? "present" : "absent";
     const coverage = presenceRows.find((row) => row.memberId === memberId)?.presenceCoverage;
     if (coverage !== "complete" || !item.startTimeLocal || !dayDate) return "unknown";
-    const instant = Date.parse(`${dayDate}T${item.startTimeLocal}:00+08:00`);
+    const instant = Date.parse(`${dayDate}T${item.startTimeLocal}:00${timezoneOffset}`);
     if (!Number.isFinite(instant)) return "unknown";
     const windows = presenceWindows.filter((window) => window.memberId === memberId).some((window) => Date.parse(window.startsAt) <= instant && (window.endsAt == null || instant < Date.parse(window.endsAt)));
     return windows ? "present" : "absent";
   };
   for (const day of days) {
-    const stops = items.filter(({ item, place }) => item.dayId === day.id && Boolean(place)).map(({ item, place }) => ({ id: item.id, source: "itinerary" as const, title: item.title, place: place!, sortOrder: item.sortOrder, memberStates: Object.fromEntries(presenceRows.map((member) => [member.memberId, presenceState(item, member.memberId, day.date)])) }));
+    const stops = items.filter(({ item, place }) => item.dayId === day.id && Boolean(place)).map(({ item, place }) => ({ id: item.id, source: "itinerary" as const, title: item.title, place: place!, sortOrder: item.sortOrder, memberStates: itemStates(item, day.date) }));
     const dayBookings: RouteStop[] = [];
     if (day.date) for (const { booking, place } of bookings) {
       const directPlace = place || (booking.placeId ? bookingRelatedPlaces.find((candidate) => candidate.id === booking.placeId) : null);
@@ -110,11 +127,12 @@ export async function getPlanWorkspace(slug: string, memberId?: string) {
   }
   return {
     trip,
-    days: days.map((day) => ({ ...day, items: items.filter(({ item }) => item.dayId === day.id), timeline: timelineByDay.get(day.id) || [] })),
+    days: days.map((day) => ({ ...day, items: items.filter(({ item }) => item.dayId === day.id).map(({ item, place, recommendationTitle }) => ({ item, place, recommendationTitle, participantStates: itemStates(item, day.date), participantOverrides: itemOverrides(item.id) })), timeline: timelineByDay.get(day.id) || [] })),
     recommendations: recommendations.map((recommendation) => ({ ...recommendation, options: options.filter(({ option }) => option.recommendationId === recommendation.id), addedDays: items.filter(({ item }) => item.recommendationId === recommendation.id).map(({ item }) => item.dayId), locked: items.some(({ item }) => item.recommendationId === recommendation.id && item.lockedAt != null) })),
     bookings,
     costLines: costLines.map(({ booking_cost_lines: line, bookings: booking }) => ({ ...line, bookingTitle: booking.title, allocations: allocations.filter(({ allocation }) => allocation.costLineId === line.id) })),
     presenceUnknown: presenceRows.some((row) => row.presenceCoverage === "unknown"),
+    dayPresenceByDay: Object.fromEntries(days.map((day) => [day.id, Object.fromEntries(memberIds.map((memberId) => [memberId, dayPresenceState(day.date, memberId)]))])),
     budget,
     currentMemberId: memberId ?? null,
     savedPlaces,

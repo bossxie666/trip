@@ -1,6 +1,6 @@
 import { and, asc, eq } from "drizzle-orm";
 import { getDb } from "../db/index.ts";
-import { itineraryItemParticipantOverrideRecords, itineraryItemRecords, memberPresenceWindowRecords, tripMemberRecords, tripStageRecords } from "../db/schema.ts";
+import { dayRecords, itineraryItemParticipantOverrideRecords, itineraryItemRecords, memberPresenceWindowRecords, tripMemberRecords, tripRecords, tripStageRecords } from "../db/schema.ts";
 import { assertNoPresenceOverlap, assertTimezone, assertUtcInstant, resolvePresence } from "./planning-domain.mjs";
 import type { PresenceCoverage, PresenceState } from "../models/planning.ts";
 
@@ -47,4 +47,43 @@ export async function resolveItineraryParticipants(itineraryItemId: string, at: 
     results.push({ memberId: member.memberId, state, source: override ? "override" as const : at ? "presence" as const : "incomplete" as const });
   }
   return results;
+}
+
+function localDayBounds(date: string, timezone: string) {
+  // Current trips use Asia/Shanghai. Keep a small explicit fallback for other
+  // trips rather than silently treating a missing timezone as local time.
+  const offset = timezone === "Asia/Shanghai" ? "+08:00" : timezone === "Asia/Tokyo" ? "+09:00" : "+00:00";
+  const start = new Date(`${date}T00:00:00${offset}`);
+  const end = new Date(start.getTime() + 86_400_000);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
+/**
+ * Confirm one day's presence in a single, explicit operation. Selected
+ * members receive an all-day window; unselected members are marked complete
+ * with no window, which resolves them as absent for that day. Existing
+ * non-day-aligned windows are left intact and cause an overlap error instead
+ * of being silently destroyed.
+ */
+export async function replaceDayPresence(input: { tripId: string; dayId: string; memberIds: string[]; actorMemberId: string }) {
+  const db = getDb();
+  await (async () => {
+    if (!(await db.select({ memberId: tripMemberRecords.memberId }).from(tripMemberRecords).where(and(eq(tripMemberRecords.tripId, input.tripId), eq(tripMemberRecords.memberId, input.actorMemberId))).limit(1))[0]) throw new Error("MEMBER_NOT_IN_TRIP");
+  })();
+  const day = (await db.select({ date: dayRecords.date, timezone: tripRecords.timezone }).from(dayRecords).innerJoin(tripRecords, eq(tripRecords.id, dayRecords.tripId)).where(and(eq(dayRecords.id, input.dayId), eq(dayRecords.tripId, input.tripId))).limit(1))[0];
+  if (!day?.date || !day.timezone) throw new Error("DAY_CONTEXT_INCOMPLETE");
+  const members = await db.select({ memberId: tripMemberRecords.memberId }).from(tripMemberRecords).where(eq(tripMemberRecords.tripId, input.tripId));
+  const memberSet = new Set(members.map((member) => member.memberId));
+  const selected = new Set(input.memberIds.map(String));
+  if ([...selected].some((memberId) => !memberSet.has(memberId))) throw new Error("MEMBER_NOT_IN_TRIP");
+  const { start, end } = localDayBounds(day.date, day.timezone);
+  const now = new Date().toISOString(), d1 = getRuntimeEnv().DB;
+  const statements = [] as D1PreparedStatement[];
+  for (const member of members) {
+    statements.push(d1.prepare("DELETE FROM member_presence_windows WHERE trip_id = ? AND member_id = ? AND starts_at = ? AND ends_at = ?").bind(input.tripId, member.memberId, start, end));
+    if (selected.has(member.memberId)) statements.push(d1.prepare("INSERT INTO member_presence_windows (id, trip_id, member_id, stage_id, starts_at, ends_at, timezone, note, created_by_member_id, updated_by_member_id, created_at, updated_at) VALUES (?, ?, ?, NULL, ?, ?, ?, NULL, ?, ?, ?, ?)").bind(crypto.randomUUID(), input.tripId, member.memberId, start, end, day.timezone, input.actorMemberId, input.actorMemberId, now, now));
+    statements.push(d1.prepare("UPDATE trip_members SET presence_coverage = 'complete' WHERE trip_id = ? AND member_id = ?").bind(input.tripId, member.memberId));
+  }
+  await d1.batch(statements);
+  return { dayId: input.dayId, memberIds: [...selected], startsAt: start, endsAt: end };
 }

@@ -130,3 +130,32 @@ export async function setItineraryParticipantOverride(input: { itineraryItemId: 
   const now = new Date().toISOString();
   await db.insert(itineraryItemParticipantOverrideRecords).values({ itineraryItemId: input.itineraryItemId, memberId: input.memberId, participation: input.participation, note: input.note ?? null, createdAt: now, updatedAt: now }).onConflictDoUpdate({ target: [itineraryItemParticipantOverrideRecords.itineraryItemId, itineraryItemParticipantOverrideRecords.memberId], set: { participation: input.participation, note: input.note ?? null, updatedAt: now } });
 }
+
+/**
+ * Replace the explicit participant override set for one itinerary item.
+ * `null` clears the set and returns the item to day-level presence inference.
+ * Every member is written when an explicit set is requested so that an
+ * unchecked member is an intentional exclusion, not an unknown value.
+ */
+export async function replaceItineraryParticipantOverrides(input: { tripId: string; itineraryItemId: string; memberIds: string[] | null; actorMemberId: string }) {
+  const db = getDb();
+  await assertTripMember(input.tripId, input.actorMemberId);
+  const item = (await db.select({ tripId: itineraryItemRecords.tripId }).from(itineraryItemRecords).where(and(eq(itineraryItemRecords.id, input.itineraryItemId), eq(itineraryItemRecords.tripId, input.tripId))).limit(1))[0];
+  if (!item) throw new Error("ITINERARY_ITEM_NOT_FOUND");
+  if (input.memberIds === null) {
+    await db.delete(itineraryItemParticipantOverrideRecords).where(eq(itineraryItemParticipantOverrideRecords.itineraryItemId, input.itineraryItemId));
+    return [];
+  }
+  const members = await db.select({ memberId: tripMemberRecords.memberId }).from(tripMemberRecords).where(eq(tripMemberRecords.tripId, input.tripId));
+  const memberSet = new Set(members.map((member) => member.memberId));
+  const selected = new Set(input.memberIds.map(String));
+  if ([...selected].some((memberId) => !memberSet.has(memberId))) throw new Error("MEMBER_NOT_IN_TRIP");
+  const now = new Date().toISOString();
+  const d1 = getRuntimeEnv().DB;
+  const statements = [d1.prepare("DELETE FROM itinerary_item_participant_overrides WHERE itinerary_item_id = ?").bind(input.itineraryItemId)];
+  for (const member of members) {
+    statements.push(d1.prepare("INSERT INTO itinerary_item_participant_overrides (itinerary_item_id, member_id, participation, note, created_at, updated_at) VALUES (?, ?, ?, NULL, ?, ?)").bind(input.itineraryItemId, member.memberId, selected.has(member.memberId) ? "included" : "excluded", now, now));
+  }
+  await d1.batch(statements);
+  return db.select().from(itineraryItemParticipantOverrideRecords).where(eq(itineraryItemParticipantOverrideRecords.itineraryItemId, input.itineraryItemId));
+}
