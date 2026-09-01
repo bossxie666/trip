@@ -11,7 +11,7 @@ function tripDates(trip: Trip) {
   return trip.startDate && trip.endDate ? `${trip.startDate} — ${trip.endDate}` : "日期未定";
 }
 
-export function GenericTripDetail({ trip, members, placeWorkspace, canDelete = false }: { trip: Trip; members: { id: string; displayName: string }[]; placeWorkspace: NonNullable<PlaceWorkspace>; canDelete?: boolean }) {
+export function GenericTripDetail({ trip, members, placeWorkspace }: { trip: Trip; members: { id: string; displayName: string }[]; placeWorkspace: NonNullable<PlaceWorkspace> }) {
   return (
     <main className="generic-trip-detail">
       <nav><a href="/trips">返回攻略中心</a></nav>
@@ -25,7 +25,7 @@ export function GenericTripDetail({ trip, members, placeWorkspace, canDelete = f
       <section><h2>地图</h2><p>按 Day 查看已确认的高德地点，并比较步行、公共交通、驾车或骑行路线。</p><GenericTripMap slug={trip.slug} initial={placeWorkspace} /></section>
       <section><h2>预算</h2><p>还没有预算记录。</p></section>
       <section><h2>Checklist</h2><p>还没有待办事项。</p></section>
-      <EditTripForm trip={trip} members={members} canDelete={canDelete} />
+      <EditTripForm trip={trip} members={members} />
     </main>
   );
 }
