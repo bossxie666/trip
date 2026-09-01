@@ -373,6 +373,43 @@ export const frameworkConstraintRecords = sqliteTable("framework_constraints", {
   index("idx_framework_constraints_trip_day").on(table.tripId, table.dayId, table.deletedAt),
 ]);
 
+/** A lightweight trip-level scratchpad. A saved place is not a recommendation,
+ * an itinerary item, or a legacy trip_place; it is simply a place worth
+ * looking at later. */
+export const tripSavedPlaceRecords = sqliteTable("trip_saved_places", {
+  id: text("id").primaryKey(),
+  tripId: text("trip_id").notNull().references(() => tripRecords.id, { onDelete: "cascade" }),
+  placeId: text("place_id").notNull().references(() => placeRecords.id, { onDelete: "restrict" }),
+  createdByMemberId: text("created_by_member_id").notNull().references(() => memberRecords.id, { onDelete: "restrict" }),
+  note: text("note"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("idx_trip_saved_places_trip_place").on(table.tripId, table.placeId),
+  index("idx_trip_saved_places_trip_created").on(table.tripId, table.createdAt),
+]);
+
+/** The user's chosen mode for a derived route segment. Route responses from
+ * AMap remain ephemeral/cacheable and are deliberately not stored here. */
+export const routePreferenceRecords = sqliteTable("route_preferences", {
+  id: text("id").primaryKey(),
+  tripId: text("trip_id").notNull().references(() => tripRecords.id, { onDelete: "cascade" }),
+  dayId: text("day_id").notNull().references(() => dayRecords.id, { onDelete: "cascade" }),
+  fromSource: text("from_source").notNull(),
+  fromId: text("from_id").notNull(),
+  toSource: text("to_source").notNull(),
+  toId: text("to_id").notNull(),
+  memberId: text("member_id").references(() => memberRecords.id, { onDelete: "restrict" }),
+  preferredMode: text("preferred_mode", { enum: ["walking", "subway", "bus", "mixed_transit", "taxi"] }).notNull(),
+  createdByMemberId: text("created_by_member_id").references(() => memberRecords.id, { onDelete: "set null" }),
+  updatedByMemberId: text("updated_by_member_id").references(() => memberRecords.id, { onDelete: "set null" }),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("idx_route_preferences_segment_member").on(table.tripId, table.dayId, table.fromSource, table.fromId, table.toSource, table.toId, table.memberId),
+  index("idx_route_preferences_day").on(table.tripId, table.dayId),
+]);
+
 export const dayPlaceRecords = sqliteTable("day_places", {
   dayId: text("day_id").notNull().references(() => dayRecords.id, { onDelete: "cascade" }),
   placeId: text("place_id").notNull().references(() => placeRecords.id, { onDelete: "restrict" }),

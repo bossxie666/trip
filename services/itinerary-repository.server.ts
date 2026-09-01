@@ -29,12 +29,17 @@ export type UpdateItineraryItemInput = {
   dayId?: string;
 };
 
+async function assertTripMember(tripId: string, memberId: string) {
+  if (!(await getDb().select({ memberId: tripMemberRecords.memberId }).from(tripMemberRecords).where(and(eq(tripMemberRecords.tripId, tripId), eq(tripMemberRecords.memberId, memberId))).limit(1))[0]) throw new Error("MEMBER_NOT_IN_TRIP");
+}
+
 export async function createItineraryItem(input: CreateItineraryItemInput, actorMemberId: string) {
   if (!input.title.trim()) throw new Error("ITINERARY_TITLE_REQUIRED");
   assertLocalTime(input.startTimeLocal ?? null, "start_time");
   assertUtcInstant(input.lockedAt ?? null, "locked_at");
   if (input.durationMinutes != null && (!Number.isSafeInteger(input.durationMinutes) || input.durationMinutes < 0)) throw new Error("INVALID_DURATION");
   const db = getDb();
+  await assertTripMember(input.tripId, actorMemberId);
   const day = (await db.select().from(dayRecords).where(and(eq(dayRecords.id, input.dayId), eq(dayRecords.tripId, input.tripId))).limit(1))[0];
   if (!day) throw new Error("DAY_NOT_IN_TRIP");
   if (input.stageId && !(await db.select({ id: tripStageRecords.id }).from(tripStageRecords).where(and(eq(tripStageRecords.id, input.stageId), eq(tripStageRecords.tripId, input.tripId))).limit(1))[0]) throw new Error("STAGE_NOT_IN_TRIP");
@@ -63,6 +68,8 @@ export async function reorderItineraryItems(tripId: string, dayId: string, order
   const current = await db.select({ id: itineraryItemRecords.id }).from(itineraryItemRecords).where(and(eq(itineraryItemRecords.dayId, dayId), eq(itineraryItemRecords.tripId, tripId)));
   const currentIds = current.map((item) => item.id).sort(), requestedIds = [...orderedItemIds].sort();
   if (currentIds.length !== requestedIds.length || currentIds.some((id, index) => id !== requestedIds[index])) throw new Error("INVALID_ORDER");
+  const allItems = await db.select({ id: itineraryItemRecords.id, lockedAt: itineraryItemRecords.lockedAt }).from(itineraryItemRecords).where(and(eq(itineraryItemRecords.dayId, dayId), eq(itineraryItemRecords.tripId, tripId)));
+  if (allItems.some((item) => item.lockedAt != null)) throw new Error("ITINERARY_ITEM_LOCKED");
   const d1 = getRuntimeEnv().DB;
   const statements = [];
   for (const [index, id] of orderedItemIds.entries()) statements.push(d1.prepare("UPDATE itinerary_items SET sort_order = ?, updated_at = ? WHERE id = ? AND day_id = ? AND trip_id = ?").bind(-(index + 1), new Date().toISOString(), id, dayId, tripId));
@@ -73,6 +80,7 @@ export async function reorderItineraryItems(tripId: string, dayId: string, order
 
 export async function updateItineraryItem(tripId: string, id: string, input: UpdateItineraryItemInput, actorMemberId: string) {
   const db = getDb();
+  await assertTripMember(tripId, actorMemberId);
   const item = (await db.select().from(itineraryItemRecords).where(and(eq(itineraryItemRecords.id, id), eq(itineraryItemRecords.tripId, tripId))).limit(1))[0];
   if (!item) throw new Error("ITINERARY_ITEM_NOT_FOUND");
   const title = input.title === undefined ? item.title : input.title.trim();
@@ -87,6 +95,7 @@ export async function updateItineraryItem(tripId: string, id: string, input: Upd
   if (targetDayId === item.dayId) {
     await db.update(itineraryItemRecords).set({ title, note, startTimeLocal, durationMinutes, updatedByMemberId: actorMemberId, updatedAt: now }).where(and(eq(itineraryItemRecords.id, id), eq(itineraryItemRecords.tripId, tripId)));
   } else {
+    if (item.lockedAt != null) throw new Error("ITINERARY_ITEM_LOCKED");
     const [sourceItems, targetHighest] = await Promise.all([
       db.select({ id: itineraryItemRecords.id }).from(itineraryItemRecords).where(and(eq(itineraryItemRecords.tripId, tripId), eq(itineraryItemRecords.dayId, item.dayId))).orderBy(asc(itineraryItemRecords.sortOrder), asc(itineraryItemRecords.id)),
       db.select({ value: max(itineraryItemRecords.sortOrder) }).from(itineraryItemRecords).where(and(eq(itineraryItemRecords.tripId, tripId), eq(itineraryItemRecords.dayId, targetDayId))),

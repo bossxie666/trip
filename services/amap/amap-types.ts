@@ -10,7 +10,18 @@ export type AMapPoiCandidate = {
   typeCode: string | null;
 };
 
-export type AMapRouteMode = "walking" | "driving" | "bicycling" | "transit";
+export type AMapRouteMode = "walking" | "subway" | "bus" | "mixed_transit" | "taxi" | "driving" | "bicycling" | "transit";
+
+export type AMapRouteStep = {
+  mode: "walking" | "subway" | "bus" | "taxi" | "other";
+  instruction: string | null;
+  lineName: string | null;
+  direction: string | null;
+  stationCount: number | null;
+  durationSeconds: number | null;
+  distanceMeters: number | null;
+  polyline: [number, number][];
+};
 
 export type AMapRouteResult = {
   mode: AMapRouteMode;
@@ -19,4 +30,6 @@ export type AMapRouteResult = {
   taxiCost: number | null;
   transitCost: number | null;
   polylines: [number, number][][];
+  steps?: AMapRouteStep[];
+  summary?: string | null;
 };

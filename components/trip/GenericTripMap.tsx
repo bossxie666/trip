@@ -32,7 +32,7 @@ async function loadAMap() {
   return loader;
 }
 
-const modeLabels: Record<AMapRouteMode, string> = { walking: "步行", transit: "公共交通", driving: "驾车", bicycling: "骑行" };
+const modeLabels: Record<AMapRouteMode, string> = { walking: "步行", subway: "地铁", bus: "公交", mixed_transit: "地铁 + 公交", taxi: "打车", transit: "公共交通", driving: "驾车", bicycling: "骑行" };
 function minutes(seconds: number | null) { return seconds == null ? "时间未知" : `${Math.max(1, Math.round(seconds / 60))} 分钟`; }
 function distance(meters: number | null) { return meters == null ? "距离未知" : meters < 1000 ? `${Math.round(meters)} 米` : `${(meters / 1000).toFixed(1)} 公里`; }
 
@@ -55,7 +55,7 @@ export function GenericTripMap({ slug, initial, cityId, fallbackCenter }: { slug
 
   return <div className="generic-trip-map">
     <div className="map-toolbar"><label>Day<select value={day?.id || ""} onChange={(event) => { setDayId(event.target.value); setOriginId(""); setDestinationId(""); setRoute(null); }}>{workspace.days.map((item) => <option key={item.id} value={item.id}>Day {item.dayNumber}</option>)}</select></label><label>起点<select value={selectedOriginId} onChange={(event) => setOriginId(event.target.value)}><option value="">{routePlaces.length ? "请选择" : "暂无已选地点"}</option>{routePlaces.map((place) => <option key={place.id} value={place.id}>{place.name}</option>)}</select></label><label>终点<select value={selectedDestinationId} onChange={(event) => setDestinationId(event.target.value)}><option value="">{routePlaces.length ? "请选择" : "暂无已选地点"}</option>{routePlaces.map((place) => <option key={place.id} value={place.id}>{place.name}</option>)}</select></label></div>
-    <div className="route-modes">{(Object.keys(modeLabels) as AMapRouteMode[]).map((item) => <button type="button" className={mode === item ? "active" : ""} key={item} onClick={() => setMode(item)}>{modeLabels[item]}</button>)}<button type="button" className="route-submit" disabled={!selectedOriginId || !selectedDestinationId || selectedOriginId === selectedDestinationId || routing} onClick={plan}>{routing ? "规划中…" : "规划路线"}</button></div>
+    <div className="route-modes">{(["walking", "subway", "bus", "mixed_transit", "taxi"] as AMapRouteMode[]).map((item) => <button type="button" className={mode === item ? "active" : ""} key={item} onClick={() => setMode(item)}>{modeLabels[item]}</button>)}<button type="button" className="route-submit" disabled={!selectedOriginId || !selectedDestinationId || selectedOriginId === selectedDestinationId || routing} onClick={plan}>{routing ? "规划中…" : "规划路线"}</button></div>
     <div className="amap-canvas-wrap"><div ref={container} className="amap-canvas" aria-label="高德地图" />{loading && <p className="map-state">地图加载中…</p>}{!loading && !allPlaces.length && <p className="map-state">先从高德搜索并添加至少一个地点。</p>}{!loading && allPlaces.length > 0 && routePlaces.length < 2 && <p className="map-state">候选地点仅作参考；至少选择两个已选地点后才能规划路线。</p>}</div>
     {route && <div className="route-summary"><b>{modeLabels[route.mode]}</b><span>{distance(route.distanceMeters)}</span><span>{minutes(route.durationSeconds)}</span>{route.transitCost != null && <span>公共交通约 ¥{route.transitCost}</span>}{route.taxiCost != null && <span>打车参考 ¥{route.taxiCost}</span>}</div>}
     {error && <p className="form-error" role="alert">{error}</p>}

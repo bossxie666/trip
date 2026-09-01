@@ -21,7 +21,7 @@ class TestD1Database {
 const DB = new TestD1Database();
 globalThis.__TRIP_TEST_D1__ = DB;
 globalThis.__TRIP_TEST_ENV__ = { TRIP_SPACE_INVITE_CODE: "test-invite", TRIP_SPACE_SESSION_SECRET: "test-session-secret-at-least-32-characters", AMAP_JS_API_KEY: "test-js-key", AMAP_JS_SECURITY_CODE: "test-js-code", AMAP_WEB_SERVICE_KEY: "test-web-key" };
-for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
+for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
 
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
@@ -186,7 +186,7 @@ test("renders the E1 planning workspace from Booking, Recommendation and Itinera
 test("validates E1 URL state and renders map and budget views", async () => {
   const invalid = await (await render("/trips/shanghai-hangzhou-2026/plan?view=wrong&day=other-trip-day")).text();
   assert.match(invalid, /09\/23 · 上海/); assert.match(invalid, /攻略素材/);
-  const map = await (await render("/trips/shanghai-hangzhou-2026/plan?view=map&mode=library&day=trip-shanghai-hangzhou-2026-day-2")).text();
+  const mapResponse = await render("/trips/shanghai-hangzhou-2026/plan?view=map&mode=library&day=trip-shanghai-hangzhou-2026-day-2"), map = await mapResponse.text();
   assert.match(map, /攻略地图/); assert.match(map, /高德地图/); assert.match(map, /淡色 Marker/);
   const budget = await (await render("/trips/shanghai-hangzhou-2026/plan?view=budget&day=trip-shanghai-hangzhou-2026-day-3")).text();
   assert.match(budget, /我的个人预算/); assert.match(budget, /¥159\.11/); assert.match(budget, /我的费用待确认/); assert.match(budget, /订单总价不会直接算入个人费用/);

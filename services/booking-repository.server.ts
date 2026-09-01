@@ -113,6 +113,9 @@ export type UpdateBookingInput = {
   currency?: string | null;
   bookingReference?: string | null;
   notes?: string | null;
+  placeId?: string | null;
+  originPlaceId?: string | null;
+  destinationPlaceId?: string | null;
 };
 
 /**
@@ -139,6 +142,14 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
   assertUtcInstant(input.endAt === undefined ? booking.endAt : input.endAt, "end_at");
   assertLocalDate(input.startDateLocal === undefined ? booking.startDateLocal : input.startDateLocal, "start_date");
   assertLocalDate(input.endDateLocal === undefined ? booking.endDateLocal : input.endDateLocal, "end_date");
+  const nextPlaceId = input.placeId === undefined ? booking.placeId : input.placeId;
+  const nextOriginPlaceId = input.originPlaceId === undefined ? booking.originPlaceId : input.originPlaceId;
+  const nextDestinationPlaceId = input.destinationPlaceId === undefined ? booking.destinationPlaceId : input.destinationPlaceId;
+  const placeIds = [...new Set([nextPlaceId, nextOriginPlaceId, nextDestinationPlaceId].filter((value): value is string => Boolean(value)))];
+  if (placeIds.length) {
+    const valid = await db.select({ id: placeRecords.id }).from(placeRecords).innerJoin(tripCityRecords, and(eq(tripCityRecords.cityId, placeRecords.cityId), eq(tripCityRecords.tripId, booking.tripId))).where(inArray(placeRecords.id, placeIds));
+    if (valid.length !== placeIds.length) throw new Error("BOOKING_PLACE_NOT_IN_TRIP_CITY");
+  }
   if (nextAmount !== booking.totalAmountMinor) {
     const lines = await db.select({ line: bookingCostLineRecords, allocation: bookingCostAllocationRecords }).from(bookingCostLineRecords).leftJoin(bookingCostAllocationRecords, eq(bookingCostAllocationRecords.costLineId, bookingCostLineRecords.id)).where(eq(bookingCostLineRecords.bookingId, booking.id));
     if (lines.length) {
@@ -159,6 +170,9 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
     currency: nextCurrency,
     bookingReference: input.bookingReference === undefined ? booking.bookingReference : input.bookingReference,
     notes: input.notes === undefined ? booking.notes : input.notes,
+    placeId: nextPlaceId,
+    originPlaceId: nextOriginPlaceId,
+    destinationPlaceId: nextDestinationPlaceId,
     updatedAt: now,
     updatedByMemberId: actorMemberId,
   }).where(eq(bookingRecords.id, id));

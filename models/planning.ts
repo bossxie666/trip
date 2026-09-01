@@ -12,6 +12,34 @@ export type ParticipantOverride = "included" | "excluded";
 export type ConstraintStrength = "soft" | "hard";
 export type BudgetCategory = "food" | "local_transport" | "entertainment" | "shopping" | "other";
 export type ExpenseScope = "personal" | "shared";
+export type RoutePreferenceMode = "walking" | "subway" | "bus" | "mixed_transit" | "taxi";
+export type RouteSource = "itinerary" | "booking";
+
+export type TripSavedPlace = {
+  id: string;
+  tripId: string;
+  placeId: string;
+  createdByMemberId: string;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RoutePreference = {
+  id: string;
+  tripId: string;
+  dayId: string;
+  fromSource: RouteSource;
+  fromId: string;
+  toSource: RouteSource;
+  toId: string;
+  memberId: string | null;
+  preferredMode: RoutePreferenceMode;
+  createdByMemberId: string | null;
+  updatedByMemberId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
 
 export type MoneyAllocation = {
   memberId: string;

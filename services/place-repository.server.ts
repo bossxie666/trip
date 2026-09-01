@@ -38,7 +38,7 @@ async function ensureTripPlace(tripId: string, placeId: string, planStatus: Trip
   else if (planStatus === "selected" && existing[0].planStatus === "candidate") await db.update(tripPlaceRecords).set({ planStatus }).where(and(eq(tripPlaceRecords.tripId, tripId), eq(tripPlaceRecords.placeId, placeId)));
 }
 
-export async function createManualPlace(slug: string, input: { name: string; cityId: string; address: string | null }, actorMemberId: string) {
+export async function createManualPlace(slug: string, input: { name: string; cityId: string; address: string | null; longitude?: number | null; latitude?: number | null }, actorMemberId: string) {
   const db = getDb();
   const trip = await getStoredTrip(slug); if (!trip) throw new Error("TRIP_NOT_FOUND");
   const cityLink = await db.select().from(tripCityRecords).where(and(eq(tripCityRecords.tripId, trip.id), eq(tripCityRecords.cityId, input.cityId))).limit(1);
@@ -46,7 +46,9 @@ export async function createManualPlace(slug: string, input: { name: string; cit
   const existing = (await db.select().from(placeRecords).where(and(eq(placeRecords.cityId, input.cityId), eq(placeRecords.name, input.name))).limit(1))[0];
   if (existing) return existing;
   const now = new Date().toISOString();
-  const place = { id: crypto.randomUUID(), name: input.name, cityId: input.cityId, address: input.address, latitude: null, longitude: null, coordinateSystem: null, provider: "manual" as const, providerPlaceId: null, createdByMemberId: actorMemberId, updatedByMemberId: actorMemberId, createdAt: now, updatedAt: now };
+  if (input.longitude != null && (!Number.isFinite(input.longitude) || input.longitude < -180 || input.longitude > 180)) throw new Error("INVALID_LONGITUDE");
+  if (input.latitude != null && (!Number.isFinite(input.latitude) || input.latitude < -90 || input.latitude > 90)) throw new Error("INVALID_LATITUDE");
+  const place = { id: crypto.randomUUID(), name: input.name, cityId: input.cityId, address: input.address, latitude: input.latitude ?? null, longitude: input.longitude ?? null, coordinateSystem: input.latitude != null && input.longitude != null ? "GCJ02" as const : null, provider: "manual" as const, providerPlaceId: null, createdByMemberId: actorMemberId, updatedByMemberId: actorMemberId, createdAt: now, updatedAt: now };
   await db.insert(placeRecords).values(place); return place;
 }
 
