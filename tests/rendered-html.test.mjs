@@ -21,7 +21,7 @@ class TestD1Database {
 const DB = new TestD1Database();
 globalThis.__TRIP_TEST_D1__ = DB;
 globalThis.__TRIP_TEST_ENV__ = { TRIP_SPACE_INVITE_CODE: "test-invite", TRIP_SPACE_SESSION_SECRET: "test-session-secret-at-least-32-characters", AMAP_JS_API_KEY: "test-js-key", AMAP_JS_SECURITY_CODE: "test-js-code", AMAP_WEB_SERVICE_KEY: "test-web-key" };
-for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql", "0011_v2_1_stability.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
+for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
 
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
@@ -60,6 +60,20 @@ async function loginAs(memberName) {
 }
 
 await login();
+
+test("renames Zhu Jingqi's login and display labels without changing identity or relations", async () => {
+  const member = DB.database.prepare("SELECT id, name, display_name FROM members WHERE id = 'member-zhu-jingqi'").get();
+  assert.deepEqual({ ...member }, { id: "member-zhu-jingqi", name: "kiki", display_name: "kiki" });
+  assert.equal(DB.database.prepare("SELECT count(*) AS count FROM trip_members WHERE member_id = 'member-zhu-jingqi'").get().count, 1);
+  assert.equal(DB.database.prepare("SELECT count(*) AS count FROM trip_stage_members WHERE member_id = 'member-zhu-jingqi'").get().count, 1);
+  const response = await render("/api/session", { method: "POST", body: { memberName: "kiki", code: "test-invite" } });
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).member, { id: "member-zhu-jingqi", displayName: "kiki" });
+  const plan = await render("/trips/shanghai-hangzhou-2026/plan?view=planning");
+  const planHtml = await plan.text();
+  assert.match(planHtml, /kiki/);
+  assert.doesNotMatch(planHtml, /朱婧琪/);
+});
 
 async function createTrip(body) {
   const response = await render("/api/trips", { method: "POST", body });
@@ -386,7 +400,7 @@ test("keeps budget plans, expenses, and booking edits member-scoped", async () =
   const forbiddenPersonalEdit = await render(`/api/trips/shanghai-hangzhou-2026/budget/expenses/${personalId}`, { method: "PATCH", body: { title: "越权修改" } });
   assert.equal(forbiddenPersonalEdit.status, 403);
 
-  await loginAs("朱婧琪");
+  await loginAs("kiki");
   const zhuBudget = (await (await render("/api/trips/shanghai-hangzhou-2026/budget/plans")).json()).budget;
   assert.equal(zhuBudget.totals.fixedPersonalMinor, 11636);
 
