@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import type { Trip, TripStatus } from "@/models/travel";
 
 type MemberOption = { id: string; displayName: string };
-export function EditTripForm({ trip, members }: { trip: Trip; members: MemberOption[] }) {
+export function EditTripForm({ trip, members, canDelete = false }: { trip: Trip; members: MemberOption[]; canDelete?: boolean }) {
   const router = useRouter();
   const [title, setTitle] = useState(trip.title), [status, setStatus] = useState<TripStatus>(trip.status);
   const [cities, setCities] = useState(trip.cities.map((city) => city.name).join("、"));
@@ -20,6 +20,7 @@ export function EditTripForm({ trip, members }: { trip: Trip; members: MemberOpt
     router.refresh(); setSaving(false);
   }
   async function remove() {
+    if (!canDelete || trip.protected) return;
     if (!confirm(`确定删除“${trip.title}”吗？删除后不能恢复。`)) return;
     setDeleting(true); setError("");
     const response = await fetch(`/api/trips/${trip.slug}`, { method: "DELETE" });
@@ -38,6 +39,6 @@ export function EditTripForm({ trip, members }: { trip: Trip; members: MemberOpt
     <label>封面地址<input value={cover} onChange={(event) => setCover(event.target.value)} /></label>
     <fieldset><legend>参与成员</legend>{members.map((member) => <label key={member.id}><input type="checkbox" checked={memberIds.includes(member.id)} onChange={(event) => setMemberIds((current) => event.target.checked ? [...new Set([...current, member.id])] : current.filter((id) => id !== member.id))} />{member.displayName}</label>)}</fieldset>
     {error && <p className="form-error" role="alert">{error}</p>}
-    <div className="edit-actions"><button disabled={saving}>{saving ? "保存中…" : "保存修改"}</button><button type="button" className="delete-trip" disabled={deleting} onClick={remove}>{deleting ? "删除中…" : "删除行程"}</button></div>
+    <div className="edit-actions"><button disabled={saving}>{saving ? "保存中…" : "保存修改"}</button><button type="button" className="delete-trip" disabled={deleting || !canDelete || Boolean(trip.protected)} title={trip.protected ? "受保护行程不能删除。" : !canDelete ? "仅 nini 可以删除行程。" : undefined} onClick={() => void remove()}>{deleting ? "删除中…" : "删除行程"}</button></div>
   </form>;
 }

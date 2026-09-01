@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element, @next/next/no-html-link-for-pages */
 import { listTrips } from "@/services/trip-repository.server";
+import { getCurrentMember, tripDeletionMemberId } from "@/services/auth.server";
 import type { TripStatus } from "@/models/travel";
 import { TripDeleteButton } from "@/components/trip/TripDeleteButton";
 
@@ -23,7 +24,7 @@ function participantSummary(trip: Awaited<ReturnType<typeof listTrips>>[number])
 export default async function TripsPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   const requested = (await searchParams).status;
   const activeStatus = filters.some((filter) => filter.value === requested) ? requested as TripStatus : "all";
-  const trips = await listTrips(activeStatus);
+  const [actor, trips] = await Promise.all([getCurrentMember(), listTrips(activeStatus)]);
 
   return (
     <main className="archive-index">
@@ -39,7 +40,7 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
               <div><span>{statusLabels[trip.status]}</span><h2>{trip.title}</h2><p>{trip.startDate && trip.endDate ? `${trip.startDate} — ${trip.endDate}` : "日期未定"}</p><p>{trip.cities.length ? trip.cities.map((city) => city.name).join("、") : "暂无城市"} · {participantSummary(trip)}</p></div>
             </a>
             <a className="trip-plan-link" href={`/trips/${trip.slug}/plan`}>规划行程 →</a>
-            <TripDeleteButton slug={trip.slug} title={trip.title} protected={trip.protected} />
+            <TripDeleteButton slug={trip.slug} title={trip.title} protected={trip.protected} canDelete={actor?.id === tripDeletionMemberId} />
           </article>
         ))}
       </section>

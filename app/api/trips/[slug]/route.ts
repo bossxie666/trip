@@ -1,4 +1,4 @@
-import { getCurrentMember } from "@/services/auth.server";
+import { getCurrentMember, tripDeletionMemberId } from "@/services/auth.server";
 import { deleteTrip, updateTrip, type UpdateTripInput } from "@/services/trip-repository.server";
 import type { TripStatus } from "@/models/travel";
 
@@ -21,6 +21,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   try {
     const actor = await getCurrentMember();
     if (!actor) return Response.json({ error: "请先验证旅行成员身份。" }, { status: 401 });
+    if (actor.id !== tripDeletionMemberId) return Response.json({ error: "只有 nini 可以删除行程。" }, { status: 403 });
     return await deleteTrip((await params).slug) ? Response.json({ ok: true }) : Response.json({ error: "没有找到这条行程。" }, { status: 404 });
   } catch (error) { const protectedTrip = error instanceof Error && error.message === "PROTECTED_TRIP"; return Response.json({ error: protectedTrip ? "上海 + 杭州是受保护行程，不能删除。" : "删除失败，请重试。" }, { status: protectedTrip ? 403 : 500 }); }
 }

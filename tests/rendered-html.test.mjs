@@ -297,7 +297,14 @@ test("requires a member session and supports collaborative edit and delete", asy
   const listAfterCreate = await render("/trips");
   const listHtml = await listAfterCreate.text();
   assert.match(listHtml, /class="trip-delete-button"[^>]+data-trip-slug="[^"]+"/);
-  assert.doesNotMatch(listHtml, /aria-label="删除行程：上海 \+ 杭州"/);
+  assert.match(listHtml, /aria-label="删除行程：上海 \+ 杭州"/);
+  const niniSession = sessionCookie;
+  await loginAs("王静雯");
+  const memberList = await render("/trips");
+  assert.match(await memberList.text(), /class="trip-delete-button"[^>]+disabled/);
+  const deniedDelete = await render(`/api/trips/${trip.slug}`, { method: "DELETE" });
+  assert.equal(deniedDelete.status, 403);
+  sessionCookie = niniSession;
   const update = await render(`/api/trips/${trip.slug}`, { method: "PUT", body: { title: "朋友旅行更新", status: "completed", cities: ["苏州", "无锡"], undated: true, people: 2, memberIds: ["member-zhu-jingqi"] } });
   assert.equal(update.status, 200); assert.equal((await update.json()).trip.status, "completed");
   const remove = await render(`/api/trips/${trip.slug}`, { method: "DELETE" }); assert.equal(remove.status, 200);
