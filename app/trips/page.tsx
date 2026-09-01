@@ -1,6 +1,7 @@
 /* eslint-disable @next/next/no-img-element, @next/next/no-html-link-for-pages */
 import { listTrips } from "@/services/trip-repository.server";
 import type { TripStatus } from "@/models/travel";
+import { TripDeleteButton } from "@/components/trip/TripDeleteButton";
 
 const statusLabels = {
   inspiration: "灵感",
@@ -38,6 +39,7 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
               <div><span>{statusLabels[trip.status]}</span><h2>{trip.title}</h2><p>{trip.startDate && trip.endDate ? `${trip.startDate} — ${trip.endDate}` : "日期未定"}</p><p>{trip.cities.length ? trip.cities.map((city) => city.name).join("、") : "暂无城市"} · {participantSummary(trip)}</p></div>
             </a>
             <a className="trip-plan-link" href={`/trips/${trip.slug}/plan`}>规划行程 →</a>
+            <TripDeleteButton slug={trip.slug} title={trip.title} protected={trip.protected} />
           </article>
         ))}
       </section>

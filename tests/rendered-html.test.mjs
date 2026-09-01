@@ -294,6 +294,10 @@ test("requires a member session and supports collaborative edit and delete", asy
   const unlock = await render("/unlock?returnTo=https://evil.example/phish"); assert.equal(unlock.status, 200); const unlockHtml = await unlock.text(); assert.equal(unlockHtml.match(/evil\.example/g)?.length, 1);
   sessionCookie = saved;
   const trip = await createTrip({ title: "朋友旅行", status: "planning", cities: ["苏州"], undated: true, people: 2, memberIds: ["member-zhu-jingqi"] });
+  const listAfterCreate = await render("/trips");
+  const listHtml = await listAfterCreate.text();
+  assert.match(listHtml, /class="trip-delete-button"[^>]+data-trip-slug="[^"]+"/);
+  assert.doesNotMatch(listHtml, /aria-label="删除行程：上海 \+ 杭州"/);
   const update = await render(`/api/trips/${trip.slug}`, { method: "PUT", body: { title: "朋友旅行更新", status: "completed", cities: ["苏州", "无锡"], undated: true, people: 2, memberIds: ["member-zhu-jingqi"] } });
   assert.equal(update.status, 200); assert.equal((await update.json()).trip.status, "completed");
   const remove = await render(`/api/trips/${trip.slug}`, { method: "DELETE" }); assert.equal(remove.status, 200);
