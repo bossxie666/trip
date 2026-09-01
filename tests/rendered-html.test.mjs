@@ -70,7 +70,10 @@ async function createTrip(body) {
 
 test("keeps all Stage A routes available", async () => {
   const [home, cities, city, map] = await Promise.all([render(), render("/cities"), render("/cities/shanghai"), render("/map")]);
-  assert.equal(home.status, 200); assert.match(await home.text(), /跳进地理书/);
+  assert.equal(home.status, 200);
+  const homeHtml = await home.text();
+  assert.match(homeHtml, /跳进地理书/);
+  assert.match(homeHtml, /<a[^>]+href="\/trips"[^>]*>进入攻略<\/a>/);
   assert.equal(cities.status, 200); assert.equal(city.status, 200); assert.equal(map.status, 200);
 });
 
