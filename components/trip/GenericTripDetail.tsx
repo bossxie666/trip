@@ -4,6 +4,7 @@ import { EditTripForm } from "@/components/trip/EditTripForm";
 import { DayPlacesEditor } from "@/components/trip/DayPlacesEditor";
 import type { PlaceWorkspace } from "@/services/place-repository.server";
 import { GenericTripMap } from "@/components/trip/GenericTripMap";
+import { MemberIdentityControl, type SessionMemberSummary } from "@/components/auth/MemberIdentityControl";
 
 const statusLabels = { inspiration: "灵感", planning: "待出行", completed: "已出行" };
 
@@ -11,10 +12,10 @@ function tripDates(trip: Trip) {
   return trip.startDate && trip.endDate ? `${trip.startDate} — ${trip.endDate}` : "日期未定";
 }
 
-export function GenericTripDetail({ trip, members, placeWorkspace }: { trip: Trip; members: { id: string; displayName: string }[]; placeWorkspace: NonNullable<PlaceWorkspace> }) {
+export function GenericTripDetail({ trip, members, placeWorkspace, currentMember }: { trip: Trip; members: { id: string; displayName: string }[]; placeWorkspace: NonNullable<PlaceWorkspace>; currentMember?: SessionMemberSummary | null }) {
   return (
     <main className="generic-trip-detail">
-      <nav><a href="/trips">返回攻略中心</a></nav>
+      <nav className="archive-top-nav"><a href="/trips">返回攻略中心</a><MemberIdentityControl currentMember={currentMember} /></nav>
       <header>
         <span>{statusLabels[trip.status]}</span>
         <h1>{trip.title}</h1>

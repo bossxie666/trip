@@ -6,6 +6,7 @@ import { TripDetailPage } from "@/components/trip/TripDetailPage";
 import { GenericTripDetail } from "@/components/trip/GenericTripDetail";
 import { listActiveMembers } from "@/services/member-repository.server";
 import { getPlaceWorkspace } from "@/services/place-repository.server";
+import { getCurrentMember } from "@/services/auth.server";
 
 export function generateStaticParams() {
   return getAllTrips().map((trip) => ({ slug: trip.slug }));
@@ -26,11 +27,11 @@ export default async function TripDetailRoute({ params }: { params: Promise<{ sl
   if (slug === protectedTripSlug) redirect(`/trips/${slug}/plan`);
   const trip = await findTripBySlug(slug);
   if (!trip) notFound();
-  const [members, placeWorkspace] = await Promise.all([listActiveMembers(), getPlaceWorkspace(slug)]);
+  const [members, placeWorkspace, current] = await Promise.all([listActiveMembers(), getPlaceWorkspace(slug), getCurrentMember()]);
 
   return (
     <TripDetailPage trip={trip}>
-      {placeWorkspace ? <GenericTripDetail trip={trip} members={members} placeWorkspace={placeWorkspace} /> : null}
+      {placeWorkspace ? <GenericTripDetail trip={trip} members={members} placeWorkspace={placeWorkspace} currentMember={current ? { id: current.id, displayName: current.displayName } : null} /> : null}
     </TripDetailPage>
   );
 }

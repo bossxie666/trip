@@ -51,3 +51,26 @@
 /* V2.3 identity control: Session Member is explicit and independent from Member View. */
 .archive-top-nav{display:flex;align-items:center;justify-content:space-between;gap:12px}.member-identity-control{position:relative;z-index:60}.member-identity-trigger{display:inline-flex;align-items:center;gap:7px;min-height:42px;padding:9px 13px;border:1px solid var(--line);border-radius:999px;background:var(--paper2);color:var(--ink);cursor:pointer;font-size:11px;font-weight:800}.member-identity-trigger:hover,.member-identity-trigger:focus-visible{border-color:var(--ink)}.member-identity-trigger>span:first-child{color:var(--muted);font-size:10px;font-weight:600}.member-identity-trigger>span:last-child{color:var(--clay);font-size:14px;line-height:1}.member-identity-menu{position:absolute;top:calc(100% + 8px);right:0;display:grid;gap:7px;width:210px;padding:14px;background:var(--paper2);border:1px solid var(--line);box-shadow:var(--shadow)}.member-identity-current{display:grid;gap:3px;padding-bottom:8px;border-bottom:1px dashed var(--line)}.member-identity-current span{color:var(--muted);font-size:10px}.member-identity-current strong{font-size:15px}.member-identity-menu button{min-height:40px;padding:9px 10px;border:1px solid var(--line);background:var(--paper);text-align:left;cursor:pointer;font-size:11px;font-weight:800}.member-identity-menu button:hover,.member-identity-menu button:focus-visible{border-color:var(--ink);background:var(--paper2)}.member-identity-menu button:disabled{opacity:.55;cursor:wait}.member-identity-menu .member-identity-logout{border-color:#b97967;background:transparent;color:#8d2f27}.member-identity-status,.member-identity-error{font-size:10px}.member-identity-status{color:var(--muted)}.member-identity-error{padding:7px;background:#f2d7cf;color:#8d2f27}.trip-console-side{display:grid;gap:10px;align-content:start;justify-items:end}.trip-console-side>.member-identity-control{justify-self:end}.library-console>.member-identity-control{justify-self:end;align-self:start}
 @media(max-width:680px){.archive-top-nav{align-items:flex-start}.archive-top-nav .member-identity-control{flex:0 1 auto;margin-left:auto}.archive-top-nav .member-identity-trigger{width:auto}.trip-console-side{justify-items:stretch}.trip-console-side>.member-identity-control{justify-self:stretch}.member-identity-trigger{justify-content:center;width:100%}.member-identity-menu{position:fixed;top:76px;left:14px;right:14px;width:auto}.library-console>.member-identity-control{justify-self:stretch}.library-console .member-identity-trigger{width:100%}}
+
+/* Identity control is a page-level action: keep it in the upper-right corner everywhere. */
+.archive-home,.archive-placeholder,.trip-plan-page{position:relative}
+.archive-home-topbar,.archive-placeholder-topbar{position:absolute;top:clamp(18px,4vw,48px);right:clamp(20px,7vw,96px);z-index:60}
+.archive-home-topbar .member-identity-control,.archive-placeholder-topbar .member-identity-control{width:auto}
+.archive-home-topbar .member-identity-trigger,.archive-placeholder-topbar .member-identity-trigger{width:auto}
+.trip-console{position:relative}
+.trip-console-side{padding-top:48px}
+.trip-console>.member-identity-control,.trip-console-side>.member-identity-control{position:absolute;top:0;right:0}
+.trip-console>.member-identity-control,.trip-console-side>.member-identity-control{width:auto}
+.trip-console>.member-identity-control .member-identity-trigger,.trip-console-side>.member-identity-control .member-identity-trigger{width:auto}
+.library-console .console-title{padding-right:180px}
+.member-identity-menu{z-index:70}
+.member-identity-current{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.member-identity-current>div{display:grid;gap:3px}
+.member-identity-close{width:30px!important;min-height:30px!important;height:30px;padding:0!important;border:0!important;background:transparent!important;color:var(--muted);font-size:22px!important;font-weight:500!important;line-height:1; text-align:center!important}
+.member-identity-close:hover,.member-identity-close:focus-visible{color:var(--ink);background:transparent!important}
+@media(max-width:680px){
+  .archive-home-topbar,.archive-placeholder-topbar{top:16px;right:20px}
+  .archive-home-topbar .member-identity-trigger,.archive-placeholder-topbar .member-identity-trigger{width:auto}
+  .trip-console-side{padding-top:46px}
+  .library-console .console-title{padding-right:0}
+}

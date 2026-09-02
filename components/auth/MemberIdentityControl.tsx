@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { buildIdentitySwitchReturnTo } from "@/services/identity-navigation";
 
 export type SessionMemberSummary = { id: string; displayName: string };
@@ -14,6 +14,23 @@ export function MemberIdentityControl({ currentMember }: { currentMember?: Sessi
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<"switch" | "logout" | null>(null);
   const [error, setError] = useState("");
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
 
   if (!currentMember) return null;
 
@@ -31,12 +48,12 @@ export function MemberIdentityControl({ currentMember }: { currentMember?: Sessi
     }
   }
 
-  return <div className="member-identity-control">
+  return <div className="member-identity-control" ref={rootRef}>
     <button type="button" className="member-identity-trigger" aria-haspopup="menu" aria-expanded={open} onClick={() => { setOpen((value) => !value); setError(""); }}>
       <span>当前身份</span><strong>{currentMember.displayName}</strong><span aria-hidden="true">⌄</span>
     </button>
     {open && <div className="member-identity-menu" role="menu" aria-label="成员身份操作">
-      <div className="member-identity-current"><span>当前身份</span><strong>{currentMember.displayName}</strong></div>
+      <div className="member-identity-current"><div><span>当前身份</span><strong>{currentMember.displayName}</strong></div><button type="button" className="member-identity-close" aria-label="关闭身份菜单" onClick={() => setOpen(false)}>×</button></div>
       <button type="button" role="menuitem" onClick={() => void clearSession("switch")} disabled={busy !== null}>切换身份</button>
       <button type="button" role="menuitem" className="member-identity-logout" onClick={() => void clearSession("logout")} disabled={busy !== null}>退出旅行空间</button>
       {busy && <small className="member-identity-status">{busy === "switch" ? "正在准备切换…" : "正在退出…"}</small>}
