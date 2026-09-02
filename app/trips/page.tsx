@@ -39,8 +39,12 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
               {trip.cover ? <img src={trip.cover} alt="" /> : <div className="trip-cover-empty">NO COVER</div>}
               <div><span>{statusLabels[trip.status]}</span><h2>{trip.title}</h2><p>{trip.startDate && trip.endDate ? `${trip.startDate} — ${trip.endDate}` : "日期未定"}</p><p>{trip.cities.length ? trip.cities.map((city) => city.name).join("、") : "暂无城市"} · {participantSummary(trip)}</p></div>
             </a>
-            <a className="trip-plan-link" href={`/trips/${trip.slug}/plan`}>规划行程 →</a>
-            <TripDeleteButton slug={trip.slug} title={trip.title} protected={trip.protected} canDelete={actor?.id === tripDeletionMemberId} />
+            <div className="trip-card-footer">
+              <div className="trip-card-delete">
+                <TripDeleteButton slug={trip.slug} title={trip.title} protected={trip.protected} canDelete={actor?.id === tripDeletionMemberId} />
+              </div>
+              <a className="trip-plan-link" href={`/trips/${trip.slug}/plan`}>规划行程 →</a>
+            </div>
           </article>
         ))}
       </section>
