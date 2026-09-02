@@ -3,6 +3,7 @@ import { listTrips } from "@/services/trip-repository.server";
 import { getCurrentMember, tripDeletionMemberId } from "@/services/auth.server";
 import type { TripStatus } from "@/models/travel";
 import { TripDeleteButton } from "@/components/trip/TripDeleteButton";
+import { MemberIdentityControl } from "@/components/auth/MemberIdentityControl";
 
 const statusLabels = {
   inspiration: "灵感",
@@ -28,7 +29,7 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
 
   return (
     <main className="archive-index">
-      <nav><a href="/">返回首页</a></nav>
+      <nav className="archive-top-nav"><a href="/">返回首页</a><MemberIdentityControl currentMember={actor ? { id: actor.id, displayName: actor.displayName } : null} /></nav>
       <header><span>TRIPS</span><h1>攻略</h1><a className="new-trip-link" href="/trips/new">＋ 新建行程</a></header>
       <nav className="trip-tabs" aria-label="行程状态">{filters.map((filter) => <a key={filter.value} className={activeStatus === filter.value ? "active" : ""} href={filter.value === "all" ? "/trips" : `/trips?status=${filter.value}`}>{filter.label}</a>)}</nav>
       <section className="trip-list">

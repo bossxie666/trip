@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
+import { buildIdentitySwitchReturnTo } from "../services/identity-navigation.ts";
 
 class TestD1Statement {
   constructor(database, sql, values = []) { this.database = database; this.sql = sql; this.values = values; }
@@ -76,6 +77,58 @@ test("renames Zhu Jingqi's login and display labels without changing identity or
   const planHtml = await plan.text();
   assert.match(planHtml, /kiki/);
   assert.doesNotMatch(planHtml, /朱婧琪/);
+});
+
+test("keeps Session Member separate from Member View and safely resets view on identity switch", async () => {
+  const savedSession = sessionCookie;
+  try {
+    await loginAs("nini");
+    const viewedWang = await render("/trips/shanghai-hangzhou-2026/plan?view=planning&day=trip-shanghai-hangzhou-2026-day-1&member=member-wang-jingwen");
+    assert.equal(viewedWang.status, 200);
+    const viewedWangHtml = await viewedWang.text();
+    assert.match(viewedWangHtml, /当前身份/);
+    assert.match(viewedWangHtml, /nini/);
+    assert.match(viewedWangHtml, /成员视角/);
+    assert.match(viewedWangHtml, /王静雯/);
+    assert.equal(buildIdentitySwitchReturnTo("/trips/shanghai-hangzhou-2026/plan?view=planning&day=trip-shanghai-hangzhou-2026-day-1&member=member-wang-jingwen"), "/trips/shanghai-hangzhou-2026/plan?view=planning&day=trip-shanghai-hangzhou-2026-day-1");
+
+    const cleared = await render("/api/session", { method: "DELETE", headers: { accept: "application/json" } });
+    assert.equal(cleared.status, 200);
+    sessionCookie = "";
+    const denied = await render("/trips/shanghai-hangzhou-2026/plan?view=map&day=trip-shanghai-hangzhou-2026-day-2");
+    assert.equal(denied.status, 302);
+    assert.equal(new URL(denied.headers.get("location")).searchParams.get("returnTo"), "/trips/shanghai-hangzhou-2026/plan?view=map&day=trip-shanghai-hangzhou-2026-day-2");
+
+    await loginAs("刘徐");
+    const switched = await render("/trips/shanghai-hangzhou-2026/plan?view=planning&day=trip-shanghai-hangzhou-2026-day-1");
+    const switchedHtml = await switched.text();
+    assert.match(switchedHtml, /当前身份[\s\S]{0,120}刘徐/);
+    assert.match(switchedHtml, /<a class="active"[^>]+member=member-liu-xu[^>]*>刘徐<\/a>/);
+
+    const viewedAgain = await render("/trips/shanghai-hangzhou-2026/plan?view=planning&day=trip-shanghai-hangzhou-2026-day-1&member=member-wang-jingwen");
+    const viewedAgainHtml = await viewedAgain.text();
+    assert.match(viewedAgainHtml, /当前身份[\s\S]{0,120}刘徐/);
+    assert.match(viewedAgainHtml, /<a class="active"[^>]+member=member-wang-jingwen[^>]*>王静雯<\/a>/);
+
+    const loggedOut = await render("/api/session", { method: "DELETE", headers: { accept: "application/json" } });
+    assert.equal(loggedOut.status, 200);
+    sessionCookie = "";
+    const protectedAfterLogout = await render("/trips");
+    assert.equal(protectedAfterLogout.status, 302);
+    assert.equal(new URL(protectedAfterLogout.headers.get("location")).searchParams.get("returnTo"), "/trips");
+  } finally {
+    sessionCookie = savedSession;
+  }
+});
+
+test("renders the identity control on the archive and workspace shells", async () => {
+  await loginAs("nini");
+  const tripsHtml = await (await render("/trips")).text();
+  assert.match(tripsHtml, /class="member-identity-trigger"/);
+  assert.match(tripsHtml, /aria-haspopup="menu"/);
+  const planHtml = await (await render("/trips/shanghai-hangzhou-2026/plan?view=map")).text();
+  assert.match(planHtml, /class="member-identity-trigger"/);
+  assert.match(planHtml, /当前身份/);
 });
 
 async function createTrip(body) {

@@ -12,6 +12,7 @@ import { BookingPlaceControl } from "./BookingPlaceControl";
 import { BookingDisplayNameControl } from "./BookingDisplayNameControl";
 import { ItineraryItemPlaceControl } from "./ItineraryItemPlaceControl";
 import { TransportIcon, iconForBookingType, iconForItemType } from "./TransportIcon";
+import { MemberIdentityControl, type SessionMemberSummary } from "@/components/auth/MemberIdentityControl";
 import type { getPlanWorkspace } from "@/services/plan-workspace-service.server";
 
 type Workspace = NonNullable<Awaited<ReturnType<typeof getPlanWorkspace>>>;
@@ -39,7 +40,7 @@ function bookingTime(booking: Workspace["bookings"][number]["booking"]) {
   return `${shortDate(booking.startDateLocal)}–${shortDate(booking.endDateLocal)}`;
 }
 
-export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query, areaFilter, categoryFilter, libraryMode = false, librarySort = "core", libraryPage = 1, memberFilter = "all", costMode = "expected" }: { workspace: Workspace; activeDayId: string; view: View; mapMode: MapMode; query: string; areaFilter: AreaFilter; categoryFilter: CategoryFilter; libraryMode?: boolean; librarySort?: LibrarySort; libraryPage?: number; memberFilter?: string; costMode?: "expected" | "actual" }) {
+export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query, areaFilter, categoryFilter, libraryMode = false, librarySort = "core", libraryPage = 1, memberFilter = "all", costMode = "expected", currentMember = null }: { workspace: Workspace; activeDayId: string; view: View; mapMode: MapMode; query: string; areaFilter: AreaFilter; categoryFilter: CategoryFilter; libraryMode?: boolean; librarySort?: LibrarySort; libraryPage?: number; memberFilter?: string; costMode?: "expected" | "actual"; currentMember?: SessionMemberSummary | null }) {
   const { trip, days, recommendations, bookings } = workspace;
   const activeDay = days.find((day) => day.id === activeDayId) || days[0];
   const dayLabels = days.map((day) => ({ id: day.id, label: `${shortDate(day.date)} ${dayArea(day)}` }));
@@ -193,13 +194,13 @@ export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query
     memberFilter,
   };
 
-  if (libraryMode) return <main className="trip-plan-page recommendation-library-page"><header className="trip-console library-console"><div className="console-title"><a href={libraryLink(areaFilter, categoryFilter)}>← 返回规划</a><span>TRIP LIBRARY</span><h1>{trip.title} · 攻略资料库</h1><p>浏览素材与攻略，选择目标 Day 后再加入正式行程。</p></div></header><section className="recommendation-library-full">{library}</section></main>;
+  if (libraryMode) return <main className="trip-plan-page recommendation-library-page"><header className="trip-console library-console"><div className="console-title"><a href={libraryLink(areaFilter, categoryFilter)}>← 返回规划</a><span>TRIP LIBRARY</span><h1>{trip.title} · 攻略资料库</h1><p>浏览素材与攻略，选择目标 Day 后再加入正式行程。</p></div><MemberIdentityControl currentMember={currentMember} /></header><section className="recommendation-library-full">{library}</section></main>;
 
   const hotelBookings = bookings.filter(({ booking }) => booking.type === "hotel");
   return <main className="trip-plan-page">
     <header className="trip-console">
       <div className="console-title"><a href="/trips">← 攻略中心</a><span>TRIP CONSOLE</span><h1>{trip.title}</h1><p>{fullRange(trip.startDate, trip.endDate)} · {stageSummary}</p></div>
-      <div className="booking-console"><span className="booking-console-label">住宿</span>{hotelBookings.map(({ booking }) => <article key={booking.id}><b className="booking-summary-title"><TransportIcon kind="hotel" size={15} />{booking.title.replace("附近", "")}</b><span>{bookingStatus(booking.type)} · {bookingTime(booking)}</span><strong><small>总价 {money(booking.totalAmountMinor)}</small></strong><BookingDisplayNameControl slug={trip.slug} bookingId={booking.id} initialTitle={booking.title} /></article>)}{!hotelBookings.length && <p className="booking-console-empty">暂无住宿预订</p>}</div>
+      <div className="trip-console-side"><MemberIdentityControl currentMember={currentMember} /><div className="booking-console"><span className="booking-console-label">住宿</span>{hotelBookings.map(({ booking }) => <article key={booking.id}><b className="booking-summary-title"><TransportIcon kind="hotel" size={15} />{booking.title.replace("附近", "")}</b><span>{bookingStatus(booking.type)} · {bookingTime(booking)}</span><strong><small>总价 {money(booking.totalAmountMinor)}</small></strong><BookingDisplayNameControl slug={trip.slug} bookingId={booking.id} initialTitle={booking.title} /></article>)}{!hotelBookings.length && <p className="booking-console-empty">暂无住宿预订</p>}</div></div>
     </header>
     <nav className="day-navigation" aria-label="选择日期">{days.map((day) => <a className={day.id === activeDayId ? "active" : ""} key={day.id} href={link(view, day.id)}><b>{shortDate(day.date)}</b><span>{dayArea(day)}</span></a>)}</nav>
     <nav className="plan-view-tabs" aria-label="工作台视图"><a className={view === "planning" ? "active" : ""} href={link("planning")}>规划</a><a className={view === "map" ? "active" : ""} href={link("map")}>地图</a><a className={view === "budget" ? "active" : ""} href={link("budget")}>费用</a></nav>
