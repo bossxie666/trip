@@ -1,5 +1,5 @@
 import { asc, desc, eq, inArray } from "drizzle-orm";
-import { getDb } from "@/db";
+import { getDb, getRuntimeEnv } from "@/db";
 import { cityRecords, dayPlaceRecords, dayRecords, memberRecords, tripCityRecords, tripMemberRecords, tripRecords, tripStageMemberRecords, tripStageRecords } from "@/db/schema";
 import { getTripBySlug as getSeedTripBySlug, trips as seedTrips } from "@/data/trips";
 import type { Day, Trip, TripStatus } from "@/models/travel";
@@ -19,6 +19,18 @@ export type UpdateTripInput = Omit<CreateTripInput, "status"> & { status: TripSt
 
 function normalizeCityNames(names: string[]) {
   return [...new Set(names.map((name) => name.trim()).filter(Boolean))];
+}
+
+/**
+ * Seed records are useful for local fixtures, but a production D1 must never
+ * silently be supplemented by stale static planning data.  The Sites runtime
+ * always exposes DB, while tests can opt into the same behaviour by providing
+ * the in-memory D1 binding.  A seed fallback is therefore only available when
+ * no database binding exists (or when an explicit development flag enables it).
+ */
+function seedFallbackAllowed() {
+  const env = getRuntimeEnv() as { DB?: unknown; TRIP_ALLOW_SEED_FALLBACK?: string };
+  return !env.DB || env.TRIP_ALLOW_SEED_FALLBACK === "true";
 }
 
 export function createStableSlugBase(title: string, startDate: string | null, id: string) {
@@ -134,7 +146,7 @@ export async function listTrips(status: TripStatus | "all" = "all") {
     ? await db.select().from(tripRecords).orderBy(desc(tripRecords.createdAt))
     : await db.select().from(tripRecords).where(eq(tripRecords.status, status)).orderBy(desc(tripRecords.createdAt));
   const storedTrips = await hydrateTrips(rows);
-  const seeds = status === "all" ? seedTrips : seedTrips.filter((trip) => trip.status === status);
+  const seeds = seedFallbackAllowed() ? (status === "all" ? seedTrips : seedTrips.filter((trip) => trip.status === status)) : [];
   const storedSlugs = new Set(storedTrips.map((trip) => trip.slug));
   return [...storedTrips, ...seeds.filter((trip) => !storedSlugs.has(trip.slug))];
 }
@@ -144,11 +156,11 @@ export async function findTripBySlug(slug: string) {
   const rows = await db.select().from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1);
   const stored = (await hydrateTrips(rows))[0];
   if (stored) return stored;
-  return getSeedTripBySlug(slug);
+  return seedFallbackAllowed() ? getSeedTripBySlug(slug) : undefined;
 }
 
 async function slugExists(slug: string) {
-  if (getSeedTripBySlug(slug)) return true;
+  if (seedFallbackAllowed() && getSeedTripBySlug(slug)) return true;
   const rows = await getDb().select({ id: tripRecords.id }).from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1);
   return rows.length > 0;
 }

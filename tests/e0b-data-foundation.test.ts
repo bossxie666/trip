@@ -72,6 +72,9 @@ const presenceRepo = await import("../services/presence-repository.server.ts");
 const timelineService = await import("../services/day-timeline-service.server.ts");
 const timelinePlacementRepo = await import("../services/timeline-placement-repository.server.ts");
 const transitSteps = await import("../services/amap/transit-steps.ts");
+const amapWebService = await import("../services/amap/amap-web-service.server.ts");
+const transportEstimate = await import("../services/transport-estimate.ts");
+const subwayColors = await import("../services/amap/subway-colors.ts");
 const domain = await import("../services/planning-domain.mjs");
 
 test("E0B data foundation", async (t) => {
@@ -204,6 +207,50 @@ test("E0B data foundation", async (t) => {
     ]);
     assert.deepEqual(result.map((step) => [step.mode, step.lineName, step.stationCount]), [["walking", null, null], ["subway", "2号线", 5], ["walking", null, null]]);
     assert.equal(result.some((step) => step.stationCount === 0), false);
+  });
+
+  await t.test("parses ordered walking, subway, bus and transfer legs", () => {
+    const result = amapWebService.normalizeTransitSteps({
+      walking: [{ instruction: "步行至人民广场站", distance: "300", duration: "180" }],
+      railway: [{ route_name: "2号线", direction: "浦东国际机场方向", departure_stop: { name: "人民广场" }, arrival_stop: { name: "世纪大道" }, station_count: "3", distance: "2500", duration: "600" }],
+      bus: [{ route_name: "123路", direction: "外滩方向", departure_stop: { name: "世纪大道" }, arrival_stop: { name: "外滩" }, station_count: "4", distance: "2100", duration: "500" }],
+      transfers: [{ name: "换乘" }],
+    });
+    assert.deepEqual(result.map((step) => step.mode), ["walking", "subway", "bus", "other"]);
+    assert.deepEqual(result.slice(1, 3).map((step) => [step.fromStation, step.lineName, step.direction, step.stationCount, step.toStation]), [
+      ["人民广场", "2号线", "浦东国际机场方向", 3, "世纪大道"],
+      ["世纪大道", "123路", "外滩方向", 4, "外滩"],
+    ]);
+    assert.equal(result.some((step) => step.stationCount === 0), false);
+  });
+
+  await t.test("keeps transport estimates participant-aware and cycling free", () => {
+    const memberStates = { "member-nini": "present" as const, "member-wang-jingwen": "present" as const, "member-zhu-jingqi": "present" as const, "member-liu-xu": "present" as const };
+    assert.deepEqual(transportEstimate.estimateTransportCost({ mode: "transit", transitCost: 7, memberId: "member-nini", memberStates }), { amountMinor: 700, pending: false, participantCount: 1 });
+    assert.equal(transportEstimate.estimateTransportCost({ mode: "taxi", taxiCost: 120, memberId: "member-nini", memberStates }).amountMinor, 3000);
+    assert.equal(transportEstimate.estimateTransportCost({ mode: "walking", memberId: "member-nini", memberStates }).amountMinor, 0);
+    assert.equal(transportEstimate.estimateTransportCost({ mode: "bicycling", memberId: "member-nini", memberStates }).amountMinor, 0);
+    assert.equal(transportEstimate.estimateTransportCost({ mode: "taxi", taxiCost: 120, memberId: "member-nini", memberStates: { "member-nini": "present", "member-wang-jingwen": "unknown" } }).pending, true);
+    assert.equal(transportEstimate.mergeTransportParticipantStates({ "member-nini": "present" }, { "member-nini": "unknown" })["member-nini"], "unknown");
+  });
+
+  await t.test("uses city-scoped subway colors and a neutral fallback", () => {
+    assert.notEqual(subwayColors.subwayLineColor("Shanghai", "2号线"), subwayColors.subwayLineColor("Hangzhou", "2号线"));
+    assert.equal(subwayColors.subwayLineColor("Shanghai", "99号线"), subwayColors.SUBWAY_NEUTRAL);
+    assert.equal(subwayColors.routeStrokeColor("bus", [], "Shanghai"), subwayColors.BUS_NEUTRAL);
+    assert.equal(subwayColors.routeStrokeColor("transit", [{ mode: "subway", lineName: "2号线" }], "Shanghai"), subwayColors.subwayLineColor("Shanghai", "2号线"));
+  });
+
+  await t.test("supports all itinerary time modes through the database", async () => {
+    const modes = [
+      ["untimed", null, null], ["start_only", "09:00", null], ["range", "10:00", "11:00"], ["all_day", null, null], ["opening_hours", null, null],
+    ] as const;
+    for (const [timeMode, startTimeLocal, endTimeLocal] of modes) {
+      await itineraryRepo.createItineraryItem({ tripId: "trip-e0b-a", dayId: "e0b-a-day-3", itemType: "activity", title: `时间 ${timeMode}`, timeMode, startTimeLocal, endTimeLocal, openingHoursNote: timeMode === "opening_hours" ? "营业时间待确认" : null }, "member-nini");
+    }
+    const savedModes = DB.database.prepare("SELECT time_mode, start_time_local, end_time_local, opening_hours_note FROM itinerary_items WHERE day_id = 'e0b-a-day-3' AND title LIKE '时间 %' ORDER BY sort_order").all();
+    assert.deepEqual(savedModes.map((row) => row.time_mode), modes.map(([timeMode]) => timeMode));
+    assert.equal(savedModes.at(-1)?.opening_hours_note, "营业时间待确认");
   });
 
   await t.test("domain validation rejects floats and preserves stable tie breaks", () => {

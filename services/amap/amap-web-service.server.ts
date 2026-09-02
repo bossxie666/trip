@@ -1,6 +1,6 @@
-import { getRuntimeEnv } from "@/db";
-import type { AMapPoiCandidate, AMapRouteMode, AMapRouteResult, AMapRouteStep } from "@/services/amap/amap-types";
-import { aggregateTransitSteps } from "@/services/amap/transit-steps";
+import { getRuntimeEnv } from "../../db/index.ts";
+import type { AMapPoiCandidate, AMapRouteMode, AMapRouteResult, AMapRouteStep } from "./amap-types.ts";
+import { aggregateTransitSteps } from "./transit-steps.ts";
 
 const base = "https://restapi.amap.com";
 const routeCache = new Map<string, { expiresAt: number; result: AMapRouteResult }>();
@@ -246,7 +246,9 @@ export async function planAmapRoute(input: { mode: AMapRouteMode; origin: { long
   if (cached && cached.expiresAt > Date.now()) return cached.result;
   const common = { origin: `${input.origin.longitude},${input.origin.latitude}`, destination: `${input.destination.longitude},${input.destination.latitude}`, origin_id: input.origin.providerPlaceId || undefined, destination_id: input.destination.providerPlaceId || undefined };
   const transit = input.mode === "transit" || input.mode === "subway" || input.mode === "bus" || input.mode === "mixed_transit";
-  const endpoint = transit ? "/v3/direction/transit/integrated" : input.mode === "taxi" ? "/v3/direction/driving" : `/v5/direction/${input.mode}`;
+  // AMap calls its cycling endpoint "riding".  Keep the public route mode
+  // as "bicycling" while translating only at the upstream boundary.
+  const endpoint = transit ? "/v3/direction/transit/integrated" : input.mode === "taxi" ? "/v3/direction/driving" : input.mode === "bicycling" ? "/v5/direction/riding" : `/v5/direction/${input.mode}`;
   const data = await amapFetch(endpoint, transit ? { ...common, city: input.origin.cityCode || undefined, cityd: input.destination.cityCode || undefined, strategy: "0" } : common, "route-search");
   const route = (data.route && typeof data.route === "object" ? data.route : {}) as Record<string, unknown>;
   const paths = Array.isArray(route.paths) ? route.paths : Array.isArray(route.transits) ? route.transits : [];

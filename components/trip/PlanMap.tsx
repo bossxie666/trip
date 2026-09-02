@@ -2,6 +2,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AMapRouteMode, AMapRouteResult } from "@/services/amap/amap-types";
+import { routeStrokeColor } from "@/services/amap/subway-colors";
 
 type Place = { id: string; name: string; cityId: string; address: string | null; latitude: number | null; longitude: number | null; district?: string | null; providerPlaceId?: string | null };
 type Day = { id: string; dayNumber: number; date: string | null; title: string; items: { item: { id: string; title: string; dayId: string; sortOrder: number; lockedAt: string | null; placeId: string | null }; place: Place | null }[] };
@@ -38,6 +39,17 @@ const modeLabels: Record<AMapRouteMode, string> = { walking: "步行", subway: "
 const categoryLabels = [{ key: "all", label: "全部" }, { key: "attraction", label: "景点" }, { key: "food", label: "美食" }, { key: "cafe", label: "咖啡" }, { key: "shopping", label: "购物" }, { key: "guide", label: "攻略" }, { key: "other", label: "其他" }];
 function minutes(seconds: number | null) { return seconds == null ? "时间待确认" : `${Math.max(1, Math.round(seconds / 60))} 分钟`; }
 function distance(meters: number | null) { return meters == null ? "距离待确认" : meters < 1000 ? `${Math.round(meters)} 米` : `${(meters / 1000).toFixed(1)} 公里`; }
+function routeFare(route: AMapRouteResult) {
+  if (route.transitCost != null) return `约 ¥${route.transitCost}/人`;
+  if (route.taxiCost != null) return `约 ¥${route.taxiCost}/车`;
+  if (route.mode === "walking" || route.mode === "bicycling") return "¥0";
+  if (route.mode === "taxi" || route.mode === "driving") return "费用待确认";
+  return "票价待确认";
+}
+function mainLine(route: AMapRouteResult) {
+  const lines = [...new Set((route.steps || []).filter((step) => step.mode === "subway" || step.mode === "bus").map((step) => step.lineName?.trim()).filter((line): line is string => Boolean(line)))];
+  return lines.length ? lines.join(" / ") : null;
+}
 function shortDate(date: string | null) { return date ? date.slice(5).replace("-", "/") : "日期未定"; }
 function placeArea(place: Place, cities: { id: string; name: string }[]) { const city = cities.find((item) => item.id === place.cityId)?.name || ""; return (place.name.includes("桐庐") || place.district?.includes("桐庐")) ? "tonglu" : city.includes("上海") ? "shanghai" : "hangzhou"; }
 function placeCategory(entry: MapEntry) { if (entry.category === "hotel" || entry.category === "experience") return "other"; return entry.category || (entry.kind === "recommendation" ? "attraction" : "other"); }
@@ -54,7 +66,10 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
   const activeDay = workspace?.days.find((day) => day.id === activeDayId) || workspace?.days[0];
   const allDayStops = activeDay && workspace?.routeStopsByDay?.[activeDay.id] ? workspace.routeStopsByDay[activeDay.id] : [];
   const dayStops = memberFilter === "all" ? allDayStops : allDayStops.filter((stop) => stop.memberStates?.[memberFilter] !== "absent");
-  const daySegments = dayStops.slice(1).map((to, index) => { const from = dayStops[index]; return { id: `${from.id}-${to.id}`, from, to, crossCity: from.place.cityId !== to.place.cityId }; });
+  const persistedDaySegments = activeDay && workspace?.routeSegmentsByDay?.[activeDay.id] ? workspace.routeSegmentsByDay[activeDay.id] : [];
+  const daySegments = persistedDaySegments.length
+    ? persistedDaySegments.filter((segment) => memberFilter === "all" || (segment.from.memberStates?.[memberFilter] !== "absent" && segment.to.memberStates?.[memberFilter] !== "absent"))
+    : dayStops.slice(1).map((to, index) => { const from = dayStops[index]; return { id: `${from.id}-${to.id}`, from, to, crossCity: from.place.cityId !== to.place.cityId }; });
   const entries = useMemo<MapEntry[]>(() => workspace?.mapPlaces || places.map((place) => ({ place: { ...place, cityId: "" }, kind: place.candidate ? "candidate" : "itinerary", planStatus: place.candidate ? "candidate" : "selected" })), [workspace, places]);
   const mapEntries = useMemo(() => {
     if (!workspace || mapMode === "day") {
@@ -97,7 +112,12 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
       return marker;
     });
     markerObjects.current = markers;
-    const lines = Object.values(routeResults).flatMap((route) => (route.polylines || []).map((path) => new AMap.Polyline({ path, strokeColor: "#bf6648", strokeWeight: 5, strokeOpacity: .88, showDir: true })));
+    const lines = Object.entries(routeResults).flatMap(([segmentId, route]) => {
+      const segment = daySegments.find((candidate) => candidate.id === segmentId);
+      const cityName = segment ? workspace?.cities.find((city) => city.id === segment.from.place.cityId)?.name : null;
+      const strokeColor = routeStrokeColor(route.mode, route.steps || [], cityName);
+      return (route.polylines || []).map((path) => new AMap.Polyline({ path, strokeColor, strokeWeight: 5, strokeOpacity: .88, showDir: true }));
+    });
     const resultMarkers = searchResults.map((poi) => {
       const marker = new AMap.Marker({ position: [poi.longitude, poi.latitude], title: poi.name, opacity: selectedSearch === poi.id ? 1 : .72, label: { content: `⌖ ${poi.name}`, direction: "top" } });
       marker.on?.("click", () => { setSelectedSearch(poi.id); setSelectedMapEntryId(null); });
@@ -278,7 +298,7 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
                           <button
                             type="button"
                             key={value}
-                            onClick={() => void planSegment(segment, value, value !== "bicycling")}
+                            onClick={() => void planSegment(segment, value)}
                             disabled={routing === segment.id}
                           >
                             {modeLabels[value]}
@@ -303,6 +323,7 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
                         <span>票价待确认</span>
                       )}
                       {route.taxiCost != null ? <span>约 ¥{route.taxiCost}/车</span> : null}
+                      {mainLine(route) ? <span>主要线路 {mainLine(route)}</span> : null}
                       {routeStale[segment.id] ? (
                         <button
                           type="button"
@@ -326,7 +347,7 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
                           >
                             <b>{modeLabels[alternativeMode as AMapRouteMode]}</b>
                             <small>
-                              {minutes(alternative.durationSeconds)} · {distance(alternative.distanceMeters)}
+                              {minutes(alternative.durationSeconds)} · {distance(alternative.distanceMeters)} · {routeFare(alternative)}{mainLine(alternative) ? ` · ${mainLine(alternative)}` : ""}
                             </small>
                           </button>
                         ) : null,

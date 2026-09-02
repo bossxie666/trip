@@ -131,19 +131,31 @@ export async function getPlanWorkspace(slug: string, memberId?: string) {
     routeStopsByDay.set(day.id, merged);
   }
   const routeSegmentsByDay = new Map<string, { id: string; from: RouteStop; to: RouteStop; crossCity: boolean }[]>();
+  const transportBookingIds = new Set(bookings.filter(({ booking }) => booking.type === "flight" || booking.type === "train").map(({ booking }) => booking.id));
   for (const [dayId, stops] of routeStopsByDay.entries()) {
     const segments = [];
     for (let index = 1; index < stops.length; index += 1) {
       const from = stops[index - 1], to = stops[index];
-      segments.push({ id: `${from.id}-${to.id}`, from, to, crossCity: from.place.cityId !== to.place.cityId });
+      // A flight/train Booking is the authoritative cross-city leg.  Do not
+      // ask AMap to route across that transport anchor.  A same-city place
+      // immediately before/after an endpoint is still a useful local leg.
+      const fromBookingId = from.source === "booking" ? from.id.split(":")[0] : null;
+      const toBookingId = to.source === "booking" ? to.id.split(":")[0] : null;
+      const crossCity = from.place.cityId !== to.place.cityId;
+      if (crossCity && ((fromBookingId && transportBookingIds.has(fromBookingId)) || (toBookingId && transportBookingIds.has(toBookingId)))) continue;
+      segments.push({ id: `${from.id}-${to.id}`, from, to, crossCity });
     }
     routeSegmentsByDay.set(dayId, segments);
   }
+  const bookingPlace = (id: string | null) => {
+    const place = id ? bookingRelatedPlaces.find((candidate) => candidate.id === id) : null;
+    return place || null;
+  };
   return {
     trip,
     days: days.map((day) => ({ ...day, items: items.filter(({ item }) => item.dayId === day.id).map(({ item, place, recommendationTitle }) => ({ item, place, recommendationTitle, participantStates: itemStates(item, day.date), participantOverrides: itemOverrides(item.id) })), timeline: timelineByDay.get(day.id) || [] })),
     recommendations: recommendations.map((recommendation) => ({ ...recommendation, options: options.filter(({ option }) => option.recommendationId === recommendation.id), addedDays: items.filter(({ item }) => item.recommendationId === recommendation.id).map(({ item }) => item.dayId), locked: items.some(({ item }) => item.recommendationId === recommendation.id && item.lockedAt != null) })),
-    bookings: bookings.map(({ booking, place }) => ({ booking, place, memberStates: bookingMemberStates(booking.id) })),
+    bookings: bookings.map(({ booking, place }) => ({ booking, place, originPlace: bookingPlace(booking.originPlaceId), destinationPlace: bookingPlace(booking.destinationPlaceId), memberStates: bookingMemberStates(booking.id) })),
     costLines: costLines.map(({ booking_cost_lines: line, bookings: booking }) => ({ ...line, bookingTitle: booking.title, allocations: allocations.filter(({ allocation }) => allocation.costLineId === line.id) })),
     presenceUnknown: days.some((day) => memberIds.some((memberId) => dayPresenceState(day.id, day.date, memberId) === "unknown" || dayPresenceState(day.id, day.date, memberId) === "partial")),
     dayPresenceByDay: Object.fromEntries(days.map((day) => [day.id, Object.fromEntries(memberIds.map((memberId) => [memberId, dayPresenceState(day.id, day.date, memberId)]))])),

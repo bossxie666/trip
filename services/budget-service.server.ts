@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { getDb, getRuntimeEnv } from "@/db";
 import {
   bookingCostAllocationRecords,
@@ -13,6 +13,7 @@ import {
   itineraryItemRecords,
   memberBudgetPlanRecords,
   memberRecords,
+  placeRecords,
   recommendationRecords,
   tripMemberRecords,
   tripRecords,
@@ -37,12 +38,15 @@ export type PersonalBudgetWorkspace = {
     status: string;
     totalAmountMinor: number | null;
     currency: string | null;
+    place: { id: string; name: string; address: string | null; cityId: string; latitude: number | null; longitude: number | null; providerPlaceId: string | null } | null;
+    originPlace: { id: string; name: string; address: string | null; cityId: string; latitude: number | null; longitude: number | null; providerPlaceId: string | null } | null;
+    destinationPlace: { id: string; name: string; address: string | null; cityId: string; latitude: number | null; longitude: number | null; providerPlaceId: string | null } | null;
     ownAmountMinor: number | null;
     pending: boolean;
     participants: Array<{ memberId: string; displayName: string }>;
     costLines: Array<{ id: string; title: string; amountMinor: number; currency: string; allocationMode: "equal" | "custom"; allocations: MoneyAllocation[] }>;
   }>;
-  expenses: Array<ExpenseRow & { ownAmountMinor: number | null; payerName: string | null }>;
+  expenses: Array<ExpenseRow & { ownAmountMinor: number | null; payerName: string | null; allocations: MoneyAllocation[] }>;
   totals: {
     fixedPersonalMinor: number;
     plannedMinor: number;
@@ -93,6 +97,9 @@ export async function getPersonalBudgetWorkspace(slug: string, memberId: string)
     bookingHasOwnAllocation.add(bookingId);
   }
   const memberNames = new Map(members.map((member) => [member.id, member.displayName]));
+  const bookingPlaceIds = [...new Set(bookings.flatMap((booking) => [booking.placeId, booking.originPlaceId, booking.destinationPlaceId].filter((id): id is string => Boolean(id))))];
+  const bookingPlaces = bookingPlaceIds.length ? await db.select().from(placeRecords).where(inArray(placeRecords.id, bookingPlaceIds)) : [];
+  const placeById = new Map(bookingPlaces.map((place) => [place.id, place]));
   const participantsByBooking = new Map<string, Array<{ memberId: string; displayName: string }>>();
   for (const row of bookingParticipants) {
     const participant = row.booking_participants;
@@ -113,7 +120,11 @@ export async function getPersonalBudgetWorkspace(slug: string, memberId: string)
   }
   const bookingView = bookings.map((booking) => {
     const ownAmountMinor = bookingHasOwnAllocation.has(booking.id) ? ownBookingAmounts.get(booking.id) || 0 : null;
-    return { id: booking.id, title: booking.title, type: booking.type, status: booking.status, totalAmountMinor: booking.totalAmountMinor, currency: booking.currency, ownAmountMinor, pending: ownAmountMinor == null, participants: participantsByBooking.get(booking.id) || [], costLines: costLinesByBooking.get(booking.id) || [] };
+    const projectPlace = (id: string | null) => {
+      const place = id ? placeById.get(id) : null;
+      return place ? { id: place.id, name: place.name, address: place.address, cityId: place.cityId, latitude: place.latitude, longitude: place.longitude, providerPlaceId: place.providerPlaceId } : null;
+    };
+    return { id: booking.id, title: booking.title, type: booking.type, status: booking.status, totalAmountMinor: booking.totalAmountMinor, currency: booking.currency, place: projectPlace(booking.placeId), originPlace: projectPlace(booking.originPlaceId), destinationPlace: projectPlace(booking.destinationPlaceId), ownAmountMinor, pending: ownAmountMinor == null, participants: participantsByBooking.get(booking.id) || [], costLines: costLinesByBooking.get(booking.id) || [] };
   });
 
   const ownExpenses = new Map<string, number>();
@@ -122,13 +133,20 @@ export async function getPersonalBudgetWorkspace(slug: string, memberId: string)
   }
   const expenseView = expenses
     .filter((expense) => expense.scope === "shared" ? ownExpenses.has(expense.id) || expense.createdByMemberId === memberId : expense.createdByMemberId === memberId)
-    .map((expense) => ({ ...expense, ownAmountMinor: expense.scope === "personal" ? expense.amountMinor : ownExpenses.get(expense.id) ?? null, payerName: expense.paidByMemberId ? memberNames.get(expense.paidByMemberId) || null : null }));
+    .map((expense) => ({
+      ...expense,
+      ownAmountMinor: expense.scope === "personal" ? expense.amountMinor : ownExpenses.get(expense.id) ?? null,
+      payerName: expense.paidByMemberId ? memberNames.get(expense.paidByMemberId) || null : null,
+      allocations: expenseAllocations
+        .filter((row) => row.expenses.id === expense.id)
+        .map((row) => ({ memberId: row.expense_allocations.memberId, amountMinor: row.expense_allocations.amountMinor })),
+    }));
 
   const fixedPersonalMinor = bookingView.reduce((sum, booking) => sum + (booking.ownAmountMinor ?? 0), 0);
   const plannedMinor = plans.reduce((sum, plan) => sum + plan.plannedAmountMinor, 0);
   const actualMinor = expenseView.reduce((sum, expense) => sum + (expense.ownAmountMinor ?? 0), 0);
   let estimatedRecommendationMinor = 0;
-  let expectedUnknownCount = 0;
+  let expectedUnknownCount = bookingView.filter((booking) => booking.pending).length;
   for (const row of itineraryRows) {
     const recommendation = row.recommendation;
     if (!recommendation || recommendation.deletedAt) continue;
@@ -148,6 +166,10 @@ export async function getPersonalBudgetWorkspace(slug: string, memberId: string)
     }
     expectedUnknownCount += 1;
   }
+  // Route responses are deliberately ephemeral and are loaded by the client
+  // when the member asks for an estimate.  The server therefore contributes
+  // no guessed transport amount to the persisted total; the client augments
+  // this known total with the pure estimate helper result.
   const estimatedTransportMinor = 0;
   return {
     memberId,
