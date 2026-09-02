@@ -6,7 +6,7 @@ import { TransportIcon, iconForTransportMode } from "./TransportIcon";
 
 type DayOption = { id: string; label: string };
 type CityOption = { id: string; name: string };
-type Poi = { id: string; name: string; address: string | null; district: string | null; longitude: number; latitude: number };
+type Poi = { id: string; name: string; address: string | null; district: string | null; cityName?: string | null; longitude: number; latitude: number };
 type TransportMode = "flight" | "high_speed_rail" | "train" | "transit" | "taxi" | "walking" | "bicycling" | "other";
 type TimeMode = "untimed" | "start_only" | "range";
 type ExistingTransport = { id: string; title: string; origin: string; destination: string; type: string; totalAmountMinor: number | null };
@@ -29,7 +29,7 @@ export function PlanAddControl({ slug, days, cities, defaultDayId, currentMember
     }).catch(() => { if (!cancelled) setTransportOptions([]); });
     return () => { cancelled = true; };
   }, [currentMemberId, kind, open, slug]);
-  useEffect(() => { if (!open || kind !== "place" || !keywords.trim() || !cityId) { setPois([]); return; } const timer = window.setTimeout(async () => { setSearching(true); setError(""); try { const response = await fetch(`/api/amap/places/search?keywords=${encodeURIComponent(keywords.trim())}&cityId=${encodeURIComponent(cityId)}&tripSlug=${encodeURIComponent(slug)}`); const payload = await response.json() as { pois?: Poi[]; error?: string }; if (!response.ok) throw new Error(payload.error || "搜索失败"); setPois(payload.pois || []); } catch (caught) { setError(caught instanceof Error ? caught.message : "搜索失败"); } finally { setSearching(false); } }, 320); return () => window.clearTimeout(timer); }, [open, kind, keywords, cityId, slug]);
+  useEffect(() => { if (!open || kind !== "place" || !keywords.trim()) { setPois([]); return; } const timer = window.setTimeout(async () => { setSearching(true); setError(""); try { const cityQuery = cityId ? `&cityId=${encodeURIComponent(cityId)}` : ""; const response = await fetch(`/api/amap/places/search?keywords=${encodeURIComponent(keywords.trim())}${cityQuery}&tripSlug=${encodeURIComponent(slug)}`); const payload = await response.json() as { pois?: Poi[]; error?: string }; if (!response.ok) throw new Error(payload.error || "搜索失败"); setPois(payload.pois || []); } catch (caught) { setError(caught instanceof Error ? caught.message : "搜索失败"); } finally { setSearching(false); } }, 320); return () => window.clearTimeout(timer); }, [open, kind, keywords, cityId, slug]);
   function selectExistingTransport(id: string) { setReuseId(id); const existing = transportOptions.find((item) => item.id === id); if (!existing) return; setOrigin(existing.origin); setDestination(existing.destination); setTransportMode(existing.type === "flight" ? "flight" : existing.type === "train" ? "high_speed_rail" : "other"); setFare(existing.totalAmountMinor == null ? "" : String(existing.totalAmountMinor / 100)); }
   function resetForm() { setKeywords(""); setPois([]); setSelectedPoi(""); setTitle(""); setNote(""); setOrigin(""); setDestination(""); setFare(""); setStartTimeLocal(""); setEndTimeLocal(""); setTimeMode("untimed"); setReuseId(""); setParticipantMemberIds(currentMemberId ? [currentMemberId] : []); }
   async function submit() {
@@ -38,7 +38,7 @@ export function PlanAddControl({ slug, days, cities, defaultDayId, currentMember
       let body: Record<string, unknown>;
       if (kind === "place") {
         if (!selectedPoi) throw new Error("请先选择一个高德地点");
-        body = { dayId, providerPlaceId: selectedPoi, cityId, itemType: "place" };
+        body = { dayId, providerPlaceId: selectedPoi, cityId: cityId || undefined, itemType: "place" };
       } else if (kind === "note") {
         if (!title.trim()) throw new Error("请填写事项名称");
         body = { dayId, title: title.trim(), note: note.trim() || null, itemType: "note", startTimeLocal: startTimeLocal || null, endTimeLocal: endTimeLocal || null, timeMode };

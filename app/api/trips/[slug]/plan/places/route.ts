@@ -13,12 +13,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     const trip = (await getDb().select({ id: tripRecords.id }).from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1))[0];
     if (!trip) return Response.json({ error: "行程不存在。" }, { status: 404 });
     if (!(await getDb().select({ memberId: tripMemberRecords.memberId }).from(tripMemberRecords).where(and(eq(tripMemberRecords.tripId, trip.id), eq(tripMemberRecords.memberId, actor.id))).limit(1))[0]) return Response.json({ error: "你不是这条行程的成员。" }, { status: 403 });
-    if (!body.cityId) return Response.json({ error: "请选择地点所属城市。" }, { status: 400 });
     if (body.providerPlaceId) {
       const place = await createAmapPlace(slug, { providerPlaceId: body.providerPlaceId, cityId: body.cityId }, actor.id);
       return Response.json({ place }, { status: 201 });
     }
-    if (!body.name?.trim()) return Response.json({ error: "请填写地点名称。" }, { status: 400 });
+    if (!body.name?.trim() || !body.cityId) return Response.json({ error: "手工地点需要名称和城市。" }, { status: 400 });
     const place = await createManualPlace(slug, { name: body.name.trim(), cityId: body.cityId, address: body.address?.trim() || null, longitude: body.longitude ?? null, latitude: body.latitude ?? null }, actor.id);
     return Response.json({ place }, { status: 201 });
   } catch (error) {

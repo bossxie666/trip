@@ -32,7 +32,7 @@ function validateBookingTime(input: CreateBookingInput) {
   assertLocalDate(input.startDateLocal ?? null, "start_date"); assertLocalDate(input.endDateLocal ?? null, "end_date");
   assertTimezone(input.timezone ?? null);
   if (input.temporalKind === "date_range" && (!input.startDateLocal || !input.endDateLocal)) throw new Error("BOOKING_DATE_RANGE_REQUIRED");
-  if (input.temporalKind !== "date_range" && !input.startAt) throw new Error("BOOKING_START_AT_REQUIRED");
+  if (input.temporalKind !== "date_range" && !input.startAt && !input.startDateLocal) throw new Error("BOOKING_START_REQUIRED");
   if (input.endAt && input.startAt && Date.parse(input.endAt) <= Date.parse(input.startAt)) throw new Error("INVALID_BOOKING_RANGE");
   if (input.endDateLocal && input.startDateLocal && input.endDateLocal < input.startDateLocal) throw new Error("INVALID_BOOKING_DATE_RANGE");
 }
@@ -52,8 +52,13 @@ export async function createBooking(input: CreateBookingInput, actorMemberId: st
   }
   const placeIds = [...new Set([input.placeId, input.originPlaceId, input.destinationPlaceId].filter((id): id is string => Boolean(id)))];
   if (placeIds.length) {
-    const valid = await db.select({ id: placeRecords.id }).from(placeRecords).innerJoin(tripCityRecords, and(eq(tripCityRecords.cityId, placeRecords.cityId), eq(tripCityRecords.tripId, input.tripId))).where(inArray(placeRecords.id, placeIds));
-    if (valid.length !== placeIds.length) throw new Error("BOOKING_PLACE_NOT_IN_TRIP_CITY");
+    const valid = await db.select({ id: placeRecords.id, cityId: placeRecords.cityId }).from(placeRecords).where(inArray(placeRecords.id, placeIds));
+    if (valid.length !== placeIds.length) throw new Error("BOOKING_PLACE_NOT_FOUND");
+    // TripCity is derived from real Places. Generic Trips do not need to be
+    // preconfigured with a city before adding a hotel, airport, or station.
+    for (const cityId of [...new Set(valid.map((place) => place.cityId))]) {
+      await db.insert(tripCityRecords).values({ tripId: input.tripId, cityId, position: 999 }).onConflictDoNothing();
+    }
   }
   const id = crypto.randomUUID(), now = new Date().toISOString();
   const d1 = getRuntimeEnv().DB;
@@ -152,8 +157,8 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
   const nextDestinationPlaceId = input.destinationPlaceId === undefined ? booking.destinationPlaceId : input.destinationPlaceId;
   const placeIds = [...new Set([nextPlaceId, nextOriginPlaceId, nextDestinationPlaceId].filter((value): value is string => Boolean(value)))];
   if (placeIds.length) {
-    const valid = await db.select({ id: placeRecords.id }).from(placeRecords).innerJoin(tripCityRecords, and(eq(tripCityRecords.cityId, placeRecords.cityId), eq(tripCityRecords.tripId, booking.tripId))).where(inArray(placeRecords.id, placeIds));
-    if (valid.length !== placeIds.length) throw new Error("BOOKING_PLACE_NOT_IN_TRIP_CITY");
+    const valid = await db.select({ id: placeRecords.id }).from(placeRecords).where(inArray(placeRecords.id, placeIds));
+    if (valid.length !== placeIds.length) throw new Error("BOOKING_PLACE_NOT_FOUND");
   }
   let nextParticipantIds: string[] | undefined;
   if (input.participantMemberIds !== undefined) {

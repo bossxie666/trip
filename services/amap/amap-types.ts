@@ -7,6 +7,8 @@ export type AMapPoiCandidate = {
   adcode: string | null;
   cityCode: string | null;
   district: string | null;
+  cityName: string | null;
+  provinceName: string | null;
   typeCode: string | null;
 };
 

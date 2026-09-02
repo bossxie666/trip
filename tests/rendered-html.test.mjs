@@ -364,12 +364,60 @@ test("manages duplicate Recommendation items independently without touching Book
 test("protects E1 routes and gives Generic Trip an empty workspace", async () => {
   const generic = await createTrip({ title: "E1 Empty Trip", status: "planning", cities: ["苏州"], startDate: "2027-07-01", endDate: "2027-07-01", people: 1 });
   const genericHtml = await (await render(`/trips/${generic.slug}/plan`)).text();
-  assert.match(genericHtml, /E1 Empty Trip/); assert.match(genericHtml, /尚未安排/); assert.match(genericHtml, /0(?:<!-- -->)? 条/);
+  assert.match(genericHtml, /E1 Empty Trip/); assert.match(genericHtml, /尚未安排/); assert.match(genericHtml, /还没有添加住宿/); assert.match(genericHtml, /找想去的地方/); assert.match(genericHtml, /添加长途交通/);
   const saved = sessionCookie; sessionCookie = "";
   const anonymous = await render("/trips/shanghai-hangzhou-2026/plan?view=map&day=trip-shanghai-hangzhou-2026-day-2");
   assert.equal(anonymous.status, 302); assert.equal(new URL(anonymous.headers.get("location")).searchParams.get("returnTo"), "/trips/shanghai-hangzhou-2026/plan?view=map&day=trip-shanghai-hangzhou-2026-day-2");
   const denied = await render("/api/trips/shanghai-hangzhou-2026/plan/items", { method: "POST", body: { recommendationId: "recommendation-west-lake", dayId: "trip-shanghai-hangzhou-2026-day-5" } }); assert.equal(denied.status, 302);
   sessionCookie = saved;
+});
+
+test("creates a dated Generic Trip without TripCity or seeded business data", async () => {
+  const trip = await createTrip({ title: "V2.4 Empty Generic", status: "planning", startDate: "2028-03-01", endDate: "2028-03-02", memberIds: ["member-zhu-jingqi"] });
+  assert.equal(DB.database.prepare("SELECT count(*) count FROM trip_cities WHERE trip_id = ?").get(trip.id).count, 0);
+  assert.equal(DB.database.prepare("SELECT count(*) count FROM bookings WHERE trip_id = ?").get(trip.id).count, 0);
+  assert.equal(DB.database.prepare("SELECT count(*) count FROM itinerary_items WHERE trip_id = ?").get(trip.id).count, 0);
+  assert.equal(DB.database.prepare("SELECT count(*) count FROM expenses WHERE trip_id = ?").get(trip.id).count, 0);
+  assert.equal(DB.database.prepare("SELECT count(*) count FROM days WHERE trip_id = ?").get(trip.id).count, 2);
+  const html = await (await render(`/trips/${trip.slug}/plan`)).text();
+  assert.match(html, /还没有添加住宿/); assert.match(html, /找想去的地方/); assert.match(html, /尚未安排/);
+  assert.equal((await render(`/api/trips/${trip.slug}`, { method: "DELETE" })).status, 200);
+});
+
+test("reuses a real AMap Place for repeated Day items and one accommodation Booking", async () => {
+  const trip = await createTrip({ title: "V2.4 Place Reuse", status: "planning", startDate: "2028-04-01", endDate: "2028-04-01", memberIds: [] });
+  const dayId = DB.database.prepare("SELECT id FROM days WHERE trip_id = ?").get(trip.id).id;
+  const first = await render(`/api/trips/${trip.slug}/plan/items`, { method: "POST", body: { dayId, providerPlaceId: "B0TESTBUND", itemType: "place" } });
+  const second = await render(`/api/trips/${trip.slug}/plan/items`, { method: "POST", body: { dayId, providerPlaceId: "B0TESTBUND", itemType: "place", title: "再次到访" } });
+  assert.equal(first.status, 201); assert.equal(second.status, 201);
+  const firstItem = (await first.json()).item, secondItem = (await second.json()).item;
+  assert.notEqual(firstItem.id, secondItem.id); assert.equal(firstItem.placeId, secondItem.placeId);
+  const hotel = await render(`/api/trips/${trip.slug}/bookings`, { method: "POST", body: { type: "hotel", status: "tentative", title: "住宿候选", startDateLocal: "2028-04-01", endDateLocal: "2028-04-02", place: { placeId: firstItem.placeId }, participantMemberIds: ["member-nini"], totalAmountMinor: 60000 } });
+  assert.equal(hotel.status, 201);
+  assert.equal(DB.database.prepare("SELECT count(*) count FROM places WHERE provider = 'amap' AND provider_place_id = 'B0TESTBUND'").get().count, 1);
+  assert.equal(DB.database.prepare("SELECT count(*) count FROM itinerary_items WHERE trip_id = ? AND place_id = ?").get(trip.id, firstItem.placeId).count, 2);
+  assert.equal(DB.database.prepare("SELECT count(*) count FROM bookings WHERE trip_id = ? AND place_id = ?").get(trip.id, firstItem.placeId).count, 1);
+  assert.equal(DB.database.prepare("SELECT count(*) count FROM trip_cities WHERE trip_id = ?").get(trip.id).count, 1);
+  assert.equal((await render(`/api/trips/${trip.slug}`, { method: "DELETE" })).status, 200);
+});
+
+test("preserves calendar Day IDs and guards occupied date and referenced member removal", async () => {
+  const trip = await createTrip({ title: "V2.4 Safe Edit", status: "planning", startDate: "2028-05-02", endDate: "2028-05-03", memberIds: ["member-zhu-jingqi"] });
+  const original = DB.database.prepare("SELECT id, date FROM days WHERE trip_id = ? ORDER BY date").all(trip.id);
+  const extend = await render(`/api/trips/${trip.slug}`, { method: "PUT", body: { title: trip.title, status: "planning", startDate: "2028-05-01", endDate: "2028-05-04", memberIds: ["member-zhu-jingqi"] } });
+  assert.equal(extend.status, 200);
+  for (const day of original) assert.equal(DB.database.prepare("SELECT id FROM days WHERE trip_id = ? AND date = ?").get(trip.id, day.date).id, day.id);
+  const occupiedDay = DB.database.prepare("SELECT id FROM days WHERE trip_id = ? AND date = '2028-05-04'").get(trip.id).id;
+  assert.equal((await render(`/api/trips/${trip.slug}/plan/items`, { method: "POST", body: { dayId: occupiedDay, title: "保留的规划", itemType: "note" } })).status, 201);
+  const shrink = await render(`/api/trips/${trip.slug}`, { method: "PUT", body: { title: trip.title, status: "planning", startDate: "2028-05-01", endDate: "2028-05-03", memberIds: ["member-zhu-jingqi"] } });
+  assert.equal(shrink.status, 409);
+  assert.equal(DB.database.prepare("SELECT end_date FROM trips WHERE id = ?").get(trip.id).end_date, "2028-05-04");
+  const memberBooking = await render(`/api/trips/${trip.slug}/bookings`, { method: "POST", body: { type: "other", status: "tentative", title: "kiki 个人交通", startDateLocal: "2028-05-02", participantMemberIds: ["member-zhu-jingqi"] } });
+  assert.equal(memberBooking.status, 201);
+  const removeMember = await render(`/api/trips/${trip.slug}`, { method: "PUT", body: { title: trip.title, status: "planning", startDate: "2028-05-01", endDate: "2028-05-04", memberIds: [] } });
+  assert.equal(removeMember.status, 409);
+  assert.equal(DB.database.prepare("SELECT count(*) count FROM trip_members WHERE trip_id = ? AND member_id = 'member-zhu-jingqi'").get(trip.id).count, 1);
+  assert.equal((await render(`/api/trips/${trip.slug}`, { method: "DELETE" })).status, 200);
 });
 
 test("requires a member session and supports collaborative edit and delete", async () => {

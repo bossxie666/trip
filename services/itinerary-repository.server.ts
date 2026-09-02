@@ -51,11 +51,15 @@ export async function createItineraryItem(input: CreateItineraryItemInput, actor
   const day = (await db.select().from(dayRecords).where(and(eq(dayRecords.id, input.dayId), eq(dayRecords.tripId, input.tripId))).limit(1))[0];
   if (!day) throw new Error("DAY_NOT_IN_TRIP");
   if (input.stageId && !(await db.select({ id: tripStageRecords.id }).from(tripStageRecords).where(and(eq(tripStageRecords.id, input.stageId), eq(tripStageRecords.tripId, input.tripId))).limit(1))[0]) throw new Error("STAGE_NOT_IN_TRIP");
-  if (input.recommendationId && !(await db.select({ id: recommendationRecords.id }).from(recommendationRecords).where(and(eq(recommendationRecords.id, input.recommendationId), eq(recommendationRecords.tripId, input.tripId), isNull(recommendationRecords.deletedAt))).limit(1))[0]) throw new Error("RECOMMENDATION_NOT_IN_TRIP");
+  if (input.recommendationId && !(await db.select({ id: recommendationRecords.id }).from(recommendationRecords).where(and(eq(recommendationRecords.id, input.recommendationId), isNull(recommendationRecords.deletedAt))).limit(1))[0]) throw new Error("RECOMMENDATION_NOT_FOUND");
   const placeIds = [...new Set([input.placeId, input.originPlaceId, input.destinationPlaceId].filter((id): id is string => Boolean(id)))];
   if (placeIds.length) {
-    const valid = await db.select({ id: placeRecords.id }).from(placeRecords).innerJoin(tripCityRecords, and(eq(tripCityRecords.cityId, placeRecords.cityId), eq(tripCityRecords.tripId, input.tripId))).where(inArray(placeRecords.id, placeIds));
-    if (valid.length !== placeIds.length) throw new Error("ITEM_PLACE_NOT_IN_TRIP_CITY");
+    const valid = await db.select({ id: placeRecords.id }).from(placeRecords).where(inArray(placeRecords.id, placeIds));
+    if (valid.length !== placeIds.length) throw new Error("ITEM_PLACE_NOT_FOUND");
+    const places = await db.select({ cityId: placeRecords.cityId }).from(placeRecords).where(inArray(placeRecords.id, placeIds));
+    const existingCities = await db.select({ cityId: tripCityRecords.cityId }).from(tripCityRecords).where(eq(tripCityRecords.tripId, input.tripId));
+    const linked = new Set(existingCities.map((row) => row.cityId));
+    for (const cityId of [...new Set(places.map((row) => row.cityId))]) if (!linked.has(cityId)) { await db.insert(tripCityRecords).values({ tripId: input.tripId, cityId, position: linked.size }); linked.add(cityId); }
   }
   const highest = (await db.select({ value: max(itineraryItemRecords.sortOrder) }).from(itineraryItemRecords).where(eq(itineraryItemRecords.dayId, input.dayId)))[0]?.value ?? 0;
   const sortOrder = input.sortOrder ?? highest + 1;
@@ -106,8 +110,8 @@ export async function updateItineraryItem(tripId: string, id: string, input: Upd
   if (timeMode === "range" && (!startTimeLocal || !endTimeLocal)) throw new Error("TIME_RANGE_REQUIRED");
   if (durationMinutes != null && (!Number.isSafeInteger(durationMinutes) || durationMinutes < 0)) throw new Error("INVALID_DURATION");
   if (nextPlaceId) {
-    const validPlace = await db.select({ id: placeRecords.id }).from(placeRecords).innerJoin(tripCityRecords, and(eq(tripCityRecords.cityId, placeRecords.cityId), eq(tripCityRecords.tripId, tripId))).where(eq(placeRecords.id, nextPlaceId)).limit(1);
-    if (!validPlace.length) throw new Error("ITEM_PLACE_NOT_IN_TRIP_CITY");
+    const validPlace = await db.select({ id: placeRecords.id }).from(placeRecords).where(eq(placeRecords.id, nextPlaceId)).limit(1);
+    if (!validPlace.length) throw new Error("ITEM_PLACE_NOT_FOUND");
   }
   const targetDayId = input.dayId ?? item.dayId;
   if (!(await db.select({ id: dayRecords.id }).from(dayRecords).where(and(eq(dayRecords.id, targetDayId), eq(dayRecords.tripId, tripId))).limit(1))[0]) throw new Error("DAY_NOT_IN_TRIP");

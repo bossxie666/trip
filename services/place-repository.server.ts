@@ -52,19 +52,35 @@ export async function createManualPlace(slug: string, input: { name: string; cit
   await db.insert(placeRecords).values(place); return place;
 }
 
-export async function createAmapPlace(slug: string, input: { providerPlaceId: string; cityId: string }, actorMemberId: string) {
+export async function createAmapPlace(slug: string, input: { providerPlaceId: string; cityId?: string | null }, actorMemberId: string) {
   const db = getDb(), trip = await getStoredTrip(slug); if (!trip) throw new Error("TRIP_NOT_FOUND");
-  const cityLink = await db.select().from(tripCityRecords).where(and(eq(tripCityRecords.tripId, trip.id), eq(tripCityRecords.cityId, input.cityId))).limit(1);
-  if (!cityLink.length) throw new Error("CITY_NOT_IN_TRIP");
   const existing = (await db.select().from(placeRecords).where(and(eq(placeRecords.provider, "amap"), eq(placeRecords.providerPlaceId, input.providerPlaceId))).limit(1))[0];
-  if (existing) return existing;
+  if (existing) {
+    const link = await db.select().from(tripCityRecords).where(and(eq(tripCityRecords.tripId, trip.id), eq(tripCityRecords.cityId, existing.cityId))).limit(1);
+    if (!link.length) {
+      const links = await db.select().from(tripCityRecords).where(eq(tripCityRecords.tripId, trip.id));
+      await db.insert(tripCityRecords).values({ tripId: trip.id, cityId: existing.cityId, position: links.length });
+    }
+    return existing;
+  }
   const poi = await getAmapPoi(input.providerPlaceId), now = new Date().toISOString();
-  const sameName = (await db.select().from(placeRecords).where(and(eq(placeRecords.cityId, input.cityId), eq(placeRecords.name, poi.name))).limit(1))[0];
+  let city = input.cityId ? (await db.select().from(cityRecords).where(eq(cityRecords.id, input.cityId)).limit(1))[0] : null;
+  if (!city) {
+    const cityName = (poi.cityName || poi.provinceName || poi.district || "未知地区").replace(/市$/, "");
+    city = (await db.select().from(cityRecords).where(eq(cityRecords.name, cityName)).limit(1))[0];
+    if (!city) { const id = crypto.randomUUID(); city = { id, slug: `city-${id.slice(0, 8)}`, name: cityName, createdAt: now }; await db.insert(cityRecords).values(city); }
+  }
+  const cityLink = await db.select().from(tripCityRecords).where(and(eq(tripCityRecords.tripId, trip.id), eq(tripCityRecords.cityId, city.id))).limit(1);
+  if (!cityLink.length) {
+    const links = await db.select().from(tripCityRecords).where(eq(tripCityRecords.tripId, trip.id));
+    await db.insert(tripCityRecords).values({ tripId: trip.id, cityId: city.id, position: links.length });
+  }
+  const sameName = (await db.select().from(placeRecords).where(and(eq(placeRecords.cityId, city.id), eq(placeRecords.name, poi.name))).limit(1))[0];
   if (sameName?.provider === "manual") {
     await db.update(placeRecords).set({ address: poi.address, latitude: poi.latitude, longitude: poi.longitude, coordinateSystem: "GCJ02", provider: "amap", providerPlaceId: poi.id, adcode: poi.adcode, cityCode: poi.cityCode, district: poi.district, typeCode: poi.typeCode, providerUpdatedAt: now, updatedByMemberId: actorMemberId, updatedAt: now }).where(eq(placeRecords.id, sameName.id));
     return (await db.select().from(placeRecords).where(eq(placeRecords.id, sameName.id)).limit(1))[0];
   }
-  const place = { id: crypto.randomUUID(), name: poi.name, cityId: input.cityId, address: poi.address, latitude: poi.latitude, longitude: poi.longitude, coordinateSystem: "GCJ02" as const, provider: "amap" as const, providerPlaceId: poi.id, adcode: poi.adcode, cityCode: poi.cityCode, district: poi.district, typeCode: poi.typeCode, providerUpdatedAt: now, createdByMemberId: actorMemberId, updatedByMemberId: actorMemberId, createdAt: now, updatedAt: now };
+  const place = { id: crypto.randomUUID(), name: poi.name, cityId: city.id, address: poi.address, latitude: poi.latitude, longitude: poi.longitude, coordinateSystem: "GCJ02" as const, provider: "amap" as const, providerPlaceId: poi.id, adcode: poi.adcode, cityCode: poi.cityCode, district: poi.district, typeCode: poi.typeCode, providerUpdatedAt: now, createdByMemberId: actorMemberId, updatedByMemberId: actorMemberId, createdAt: now, updatedAt: now };
   await db.insert(placeRecords).values(place); return place;
 }
 

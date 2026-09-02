@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { getDb, getRuntimeEnv } from "@/db";
 import {
   bookingCostAllocationRecords,
@@ -76,7 +76,7 @@ export async function getPersonalBudgetWorkspace(slug: string, memberId: string)
   const db = getDb();
   const [plans, bookings, allocations, expenses, expenseAllocations, members, bookingParticipants, costLines, itineraryRows, itemOverrides, dayPresence] = await Promise.all([
     db.select().from(memberBudgetPlanRecords).where(and(eq(memberBudgetPlanRecords.tripId, trip.id), eq(memberBudgetPlanRecords.memberId, memberId))).orderBy(asc(memberBudgetPlanRecords.category)),
-    db.select().from(bookingRecords).where(and(eq(bookingRecords.tripId, trip.id), eq(bookingRecords.status, "confirmed"), isNull(bookingRecords.deletedAt))).orderBy(asc(bookingRecords.startAt), asc(bookingRecords.startDateLocal), asc(bookingRecords.id)),
+    db.select().from(bookingRecords).where(and(eq(bookingRecords.tripId, trip.id), ne(bookingRecords.status, "cancelled"), isNull(bookingRecords.deletedAt))).orderBy(asc(bookingRecords.startAt), asc(bookingRecords.startDateLocal), asc(bookingRecords.id)),
     db.select().from(bookingCostAllocationRecords).innerJoin(bookingCostLineRecords, eq(bookingCostLineRecords.id, bookingCostAllocationRecords.costLineId)).innerJoin(bookingRecords, eq(bookingRecords.id, bookingCostLineRecords.bookingId)).where(and(eq(bookingRecords.tripId, trip.id), isNull(bookingRecords.deletedAt))),
     db.select().from(expenseRecords).where(and(eq(expenseRecords.tripId, trip.id), isNull(expenseRecords.deletedAt))).orderBy(desc(expenseRecords.occurredDate), desc(expenseRecords.createdAt)),
     db.select().from(expenseAllocationRecords).innerJoin(expenseRecords, eq(expenseRecords.id, expenseAllocationRecords.expenseId)).where(and(eq(expenseRecords.tripId, trip.id), isNull(expenseRecords.deletedAt))),

@@ -96,16 +96,19 @@ function mapPoi(value: unknown): AMapPoiCandidate | null {
     id: scalar(poi.id), name: scalar(poi.name), address: scalar(poi.address) || null,
     longitude: location[0], latitude: location[1], adcode: scalar(poi.adcode) || null,
     cityCode: scalar(poi.citycode) || null, district: scalar(poi.adname) || null,
+    cityName: scalar(poi.cityname) || scalar(poi.city) || null,
+    provinceName: scalar(poi.pname) || scalar(poi.province) || null,
     typeCode: scalar(poi.typecode) || null,
   };
 }
 
-export async function searchAmapPois(keywords: string, region: string, rectangle?: string) {
+export async function searchAmapPois(keywords: string, region = "全国", rectangle?: string) {
   const cacheKey = `${keywords.trim().toLowerCase()}|${region.trim()}|${rectangle || ""}`;
   const cached = poiCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.pois;
+  const limited = Boolean(region && region !== "全国");
   try {
-    const data = await amapFetch("/v5/place/text", { keywords, region, rectangle, city_limit: "true", page_size: "12", show_fields: "business" }, "poi-search");
+    const data = await amapFetch("/v5/place/text", { keywords, region: limited ? region : undefined, rectangle, city_limit: limited ? "true" : "false", page_size: "12", show_fields: "business" }, "poi-search");
     const pois = (Array.isArray(data.pois) ? data.pois : []).map(mapPoi).filter((item): item is AMapPoiCandidate => Boolean(item));
     poiCache.set(cacheKey, { expiresAt: Date.now() + 60_000, pois });
     return pois;
@@ -115,7 +118,7 @@ export async function searchAmapPois(keywords: string, region: string, rectangle
     // v3 remains a compatibility fallback for regions/keywords rejected by
     // the v5 endpoint. It uses the same server-side key and never returns it
     // to the browser.
-    const fallback = await amapFetch("/v3/place/text", { keywords, city: region, citylimit: "true", offset: "12", page: "1", extensions: "all", rectangle }, "poi-search-fallback");
+    const fallback = await amapFetch("/v3/place/text", { keywords, city: limited ? region : "全国", citylimit: limited ? "true" : "false", offset: "12", page: "1", extensions: "all", rectangle }, "poi-search-fallback");
     const pois = (Array.isArray(fallback.pois) ? fallback.pois : []).map(mapPoi).filter((item): item is AMapPoiCandidate => Boolean(item));
     poiCache.set(cacheKey, { expiresAt: Date.now() + 60_000, pois });
     return pois;

@@ -1,4 +1,4 @@
-import { asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { getDb, getRuntimeEnv } from "@/db";
 import { cityRecords, dayPlaceRecords, dayRecords, memberRecords, tripCityRecords, tripMemberRecords, tripRecords, tripStageMemberRecords, tripStageRecords } from "@/db/schema";
 import { getTripBySlug as getSeedTripBySlug, trips as seedTrips } from "@/data/trips";
@@ -7,7 +7,7 @@ import type { Day, Trip, TripStatus } from "@/models/travel";
 export type CreateTripInput = {
   title: string;
   status: Extract<TripStatus, "inspiration" | "planning">;
-  cities: string[];
+  cities?: string[];
   startDate: string | null;
   endDate: string | null;
   people: number;
@@ -179,7 +179,7 @@ export async function createTrip(input: CreateTripInput, actorMemberId: string) 
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const slug = await uniqueSlug(createStableSlugBase(input.title, input.startDate, id));
-  const cityNames = normalizeCityNames(input.cities);
+  const cityNames = normalizeCityNames(input.cities || []);
   const days = generateDays(id, input.startDate, input.endDate);
 
   await db.insert(tripRecords).values({
@@ -227,20 +227,46 @@ export async function createTrip(input: CreateTripInput, actorMemberId: string) 
 async function replaceCitiesAndDays(tripId: string, input: UpdateTripInput) {
   const db = getDb();
   const now = new Date().toISOString();
-  await db.delete(tripCityRecords).where(eq(tripCityRecords.tripId, tripId));
-  for (const [position, name] of normalizeCityNames(input.cities).entries()) {
+  const requestedCities = normalizeCityNames(input.cities || []);
+  const days = generateDays(tripId, input.startDate, input.endDate);
+  const existingDays = await db.select().from(dayRecords).where(eq(dayRecords.tripId, tripId)).orderBy(asc(dayRecords.dayNumber));
+  const requestedDates = new Set(days.map((day) => day.date));
+  const removedDays = existingDays.filter((day) => !day.date || !requestedDates.has(day.date));
+  if (removedDays.length) {
+    const d1 = getRuntimeEnv().DB;
+    for (const day of removedDays) {
+      const occupied = await d1.prepare(`SELECT
+        (SELECT COUNT(*) FROM itinerary_items WHERE day_id = ?) +
+        (SELECT COUNT(*) FROM day_member_presence WHERE day_id = ?) +
+        (SELECT COUNT(*) FROM day_timeline_positions WHERE day_id = ?) +
+        (SELECT COUNT(*) FROM route_preferences WHERE day_id = ?) +
+        (SELECT COUNT(*) FROM day_places WHERE day_id = ?) +
+        (SELECT COUNT(*) FROM expenses WHERE day_id = ?) AS count`).bind(day.id, day.id, day.id, day.id, day.id, day.id).first() as { count: number } | null;
+      if (Number(occupied?.count || 0) > 0) throw new Error(`TRIP_DATE_SHORTEN_BLOCKED:${day.date || day.title}`);
+    }
+  }
+  // Validate all destructive date changes before touching either Days or the
+  // derived TripCity index. An aborted edit must leave the Trip unchanged.
+  if (requestedCities.length) {
+    await db.delete(tripCityRecords).where(eq(tripCityRecords.tripId, tripId));
+  }
+  for (const [position, name] of requestedCities.entries()) {
     let city = (await db.select().from(cityRecords).where(eq(cityRecords.name, name)).limit(1))[0];
     if (!city) { const id = crypto.randomUUID(); city = { id, slug: `city-${id.slice(0, 8)}`, name, createdAt: now }; await db.insert(cityRecords).values(city); }
     await db.insert(tripCityRecords).values({ tripId, cityId: city.id, position });
   }
-  const days = generateDays(tripId, input.startDate, input.endDate);
-  const existingDays = await db.select().from(dayRecords).where(eq(dayRecords.tripId, tripId)).orderBy(asc(dayRecords.dayNumber));
+  // Match by calendar date so inserting an earlier date never shifts existing
+  // content to a different day.  Temporary negative numbers avoid UNIQUE
+  // collisions while the chronological positions are rewritten.
+  const d1 = getRuntimeEnv().DB;
+  if (existingDays.length) await d1.batch(existingDays.map((day, index) => d1.prepare("UPDATE days SET day_number = ? WHERE id = ?").bind(-(index + 1), day.id)));
+  const byDate = new Map(existingDays.filter((day) => day.date).map((day) => [day.date!, day]));
   for (const [index, day] of days.entries()) {
-    const existing = existingDays[index];
-    if (existing) await db.update(dayRecords).set({ dayNumber: index + 1, date: day.date, title: day.title, updatedAt: now }).where(eq(dayRecords.id, existing.id));
-    else await db.insert(dayRecords).values({ id: day.id, tripId, dayNumber: index + 1, date: day.date, title: day.title, updatedAt: now });
+    const existing = day.date ? byDate.get(day.date) : undefined;
+    if (existing) await db.update(dayRecords).set({ dayNumber: index + 1, title: `Day ${index + 1}`, updatedAt: now }).where(eq(dayRecords.id, existing.id));
+    else await db.insert(dayRecords).values({ id: crypto.randomUUID(), tripId, dayNumber: index + 1, date: day.date, title: `Day ${index + 1}`, updatedAt: now });
   }
-  for (const removed of existingDays.slice(days.length)) await db.delete(dayRecords).where(eq(dayRecords.id, removed.id));
+  for (const removed of removedDays) await db.delete(dayRecords).where(eq(dayRecords.id, removed.id));
 }
 
 export async function updateTrip(slug: string, input: UpdateTripInput, actorMemberId: string) {
@@ -251,11 +277,31 @@ export async function updateTrip(slug: string, input: UpdateTripInput, actorMemb
     return null;
   }
   if (row.protected) throw new Error("PROTECTED_TRIP");
-  await db.update(tripRecords).set({ title: input.title, status: input.status, startDate: input.startDate, endDate: input.endDate, people: input.people, cover: input.cover, updatedAt: new Date().toISOString(), updatedByMemberId: actorMemberId }).where(eq(tripRecords.id, row.id));
-  await replaceCitiesAndDays(row.id, input);
-  await db.delete(tripMemberRecords).where(eq(tripMemberRecords.tripId, row.id));
   const memberIds = [...new Set([...input.memberIds, actorMemberId])];
-  if (memberIds.length) await db.insert(tripMemberRecords).values(memberIds.map((memberId) => ({ tripId: row.id, memberId })));
+  const currentMembers = await db.select().from(tripMemberRecords).where(eq(tripMemberRecords.tripId, row.id));
+  const currentIds = new Set(currentMembers.map((member) => member.memberId)), requestedIds = new Set(memberIds);
+  const d1 = getRuntimeEnv().DB;
+  // Validate removals before date/city mutation. This keeps a rejected edit
+  // fully non-destructive even though D1 does not expose a cross-call ORM
+  // transaction here.
+  for (const memberId of currentIds) if (!requestedIds.has(memberId)) {
+    const references = await d1.prepare(`SELECT
+      (SELECT COUNT(*) FROM booking_participants bp JOIN bookings b ON b.id = bp.booking_id WHERE b.trip_id = ? AND bp.member_id = ?) +
+      (SELECT COUNT(*) FROM booking_cost_allocations a JOIN booking_cost_lines l ON l.id = a.cost_line_id JOIN bookings b ON b.id = l.booking_id WHERE b.trip_id = ? AND a.member_id = ?) +
+      (SELECT COUNT(*) FROM day_member_presence WHERE trip_id = ? AND member_id = ?) +
+      (SELECT COUNT(*) FROM member_presence_windows WHERE trip_id = ? AND member_id = ?) +
+      (SELECT COUNT(*) FROM itinerary_item_participant_overrides o JOIN itinerary_items i ON i.id = o.itinerary_item_id WHERE i.trip_id = ? AND o.member_id = ?) +
+      (SELECT COUNT(*) FROM expense_allocations a JOIN expenses e ON e.id = a.expense_id WHERE e.trip_id = ? AND a.member_id = ?) +
+      (SELECT COUNT(*) FROM expenses WHERE trip_id = ? AND (paid_by_member_id = ? OR created_by_member_id = ?)) AS count`).bind(row.id, memberId, row.id, memberId, row.id, memberId, row.id, memberId, row.id, memberId, row.id, memberId, row.id, memberId, memberId).first() as { count: number } | null;
+    if (Number(references?.count || 0) > 0) throw new Error(`TRIP_MEMBER_REMOVE_BLOCKED:${memberId}`);
+  }
+  await replaceCitiesAndDays(row.id, input);
+  for (const memberId of currentIds) if (!requestedIds.has(memberId)) {
+    await db.delete(tripMemberRecords).where(and(eq(tripMemberRecords.tripId, row.id), eq(tripMemberRecords.memberId, memberId)));
+  }
+  const additions = memberIds.filter((memberId) => !currentIds.has(memberId));
+  if (additions.length) await db.insert(tripMemberRecords).values(additions.map((memberId) => ({ tripId: row.id, memberId })));
+  await db.update(tripRecords).set({ title: input.title, status: input.status, startDate: input.startDate, endDate: input.endDate, people: memberIds.length || input.people, cover: input.cover, updatedAt: new Date().toISOString(), updatedByMemberId: actorMemberId }).where(eq(tripRecords.id, row.id));
   return findTripBySlug(slug);
 }
 

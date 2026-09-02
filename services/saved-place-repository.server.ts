@@ -8,8 +8,11 @@ async function storedTrip(slug: string) {
 }
 
 async function assertPlaceInTrip(tripId: string, placeId: string) {
-  const row = (await getDb().select({ id: placeRecords.id }).from(placeRecords).innerJoin(tripCityRecords, and(eq(tripCityRecords.cityId, placeRecords.cityId), eq(tripCityRecords.tripId, tripId))).where(eq(placeRecords.id, placeId)).limit(1))[0];
-  if (!row) throw new Error("PLACE_NOT_IN_TRIP");
+  const db = getDb();
+  const place = (await db.select({ id: placeRecords.id, cityId: placeRecords.cityId }).from(placeRecords).where(eq(placeRecords.id, placeId)).limit(1))[0];
+  if (!place) throw new Error("PLACE_NOT_IN_TRIP");
+  const link = (await db.select().from(tripCityRecords).where(and(eq(tripCityRecords.tripId, tripId), eq(tripCityRecords.cityId, place.cityId))).limit(1))[0];
+  if (!link) { const links = await db.select().from(tripCityRecords).where(eq(tripCityRecords.tripId, tripId)); await db.insert(tripCityRecords).values({ tripId, cityId: place.cityId, position: links.length }); }
 }
 
 async function assertMember(tripId: string, memberId: string) {
@@ -34,7 +37,6 @@ export async function savePlaceForTrip(slug: string, input: { placeId?: string; 
   await assertMember(trip.id, actorMemberId);
   let placeId = input.placeId;
   if (input.providerPlaceId) {
-    if (!input.cityId) throw new Error("CITY_REQUIRED");
     placeId = (await createAmapPlace(slug, { providerPlaceId: input.providerPlaceId, cityId: input.cityId }, actorMemberId)).id;
   } else if (!placeId && input.name && input.cityId) {
     placeId = (await createManualPlace(slug, { name: input.name, cityId: input.cityId, address: input.address ?? null }, actorMemberId)).id;

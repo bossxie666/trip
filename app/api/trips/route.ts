@@ -31,11 +31,10 @@ export async function POST(request: Request) {
 
     if (!title) return Response.json({ error: "请填写行程名称。" }, { status: 400 });
     if (!creatableStatuses.has(status as CreateTripInput["status"])) return Response.json({ error: "新行程只能设为灵感或待出行。" }, { status: 400 });
-    if (!cities.length) return Response.json({ error: "请至少添加一个城市。" }, { status: 400 });
     if ((startDate && !endDate) || (!startDate && endDate)) return Response.json({ error: "请同时填写开始和结束日期，或选择日期未定。" }, { status: 400 });
     if (startDate && endDate && endDate < startDate) return Response.json({ error: "结束日期不能早于开始日期。" }, { status: 400 });
 
-    const trip = await createTrip({ title, status: status as CreateTripInput["status"], cities, startDate, endDate, people, cover, memberIds }, actor.id);
+    const trip = await createTrip({ title, status: status as CreateTripInput["status"], cities, startDate, endDate, people: Math.max(1, memberIds.length || people), cover, memberIds }, actor.id);
     return Response.json({ trip }, { status: 201 });
   } catch {
     return Response.json({ error: "创建失败，行程没有保存，请重试。" }, { status: 500 });

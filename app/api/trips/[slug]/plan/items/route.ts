@@ -20,14 +20,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     let title = body.title?.trim() || "";
     let itemType = body.itemType || "activity";
     if (recommendationId) {
-      const recommendation = (await db.select().from(recommendationRecords).where(and(eq(recommendationRecords.id, recommendationId), eq(recommendationRecords.tripId, trip.id), isNull(recommendationRecords.deletedAt))).limit(1))[0];
+      const recommendation = (await db.select().from(recommendationRecords).where(and(eq(recommendationRecords.id, recommendationId), isNull(recommendationRecords.deletedAt))).limit(1))[0];
       if (!recommendation) return Response.json({ error: "攻略素材不存在。" }, { status: 404 });
       const option = (await db.select().from(recommendationPlaceOptionRecords).where(eq(recommendationPlaceOptionRecords.recommendationId, recommendation.id)).orderBy(desc(recommendationPlaceOptionRecords.isPrimary), asc(recommendationPlaceOptionRecords.sortOrder)).limit(1))[0];
       placeId = placeId || option?.placeId || null;
       title = title || recommendation.title;
       itemType = body.itemType || (recommendation.kind === "place" ? "place" : "activity");
     } else if (body.providerPlaceId) {
-      if (!body.cityId) return Response.json({ error: "请选择地点所属城市。" }, { status: 400 });
       placeId = (await createAmapPlace(slug, { providerPlaceId: body.providerPlaceId, cityId: body.cityId }, actor.id)).id;
     }
     if (!placeId && !title) return Response.json({ error: "请填写事项名称或选择地点。" }, { status: 400 });

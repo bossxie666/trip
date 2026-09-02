@@ -10,9 +10,12 @@ import { BudgetWorkspace } from "./BudgetWorkspace";
 import { TimelinePlacementControl } from "./TimelinePlacementControl";
 import { BookingPlaceControl } from "./BookingPlaceControl";
 import { BookingDisplayNameControl } from "./BookingDisplayNameControl";
+import { BookingCreateControl } from "./BookingCreateControl";
+import { PlaceDiscoveryControl } from "./PlaceDiscoveryControl";
 import { ItineraryItemPlaceControl } from "./ItineraryItemPlaceControl";
 import { TransportIcon, iconForBookingType, iconForItemType } from "./TransportIcon";
 import { MemberIdentityControl, type SessionMemberSummary } from "@/components/auth/MemberIdentityControl";
+import { EditTripForm } from "./EditTripForm";
 import type { getPlanWorkspace } from "@/services/plan-workspace-service.server";
 
 type Workspace = NonNullable<Awaited<ReturnType<typeof getPlanWorkspace>>>;
@@ -31,7 +34,7 @@ function money(value: number | null | undefined) { return value == null ? "—" 
 function shortDate(date: string | null) { return date ? date.slice(5).replace("-", "/") : "日期未定"; }
 function fullRange(start: string | null, end: string | null) { if (!start || !end) return "日期未定"; return `${start.replaceAll("-", ".")} — ${end.slice(5).replaceAll("-", ".")}`; }
 function dayArea(day: Workspace["days"][number]) { if (day.title.includes("桐庐")) return "桐庐"; if (day.title.includes("前往杭州") || day.items.some(({ item }) => item.itemType === "transit")) return "上海→杭州"; if (day.title.includes("杭州")) return "杭州"; if (day.title.includes("上海") || day.title.includes("浦东")) return "上海"; return day.title; }
-function bookingStatus(type: string) { return type === "flight" ? "已购" : "已订"; }
+function bookingStatus(status: string, type: string) { return status === "tentative" ? "计划中" : status === "cancelled" ? "已取消" : type === "flight" || type === "train" ? "已购" : "已订"; }
 function bookingTime(booking: Workspace["bookings"][number]["booking"]) {
   if (booking.startAt && booking.endAt && booking.timezone) {
     const format = (value: string) => new Intl.DateTimeFormat("zh-CN", { timeZone: booking.timezone!, hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value));
@@ -115,7 +118,7 @@ export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query
               <h3>{recommendation.title}</h3>
               {(recommendation.estimatedDurationMinutes != null || recommendation.estimatedCostMinor != null) && <p>{recommendation.estimatedDurationMinutes != null ? `${recommendation.estimatedDurationMinutes} 分钟` : ""}{recommendation.estimatedCostMinor != null ? ` · ${money(recommendation.estimatedCostMinor)}` : ""}</p>}
               <p className="recommendation-state">{added.length ? `已加入 ${added.map(({ day, count }) => `${shortDate(day.date)}${count > 1 ? ` ×${count}` : ""}`).join(" · ")}` : "尚未加入正式行程"}{recommendation.locked ? " · 已锁定" : ""}</p>
-              <RecommendationAddControl slug={trip.slug} recommendationId={recommendation.id} days={dayLabels} defaultDayId={activeDayId} addedDayIds={recommendation.addedDays} />
+              <RecommendationAddControl slug={trip.slug} recommendationId={recommendation.id} placeId={recommendation.options[0]?.place?.id || null} days={dayLabels} defaultDayId={activeDayId} addedDayIds={recommendation.addedDays} />
             </div>
           </article>;
         })}
@@ -197,14 +200,15 @@ export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query
   if (libraryMode) return <main className="trip-plan-page recommendation-library-page"><header className="trip-console library-console"><div className="console-title"><a href={libraryLink(areaFilter, categoryFilter)}>← 返回规划</a><span>TRIP LIBRARY</span><h1>{trip.title} · 攻略资料库</h1><p>浏览素材与攻略，选择目标 Day 后再加入正式行程。</p></div><MemberIdentityControl currentMember={currentMember} /></header><section className="recommendation-library-full">{library}</section></main>;
 
   const hotelBookings = bookings.filter(({ booking }) => booking.type === "hotel");
+  const existingPlaceChoices = [...new Map([...(workspace.savedPlaces || []).map(({ place, city }) => ({ id: place.id, name: place.name, address: place.address, district: place.district, cityName: city.name, source: "existing" as const })), ...(workspace.mapPlaces || []).map(({ place }) => ({ id: place.id, name: place.name, address: place.address, district: place.district, cityName: trip.cities.find((city) => city.id === place.cityId)?.name || null, source: "existing" as const }))].map((place) => [place.id, place])).values()];
   return <main className="trip-plan-page">
     <header className="trip-console">
       <div className="console-title"><a href="/trips">← 攻略中心</a><span>TRIP CONSOLE</span><h1>{trip.title}</h1><p>{fullRange(trip.startDate, trip.endDate)} · {stageSummary}</p></div>
-      <div className="trip-console-side"><MemberIdentityControl currentMember={currentMember} /><div className="booking-console"><span className="booking-console-label">住宿</span>{hotelBookings.map(({ booking }) => <article key={booking.id}><b className="booking-summary-title"><TransportIcon kind="hotel" size={15} />{booking.title.replace("附近", "")}</b><span>{bookingStatus(booking.type)} · {bookingTime(booking)}</span><strong><small>总价 {money(booking.totalAmountMinor)}</small></strong><BookingDisplayNameControl slug={trip.slug} bookingId={booking.id} initialTitle={booking.title} /></article>)}{!hotelBookings.length && <p className="booking-console-empty">暂无住宿预订</p>}</div></div>
+      <div className="trip-console-side"><MemberIdentityControl currentMember={currentMember} />{!trip.protected && <details className="trip-settings"><summary>编辑旅行</summary><EditTripForm trip={trip} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} /></details>}<div className="booking-console"><span className="booking-console-label">住宿</span>{hotelBookings.map(({ booking }) => <article key={booking.id}><b className="booking-summary-title"><TransportIcon kind="hotel" size={15} />{booking.title.replace("附近", "")}</b><span>{bookingStatus(booking.status, booking.type)} · {bookingTime(booking)}</span><strong><small>总价 {money(booking.totalAmountMinor)}</small></strong><BookingDisplayNameControl slug={trip.slug} bookingId={booking.id} initialTitle={booking.title} /></article>)}{!hotelBookings.length && <p className="booking-console-empty">还没有添加住宿</p>}<BookingCreateControl slug={trip.slug} kind="hotel" members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} existingPlaces={existingPlaceChoices} /></div></div>
     </header>
     <nav className="day-navigation" aria-label="选择日期">{days.map((day) => <a className={day.id === activeDayId ? "active" : ""} key={day.id} href={link(view, day.id)}><b>{shortDate(day.date)}</b><span>{dayArea(day)}</span></a>)}</nav>
     <nav className="plan-view-tabs" aria-label="工作台视图"><a className={view === "planning" ? "active" : ""} href={link("planning")}>规划</a><a className={view === "map" ? "active" : ""} href={link("map")}>地图</a><a className={view === "budget" ? "active" : ""} href={link("budget")}>费用</a></nav>
-    {view === "planning" && <PlanningPanels library={library} itinerary={itinerary} />}
+    {view === "planning" && <><div className="empty-trip-actions"><PlaceDiscoveryControl slug={trip.slug} days={dayLabels} existingPlaces={existingPlaceChoices} /><BookingCreateControl slug={trip.slug} kind="transport" members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} existingPlaces={existingPlaceChoices} /></div><PlanningPanels library={library} itinerary={itinerary} /></>}
     {view === "map" && <section className="map-view"><header className="workspace-view-heading"><div><span>MAP</span><h2>{mapMode === "day" ? "行程路线" : "攻略地图"}</h2></div><nav><a className={mapMode === "day" ? "active" : ""} href={link("map", activeDayId, "day")}>行程路线</a><a className={mapMode === "library" ? "active" : ""} href={link("map", activeDayId, "library")}>攻略地图</a></nav></header><PlanMap slug={trip.slug} places={[]} workspace={mapWorkspace} activeDayId={activeDayId} mapMode={mapMode} /></section>}
     {view === "budget" && <BudgetWorkspace slug={trip.slug} budget={workspace.budget} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} days={dayLabels} cities={trip.cities.map((city) => ({ id: city.id, name: city.name }))} routeSegmentsByDay={workspace.routeSegmentsByDay} routePreferences={workspace.routePreferences} costMode={costMode} />}
   </main>;
