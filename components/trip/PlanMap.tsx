@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AMapRouteMode, AMapRouteResult } from "@/services/amap/amap-types";
 import { routeStrokeColor } from "@/services/amap/subway-colors";
+import { TransportIcon, iconForRouteMode } from "./TransportIcon";
 
 type Place = { id: string; name: string; cityId: string; address: string | null; latitude: number | null; longitude: number | null; district?: string | null; providerPlaceId?: string | null };
-type Day = { id: string; dayNumber: number; date: string | null; title: string; items: { item: { id: string; title: string; dayId: string; sortOrder: number; lockedAt: string | null; placeId: string | null }; place: Place | null }[] };
+type Day = { id: string; dayNumber: number; date: string | null; title: string; items: { item: { id: string; title: string; dayId: string; sortOrder: number; lockedAt: string | null; placeId: string | null; itemType?: string }; place: Place | null }[] };
 type Stop = { id: string; source: "itinerary" | "booking"; title: string; place: Place; sortOrder: number; memberStates?: Record<string, "present" | "absent" | "partial" | "unknown"> };
 type Segment = { id: string; from: Stop; to: Stop; crossCity: boolean };
 type MapEntry = { place: Place; kind: "itinerary" | "booking" | "recommendation" | "saved" | "candidate"; planStatus: "candidate" | "selected" | "locked"; category?: string | null; areaKey?: string | null; recommendationTitle?: string | null };
-type Workspace = { days: Day[]; cities: { id: string; name: string }[]; members?: { id: string; displayName: string }[]; currentMemberId?: string | null; bookings?: { id: string; title: string; type: string; placeId?: string | null }[]; mapPlaces?: MapEntry[]; savedPlaces?: { id: string; place: Place; note?: string | null }[]; routeStopsByDay?: Record<string, Stop[]>; routeSegmentsByDay?: Record<string, Segment[]>; routePreferences?: { dayId: string; fromId: string; toId: string; memberId: string | null; preferredMode: AMapRouteMode }[] };
+type Workspace = { days: Day[]; cities: { id: string; name: string }[]; members?: { id: string; displayName: string }[]; currentMemberId?: string | null; memberFilter?: string; bookings?: { id: string; title: string; type: string; placeId?: string | null }[]; mapPlaces?: MapEntry[]; savedPlaces?: { id: string; place: Place; note?: string | null }[]; routeStopsByDay?: Record<string, Stop[]>; routeSegmentsByDay?: Record<string, Segment[]>; routePreferences?: { dayId: string; fromId: string; toId: string; memberId: string | null; preferredMode: AMapRouteMode }[] };
 
 type AMapObject = { add(value: unknown): void; remove(value: unknown): void; setFitView(value?: unknown[]): void; setCenter?(value: [number, number]): void; getBounds?(): { getSouthWest?: () => { lng: number; lat: number }; getNorthEast?: () => { lng: number; lat: number } }; on?(event: string, handler: (event?: unknown) => void): void; off?(event: string, handler: (event?: unknown) => void): void; destroy(): void };
 type AMapMarker = { on?(event: string, handler: () => void): void };
@@ -40,8 +41,9 @@ const categoryLabels = [{ key: "all", label: "全部" }, { key: "attraction", la
 function minutes(seconds: number | null) { return seconds == null ? "时间待确认" : `${Math.max(1, Math.round(seconds / 60))} 分钟`; }
 function distance(meters: number | null) { return meters == null ? "距离待确认" : meters < 1000 ? `${Math.round(meters)} 米` : `${(meters / 1000).toFixed(1)} 公里`; }
 function routeFare(route: AMapRouteResult) {
-  if (route.transitCost != null) return `约 ¥${route.transitCost}/人`;
-  if (route.taxiCost != null) return `约 ¥${route.taxiCost}/车`;
+  const isTransit = route.mode === "transit" || route.mode === "subway" || route.mode === "bus" || route.mode === "mixed_transit";
+  if (isTransit && route.transitCost != null) return `约 ¥${route.transitCost}/人`;
+  if ((route.mode === "taxi" || route.mode === "driving") && route.taxiCost != null) return `约 ¥${route.taxiCost}/车`;
   if (route.mode === "walking" || route.mode === "bicycling") return "¥0";
   if (route.mode === "taxi" || route.mode === "driving") return "费用待确认";
   return "票价待确认";
@@ -49,6 +51,12 @@ function routeFare(route: AMapRouteResult) {
 function mainLine(route: AMapRouteResult) {
   const lines = [...new Set((route.steps || []).filter((step) => step.mode === "subway" || step.mode === "bus").map((step) => step.lineName?.trim()).filter((line): line is string => Boolean(line)))];
   return lines.length ? lines.join(" / ") : null;
+}
+function transitStepLabel(step: NonNullable<AMapRouteResult["steps"]>[number]) {
+  if (step.mode === "walking") return `步行${step.distanceMeters != null ? ` ${distance(step.distanceMeters)}` : ""}`;
+  if (step.mode === "subway") return `${step.lineName || "地铁线路待确认"}${step.direction ? ` · ${step.direction}` : ""}${step.stationCount ? ` · ${step.stationCount}站` : ""}`;
+  if (step.mode === "bus") return `${step.lineName || "公交线路待确认"}${step.direction ? ` · ${step.direction}` : ""}${step.stationCount ? ` · ${step.stationCount}站` : ""}`;
+  return step.transfer || step.instruction || "换乘";
 }
 function shortDate(date: string | null) { return date ? date.slice(5).replace("-", "/") : "日期未定"; }
 function placeArea(place: Place, cities: { id: string; name: string }[]) { const city = cities.find((item) => item.id === place.cityId)?.name || ""; return (place.name.includes("桐庐") || place.district?.includes("桐庐")) ? "tonglu" : city.includes("上海") ? "shanghai" : "hangzhou"; }
@@ -62,7 +70,7 @@ function segmentParticipantSummary(segment: Segment, members: { id: string }[] =
 export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "day" }: { slug: string; places?: { id: string; name: string; latitude: number | null; longitude: number | null; candidate: boolean; order: number | null }[]; workspace?: Workspace; activeDayId?: string; mapMode?: "day" | "library" }) {
   const container = useRef<HTMLDivElement>(null), mapRef = useRef<AMapObject | null>(null), overlays = useRef<unknown[]>([]), markerObjects = useRef<AMapMarker[]>([]), lastFitSignature = useRef(""), fitContextRef = useRef(""), userHasInteractedWithMap = useRef(false), searchAbortRef = useRef<AbortController | null>(null), searchRequestRef = useRef(0), routeAbortRef = useRef<AbortController | null>(null), routeRequestRef = useRef(0);
   const defaultRouteKey = useRef("");
-  const [ready, setReady] = useState(false), [error, setError] = useState(""), [search, setSearch] = useState(""), [searching, setSearching] = useState(false), [searchResults, setSearchResults] = useState<{ id: string; name: string; address: string | null; district: string | null; longitude: number; latitude: number }[]>([]), [selectedSearch, setSelectedSearch] = useState<string | null>(null), [selectedMapEntryId, setSelectedMapEntryId] = useState<string | null>(null), [bindingBookingId, setBindingBookingId] = useState(""), [area, setArea] = useState("all"), [category, setCategory] = useState("all"), [dayFilter, setDayFilter] = useState("all"), [memberFilter, setMemberFilter] = useState("all"), [targetDayId, setTargetDayId] = useState(activeDayId || ""), [routeResults, setRouteResults] = useState<Record<string, AMapRouteResult>>({}), [routeComparisons, setRouteComparisons] = useState<Record<string, Partial<Record<AMapRouteMode, AMapRouteResult>>>>({}), [routeStale, setRouteStale] = useState<Record<string, boolean>>({}), [routing, setRouting] = useState<string | null>(null), [viewport, setViewport] = useState<{ south: number; west: number; north: number; east: number } | null>(null), [manualPoint, setManualPoint] = useState<{ longitude: number; latitude: number } | null>(null), [manualName, setManualName] = useState(""), [manualAddress, setManualAddress] = useState(""), [manualBookingId, setManualBookingId] = useState("");
+  const [ready, setReady] = useState(false), [error, setError] = useState(""), [search, setSearch] = useState(""), [searching, setSearching] = useState(false), [searchResults, setSearchResults] = useState<{ id: string; name: string; address: string | null; district: string | null; longitude: number; latitude: number }[]>([]), [selectedSearch, setSelectedSearch] = useState<string | null>(null), [selectedMapEntryId, setSelectedMapEntryId] = useState<string | null>(null), [bindingBookingId, setBindingBookingId] = useState(""), [area, setArea] = useState("all"), [category, setCategory] = useState("all"), [dayFilter, setDayFilter] = useState("all"), [memberFilter, setMemberFilter] = useState(workspace?.memberFilter || workspace?.currentMemberId || "all"), [targetDayId, setTargetDayId] = useState(activeDayId || ""), [routeResults, setRouteResults] = useState<Record<string, AMapRouteResult>>({}), [routeComparisons, setRouteComparisons] = useState<Record<string, Partial<Record<AMapRouteMode, AMapRouteResult>>>>({}), [routeStale, setRouteStale] = useState<Record<string, boolean>>({}), [routing, setRouting] = useState<string | null>(null), [viewport, setViewport] = useState<{ south: number; west: number; north: number; east: number } | null>(null), [manualPoint, setManualPoint] = useState<{ longitude: number; latitude: number } | null>(null), [manualName, setManualName] = useState(""), [manualAddress, setManualAddress] = useState(""), [manualBookingId, setManualBookingId] = useState("");
   const activeDay = workspace?.days.find((day) => day.id === activeDayId) || workspace?.days[0];
   const allDayStops = activeDay && workspace?.routeStopsByDay?.[activeDay.id] ? workspace.routeStopsByDay[activeDay.id] : [];
   const dayStops = memberFilter === "all" ? allDayStops : allDayStops.filter((stop) => stop.memberStates?.[memberFilter] !== "absent");
@@ -96,6 +104,7 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
   const searchCity = workspace?.cities.find((item) => (area === "hangzhou" || area === "tonglu") && item.name.includes("杭州")) || workspace?.cities.find((item) => area === "shanghai" && item.name.includes("上海")) || workspace?.cities.find((item) => item.name.includes("上海")) || workspace?.cities[0];
   const searchRegion = area === "tonglu" ? "桐庐" : searchCity?.name || "";
   useEffect(() => { let cancelled = false; loadAMap().then((AMap) => { if (cancelled || !container.current) return; mapRef.current = new AMap.Map(container.current, { zoom: 11, center: [121.47, 31.23], viewMode: "2D" }); setReady(true); }).catch((caught) => { if (!cancelled) setError(caught instanceof Error ? caught.message : "地图加载失败。"); }); return () => { cancelled = true; mapRef.current?.destroy(); mapRef.current = null; }; }, []);
+  useEffect(() => { setMemberFilter(workspace?.memberFilter || workspace?.currentMemberId || "all"); }, [workspace?.memberFilter, workspace?.currentMemberId]);
   useEffect(() => { if (!ready || !mapRef.current?.on) return; const map = mapRef.current; const updateViewport = () => { const bounds = map.getBounds?.(), sw = bounds?.getSouthWest?.(), ne = bounds?.getNorthEast?.(); if (sw && ne) setViewport({ south: sw.lat, west: sw.lng, north: ne.lat, east: ne.lng }); }; const markInteraction = () => { userHasInteractedWithMap.current = true; }; map.on("moveend", updateViewport); map.on("zoomend", updateViewport); map.on("dragstart", markInteraction); map.on("zoomstart", markInteraction); map.on("movestart", markInteraction); updateViewport(); return () => { map.off?.("moveend", updateViewport); map.off?.("zoomend", updateViewport); map.off?.("dragstart", markInteraction); map.off?.("zoomstart", markInteraction); map.off?.("movestart", markInteraction); }; }, [ready]);
   useEffect(() => { if (!ready || !mapRef.current?.on) return; mapRef.current.on("click", (event) => { const lnglat = (event as { lnglat?: { lng?: number; lat?: number; getLng?: () => number; getLat?: () => number } } | undefined)?.lnglat; const longitude = lnglat?.lng ?? lnglat?.getLng?.(), latitude = lnglat?.lat ?? lnglat?.getLat?.(); if (longitude != null && latitude != null && Number.isFinite(longitude) && Number.isFinite(latitude)) setManualPoint({ longitude, latitude }); }); }, [ready]);
   useEffect(() => {
@@ -107,7 +116,7 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
       const markerNumber = mapMode === "day" ? itineraryNumbers.get(entry.place.id) : null;
       const baseOpacity = entry.kind === "candidate" ? .28 : entry.kind === "saved" ? .58 : entry.kind === "recommendation" ? .78 : 1;
       const mutedByDay = mapMode === "library" && dayFilter !== "all" && !dayHighlightIds.has(entry.place.id) ? .38 : 1;
-      const marker = new AMap.Marker({ position: [entry.place.longitude!, entry.place.latitude!], title: entry.place.name, opacity: baseOpacity * mutedByDay, label: { content: markerNumber ? `${markerNumber}. ${entry.place.name}` : entry.kind === "booking" ? `⚑ ${entry.place.name}` : entry.place.name, direction: "top" } });
+      const marker = new AMap.Marker({ position: [entry.place.longitude!, entry.place.latitude!], title: entry.place.name, opacity: baseOpacity * mutedByDay, label: { content: markerNumber ? `${markerNumber}. ${entry.place.name}` : entry.kind === "booking" ? `订单 · ${entry.place.name}` : entry.place.name, direction: "top" } });
       marker.on?.("click", () => { setSelectedMapEntryId(entry.place.id); setSelectedSearch(null); });
       return marker;
     });
@@ -119,7 +128,7 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
       return (route.polylines || []).map((path) => new AMap.Polyline({ path, strokeColor, strokeWeight: 5, strokeOpacity: .88, showDir: true }));
     });
     const resultMarkers = searchResults.map((poi) => {
-      const marker = new AMap.Marker({ position: [poi.longitude, poi.latitude], title: poi.name, opacity: selectedSearch === poi.id ? 1 : .72, label: { content: `⌖ ${poi.name}`, direction: "top" } });
+      const marker = new AMap.Marker({ position: [poi.longitude, poi.latitude], title: poi.name, opacity: selectedSearch === poi.id ? 1 : .72, label: { content: `搜索 · ${poi.name}`, direction: "top" } });
       marker.on?.("click", () => { setSelectedSearch(poi.id); setSelectedMapEntryId(null); });
       return marker;
     });
@@ -309,21 +318,13 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
                   </div>
                   {route ? (
                     <div className="route-detail">
-                      <span>{modeLabels[route.mode]}</span>
+                      <span className="route-mode-label"><TransportIcon kind={iconForRouteMode(route.mode)} size={14} />{modeLabels[route.mode]}</span>
                       {routeStale[segment.id] ? <b className="route-stale-label">上次查询结果</b> : null}
                       <span>{distance(route.distanceMeters)}</span>
                       <span>{minutes(route.durationSeconds)}</span>
-                      {route.transitCost != null ? (
-                        <span>票价约 ¥{route.transitCost}/人</span>
-                      ) : route.mode === "walking" || route.mode === "bicycling" ? (
-                        <span>票价 ¥0</span>
-                      ) : route.mode === "taxi" ? (
-                        <span>车费待确认</span>
-                      ) : (
-                        <span>票价待确认</span>
-                      )}
-                      {route.taxiCost != null ? <span>约 ¥{route.taxiCost}/车</span> : null}
-                      {mainLine(route) ? <span>主要线路 {mainLine(route)}</span> : null}
+                      <span>{routeFare(route)}</span>
+                      {mainLine(route) ? <span>线路 {mainLine(route)}</span> : null}
+                      {route.steps?.length ? <details className="route-step-details"><summary>查看步骤</summary><ol className="route-steps">{route.steps.map((step, stepIndex) => <li key={`${step.mode}-${stepIndex}`}><b>{step.mode === "subway" ? "地铁" : step.mode === "bus" ? "公交" : step.mode === "walking" ? "步行" : "换乘"}</b><span>{transitStepLabel(step)}</span>{step.fromStation || step.toStation ? <small>{[step.fromStation, step.toStation].filter(Boolean).join(" → ")}</small> : null}</li>)}</ol></details> : null}
                       {routeStale[segment.id] ? (
                         <button
                           type="button"

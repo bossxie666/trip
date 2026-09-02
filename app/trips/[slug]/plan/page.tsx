@@ -19,7 +19,16 @@ export default async function TripPlanPage({ params, searchParams }: { params: P
   const categoryFilter = categories.has(query.category || "") ? query.category as "all" | "attraction" | "food" | "cafe" | "shopping" | "guide" | "other" : "all";
   const librarySort = librarySorts.has(query.sort || "") ? query.sort as "core" | "recent" : "core";
   const parsedPage = Number.parseInt(query.page || "1", 10), libraryPage = Number.isSafeInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
-  const memberFilter = query.member && (workspace.trip.members || []).some((member) => member.id === query.member) ? query.member : "all";
+  // A signed-in member gets their own view by default.  The explicit `all`
+  // query value is retained so the “全体” chip remains a real, selectable
+  // state instead of being mistaken for an omitted parameter.
+  const memberFilter = query.member === "all"
+    ? "all"
+    : query.member && (workspace.trip.members || []).some((member) => member.id === query.member)
+      ? query.member
+      : actor?.id && (workspace.trip.members || []).some((member) => member.id === actor.id)
+        ? actor.id
+        : "all";
   const costMode = query.cost === "actual" ? "actual" : "expected";
   return <TripPlanWorkspace workspace={workspace} activeDayId={activeDayId} view={view} mapMode={mapMode} query={(query.q || "").trim()} areaFilter={areaFilter} categoryFilter={categoryFilter} libraryMode={query.library === "all"} librarySort={librarySort} libraryPage={libraryPage} memberFilter={memberFilter} costMode={costMode}/>;
 }
