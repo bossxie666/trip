@@ -304,6 +304,42 @@ export async function deleteTrip(slug: string) {
   const db = getDb();
   const row = (await db.select().from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1))[0];
   if (!row) return false;
-  await db.delete(tripRecords).where(eq(tripRecords.id, row.id));
+  // D1/SQLite evaluates RESTRICT foreign keys while cascading a parent
+  // delete.  A legacy Trip can have itinerary items that still reference a
+  // Trip stage, so deleting `trips` directly may try to remove the stage
+  // before those items and fail with a generic constraint error.  Remove
+  // only Trip-owned rows in dependency order inside one D1 batch; shared
+  // Members, Cities, Places, and cross-Trip source rows are never touched.
+  const d1 = getRuntimeEnv().DB;
+  if (!d1) throw new Error("D1 binding unavailable");
+  const tripId = row.id;
+  await d1.batch([
+    d1.prepare("DELETE FROM itinerary_item_participant_overrides WHERE itinerary_item_id IN (SELECT id FROM itinerary_items WHERE trip_id = ?)").bind(tripId),
+    d1.prepare("DELETE FROM day_timeline_positions WHERE trip_id = ?").bind(tripId),
+    d1.prepare("DELETE FROM route_preferences WHERE trip_id = ?").bind(tripId),
+    d1.prepare("DELETE FROM day_places WHERE day_id IN (SELECT id FROM days WHERE trip_id = ?)").bind(tripId),
+    d1.prepare("DELETE FROM day_member_presence WHERE trip_id = ?").bind(tripId),
+    d1.prepare("DELETE FROM framework_constraints WHERE trip_id = ?").bind(tripId),
+    d1.prepare("DELETE FROM itinerary_items WHERE trip_id = ?").bind(tripId),
+    d1.prepare("DELETE FROM member_presence_windows WHERE trip_id = ?").bind(tripId),
+    d1.prepare("DELETE FROM booking_cost_allocations WHERE cost_line_id IN (SELECT id FROM booking_cost_lines WHERE booking_id IN (SELECT id FROM bookings WHERE trip_id = ?))").bind(tripId),
+    d1.prepare("DELETE FROM booking_cost_lines WHERE booking_id IN (SELECT id FROM bookings WHERE trip_id = ?)").bind(tripId),
+    d1.prepare("DELETE FROM booking_participants WHERE booking_id IN (SELECT id FROM bookings WHERE trip_id = ?)").bind(tripId),
+    d1.prepare("DELETE FROM bookings WHERE trip_id = ?").bind(tripId),
+    d1.prepare("DELETE FROM expense_allocations WHERE expense_id IN (SELECT id FROM expenses WHERE trip_id = ?)").bind(tripId),
+    d1.prepare("DELETE FROM expenses WHERE trip_id = ?").bind(tripId),
+    d1.prepare("DELETE FROM recommendation_member_states WHERE recommendation_id IN (SELECT id FROM recommendations WHERE trip_id = ?)").bind(tripId),
+    d1.prepare("DELETE FROM recommendation_place_options WHERE recommendation_id IN (SELECT id FROM recommendations WHERE trip_id = ?)").bind(tripId),
+    d1.prepare("DELETE FROM recommendations WHERE trip_id = ?").bind(tripId),
+    d1.prepare("DELETE FROM trip_saved_places WHERE trip_id = ?").bind(tripId),
+    d1.prepare("DELETE FROM member_budget_plans WHERE trip_id = ?").bind(tripId),
+    d1.prepare("DELETE FROM trip_stage_members WHERE stage_id IN (SELECT id FROM trip_stages WHERE trip_id = ?)").bind(tripId),
+    d1.prepare("DELETE FROM trip_stages WHERE trip_id = ?").bind(tripId),
+    d1.prepare("DELETE FROM trip_cities WHERE trip_id = ?").bind(tripId),
+    d1.prepare("DELETE FROM trip_places WHERE trip_id = ?").bind(tripId),
+    d1.prepare("DELETE FROM trip_members WHERE trip_id = ?").bind(tripId),
+    d1.prepare("DELETE FROM days WHERE trip_id = ?").bind(tripId),
+    d1.prepare("DELETE FROM trips WHERE id = ?").bind(tripId),
+  ]);
   return true;
 }

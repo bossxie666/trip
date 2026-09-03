@@ -582,13 +582,21 @@ test("requires a member session and supports collaborative edit and delete", asy
 });
 
 test("deletes ordinary Trips without removing shared Places, Recommendations, or Members", async () => {
-  const tripA = await createTrip({ title: "删除隔离 A", status: "planning", cities: ["上海"], undated: true, people: 1 });
+  const tripA = await createTrip({ title: "删除隔离 A", status: "planning", cities: ["上海"], startDate: "2029-01-01", endDate: "2029-01-01", people: 1 });
   const tripB = await createTrip({ title: "删除隔离 B", status: "planning", cities: ["上海"], undated: true, people: 1 });
   const sharedPlaceId = "place-pvg-t2", unrelatedRecommendationId = "recommendation-west-lake";
   const placeBefore = DB.database.prepare("SELECT id FROM places WHERE id = ?").get(sharedPlaceId);
   const recommendationBefore = DB.database.prepare("SELECT id, title FROM recommendations WHERE id = ?").get(unrelatedRecommendationId);
   const membersBefore = DB.database.prepare("SELECT id FROM members ORDER BY id").all().map((row) => row.id);
   assert.ok(placeBefore); assert.ok(recommendationBefore);
+  // Reproduce the production failure mode: a legacy item still points at a
+  // Trip stage, whose FK is RESTRICT. The delete service must clear this
+  // Trip-owned relationship before removing the parent row.
+  const dayA = DB.database.prepare("SELECT id FROM days WHERE trip_id = ? LIMIT 1").get(tripA.id).id;
+  const cityA = DB.database.prepare("SELECT city_id FROM trip_cities WHERE trip_id = ? LIMIT 1").get(tripA.id).city_id;
+  const stageA = "delete-isolation-stage-a";
+  DB.database.prepare("INSERT INTO trip_stages (id, trip_id, city_id, title, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)").run(stageA, tripA.id, cityA, "删除测试阶段", new Date().toISOString(), new Date().toISOString());
+  DB.database.prepare("INSERT INTO itinerary_items (id, trip_id, day_id, stage_id, item_type, title, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, 'note', ?, 1, ?, ?)").run("delete-isolation-item-a", tripA.id, dayA, stageA, "阶段关联事项", new Date().toISOString(), new Date().toISOString());
   // Exercise the real FK relationship: deleting a Trip removes its link but
   // must never remove the globally reusable Place row.
   DB.database.prepare("INSERT INTO trip_places (trip_id, place_id, plan_status, created_at) VALUES (?, ?, 'selected', ?)").run(tripA.id, sharedPlaceId, new Date().toISOString());
