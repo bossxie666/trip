@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { GenericPlacePicker, type GenericPlaceChoice } from "./GenericPlacePicker";
 import { requestTripModalOpen, useExclusiveTripModal } from "./modal-events";
+import { WorkspaceOverlay } from "./WorkspaceOverlay";
 
 type MemberOption = { id: string; displayName: string };
 
@@ -60,9 +61,9 @@ export function BookingCreateControl({ slug, members, existingPlaces = [] }: { s
   }
 
   return <>
-    <button type="button" className="booking-add-button" onClick={() => { requestTripModalOpen(modalOwner); setOpen(true); }}>＋ 添加住宿</button>
-    {open && <div className="plan-add-modal" role="dialog" aria-modal="true" aria-label="添加住宿"><div className="plan-add-sheet">
-      <header><div><span>ACCOMMODATION</span><h3>编辑住宿</h3></div><button type="button" aria-label="关闭" onClick={() => setOpen(false)}>×</button></header>
+    <button type="button" className="booking-add-button button-primary" onClick={() => { requestTripModalOpen(modalOwner); setOpen(true); }}>＋ 添加住宿</button>
+    <WorkspaceOverlay open={open} onClose={() => setOpen(false)} mode="drawer" ariaLabel="添加住宿" className="plan-add-sheet">
+      <header><div><span>ACCOMMODATION</span><h3>添加住宿</h3><p>先记录计划，预订状态之后也可以修改。</p></div><button type="button" className="workspace-close" aria-label="关闭" onClick={() => setOpen(false)}>×</button></header>
       <label>住哪里？<GenericPlacePicker slug={slug} existing={existingPlaces} value={place} onChange={setPlace} autoFocus /></label>
       <div className="plan-add-two-columns"><label>入住日期<input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label>退房日期<input type="date" min={startDate} value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label></div>
       <label>入住时间（可选）<input type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} /></label>
@@ -72,7 +73,7 @@ export function BookingCreateControl({ slug, members, existingPlaces = [] }: { s
       <fieldset className="plan-add-participants"><legend>入住成员</legend><div className="participant-checkboxes">{members.map((member) => <label key={member.id}><input type="checkbox" checked={memberIds.includes(member.id)} onChange={() => setMemberIds((current) => current.includes(member.id) ? current.filter((id) => id !== member.id) : [...current, member.id])}/><span>{member.displayName}</span></label>)}</div></fieldset>
       <label>备注（可选）<textarea value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
       {error && <p className="form-error" role="alert">{error}</p>}
-      <button type="button" className="plan-add-submit" disabled={saving} onClick={save}>{saving ? "保存中…" : "保存住宿"}</button>
-    </div></div>}
+      <footer className="workspace-footer"><button type="button" className="button-secondary" disabled={saving} onClick={() => setOpen(false)}>取消</button><button type="button" className="plan-add-submit button-primary" disabled={saving} onClick={save}>{saving ? "保存中…" : "保存住宿"}</button></footer>
+    </WorkspaceOverlay>
   </>;
 }

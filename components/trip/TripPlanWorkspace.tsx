@@ -137,17 +137,31 @@ export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query
   const presenceControl = activeDay ? <DayPresenceControl slug={trip.slug} dayId={activeDay.id} dayLabel={`${shortDate(activeDay.date)} · ${dayArea(activeDay, bookings, trip.cities)}`} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} initialStates={workspace.dayPresenceByDay?.[activeDay.id] || {}} initialDetails={workspace.dayPresenceDetailsByDay?.[activeDay.id] || {}} /> : null;
   const timelineNodes = (activeDay ? (workspace.timelineNodesByDay?.[activeDay.id] || []) : []) as TimelineNode[];
   const timelineEdges = (activeDay ? (workspace.timelineEdgesByDay?.[activeDay.id] || []) : []) as TimelineEdge[];
-  const visibleTimeline = filterTimelineForMember(timelineNodes, memberFilter);
+  // Booking anchors (notably hotel check-in/stay/check-out) are order facts for
+  // the old timeline service, not user-authored Day Plan nodes.  Only an
+  // explicit ItineraryItem or a long-distance endpoint belongs on this
+  // Planning axis.  Keeping this filter at the renderer boundary also means a
+  // stale placement row can never resurrect a hotel node in the UI.
+  const visibleTimeline = filterTimelineForMember(timelineNodes, memberFilter).filter((node) => node.nodeKind !== "anchor");
   const itemIds = activeDay?.items.map(({ item }) => item.id) || [];
   const nodeNumbers = numberTimelineNodes(visibleTimeline);
 
-  const renderTimelineEdge = (edge: TimelineEdge) => {
-    const bookingRecord = edge.bookingId ? bookings.find(({ booking }) => booking.id === edge.bookingId) : null;
-    if (edge.kind === "long-distance" && bookingRecord) {
+  const renderTimelineEdge = (edge: TimelineEdge | null, from?: TimelineNode, to?: TimelineNode) => {
+    const bookingRecord = edge?.bookingId ? bookings.find(({ booking }) => booking.id === edge.bookingId) : null;
+    if (edge?.kind === "long-distance" && bookingRecord) {
+      const booking = bookingRecord.booking;
       const members = Object.entries(bookingRecord.memberStates || {}).filter(([, state]) => state === "present").map(([id]) => trip.members?.find((member) => member.id === id)?.displayName).filter((name): name is string => Boolean(name));
-      return <div className="timeline-edge timeline-edge-booking" key={edge.id}><TransportIcon kind={iconForBookingType(bookingRecord.booking.type, bookingRecord.booking.title)} size={15} /><div><b>{bookingRecord.booking.title}</b><span>{bookingStatus(bookingRecord.booking.status, bookingRecord.booking.type)} · {bookingTime(bookingRecord.booking)}{bookingRecord.booking.totalAmountMinor != null ? ` · ${money(bookingRecord.booking.totalAmountMinor)}` : ""}{members.length ? ` · ${members.join("、")}` : ""}</span></div></div>;
+      const reference = booking.bookingReference?.replace(/^(航班号|车次|交通编号)[:：]?\s*/, "") || "";
+      const providerLabel = [booking.provider, reference].filter(Boolean).join(" ");
+      const modeLabel = booking.type === "flight" ? "飞机" : booking.type === "train" ? (/高铁|动车|G\d/i.test(`${booking.title} ${reference}`) ? "高铁" : "火车") : "长途交通";
+      const routeLabel = from && to ? `${from.title} → ${to.title}` : "起点 → 终点";
+      return <div className="timeline-edge timeline-edge-booking" data-timeline-edge-kind="long-distance" data-timeline-edge-id={edge.id} key={edge.id}>
+        <div className="timeline-edge-rail" aria-hidden="true"><span><TransportIcon kind={iconForBookingType(booking.type, booking.title)} size={15} /></span></div>
+        <div className="timeline-edge-content"><div className="timeline-edge-heading"><b>{modeLabel}</b><span>{providerLabel || booking.title}</span></div><span className="timeline-edge-route">{routeLabel}</span><small>{bookingTime(booking)}{booking.totalAmountMinor != null ? ` · ${money(booking.totalAmountMinor)}` : ""}{members.length ? ` · ${members.join("、")}` : ""}</small></div>
+      </div>;
     }
-    return <div className="timeline-edge timeline-edge-local" key={edge.id}><span>交通方式待选择</span><small>相邻地点之间的本地路线由地图视图计算</small></div>;
+    const edgeId = edge?.id || `${from?.id || "unknown"}-${to?.id || "unknown"}:pending`;
+    return <div className="timeline-edge timeline-edge-local" data-timeline-edge-kind="local" data-timeline-edge-state={edge ? "ready" : "pending"} data-timeline-edge-id={edgeId} key={edgeId}><span>＋选择交通方式</span><small>相邻地点之间的本地路线由地图视图计算</small></div>;
   };
 
   const renderTimelineNode = (node: TimelineNode) => {
@@ -156,33 +170,33 @@ export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query
     const entryBooking = entryBookingRecord?.booking || null;
     const detail = node.itemId ? activeDay?.items.find(({ item }) => item.id === node.itemId) : null;
     const displayTime = detail?.item.timeMode === "opening_hours" ? "开园 → 闭园" : node.timeLocal || (node.anchorKind === "start" ? "入住" : node.anchorKind === "stay" ? "住宿中" : node.anchorKind === "end" ? "退房" : "时间待定");
-    const memberNames = Object.entries(node.memberStates || {}).filter(([, state]) => state === "present").map(([id]) => trip.members?.find((member) => member.id === id)?.displayName).filter((name): name is string => Boolean(name));
     const number = nodeNumbers.get(node.id);
-    const isTransportBooking = Boolean(entryBooking && ["flight", "train", "other"].includes(entryBooking.type));
-    const bookingPlace = entryBookingRecord?.place;
+    const isTransportBooking = Boolean(entryBooking && node.nodeKind === "endpoint" && ["flight", "train", "other"].includes(entryBooking.type));
     const originPlace = entryBookingRecord?.originPlace;
     const destinationPlace = entryBookingRecord?.destinationPlace;
-    return <article key={`${node.source}-${node.id}`} className={node.nodeKind === "anchor" ? "booking-entry timeline-anchor" : node.source === "booking" ? "booking-entry" : "item-entry"}>
+    return <article key={`${node.source}-${node.id}`} className={`timeline-node timeline-node-${node.nodeKind} ${node.source === "booking" ? "booking-entry" : "item-entry"}`} data-timeline-node-id={node.id} data-timeline-node-kind={node.nodeKind} data-timeline-node-source={node.source}>
       <div className="timeline-index">{number ? String(number).padStart(2, "0") : <TransportIcon kind={node.nodeKind === "anchor" ? "hotel" : iconForBookingType(entryBooking?.type || "", entryBooking?.title || "")} />}</div>
-      <div>
-        <div className="timeline-meta"><span>{displayTime}</span><span>{node.nodeKind === "anchor" ? "住宿订单" : node.source === "booking" ? bookingStatus(entryBooking?.status || "tentative", entryBooking?.type || "") : detail?.item.lockedAt ? "已锁定" : "可调整"}</span></div>
-        {isTransportBooking && node.endpoint === "origin" && entryBookingId && <div className="transport-endpoint transport-origin"><span>{originPlace?.name || entryBooking?.originLabel || "起点待确认"}</span><BookingPlaceControl slug={trip.slug} bookingId={entryBookingId} slot="origin" cities={trip.cities.map((city) => ({ id: city.id, name: city.name }))} currentPlace={originPlace || null} currentLabel={entryBooking?.originLabel} label={originPlace ? "修改起点" : "完善起点"} /></div>}
-        {isTransportBooking && node.endpoint === "destination" && entryBookingId && <div className="transport-endpoint transport-destination"><span>{destinationPlace?.name || entryBooking?.destinationLabel || "终点待确认"}</span><BookingPlaceControl slug={trip.slug} bookingId={entryBookingId} slot="destination" cities={trip.cities.map((city) => ({ id: city.id, name: city.name }))} currentPlace={destinationPlace || null} currentLabel={entryBooking?.destinationLabel} label={destinationPlace ? "修改终点" : "完善终点"} /></div>}
+      <div className="timeline-node-content">
+        <div className="timeline-meta"><span>{displayTime}</span><span>{node.nodeKind === "anchor" ? "住宿订单" : node.endpoint === "origin" ? "出发点" : node.endpoint === "destination" ? "到达点" : node.source === "booking" ? bookingStatus(entryBooking?.status || "tentative", entryBooking?.type || "") : detail?.item.lockedAt ? "已锁定" : "可调整"}</span></div>
         <h3 className="timeline-title"><TransportIcon kind={detail ? iconForItemType(detail.item.itemType, detail.item.title, detail.item.note || "") : node.nodeKind === "anchor" ? "hotel" : iconForBookingType(entryBooking?.type || "calendar", entryBooking?.title || "")} size={15} />{node.title}</h3>
+        {isTransportBooking && node.endpoint === "origin" && entryBookingId && <div className="timeline-node-action"><BookingPlaceControl slug={trip.slug} bookingId={entryBookingId} slot="origin" cities={trip.cities.map((city) => ({ id: city.id, name: city.name }))} currentPlace={originPlace || null} currentLabel={entryBooking?.originLabel} label={originPlace ? "修改起点" : "完善起点"} /><BookingEditControl slug={trip.slug} booking={entryBookingRecord!} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} existingPlaces={existingPlaceChoices} /></div>}
+        {isTransportBooking && node.endpoint === "destination" && entryBookingId && <div className="timeline-node-action"><BookingPlaceControl slug={trip.slug} bookingId={entryBookingId} slot="destination" cities={trip.cities.map((city) => ({ id: city.id, name: city.name }))} currentPlace={destinationPlace || null} currentLabel={entryBooking?.destinationLabel} label={destinationPlace ? "修改终点" : "完善终点"} /></div>}
         {detail && <>
           <p>{detail.item.placeId ? `地点：${detail.place?.name || "已绑定"}` : "地点待确认"}{detail.recommendationTitle ? ` · 来源：${detail.recommendationTitle}` : ""}{detail.item.timeMode === "opening_hours" ? ` · ${detail.item.openingHoursNote || "营业时间待确认"}` : ""}</p>
           {detail.item.placeId ? null : <ItineraryItemPlaceControl slug={trip.slug} itemId={detail.item.id} cities={trip.cities.map((city) => ({ id: city.id, name: city.name }))} currentPlace={null} />}
           <ItineraryOrderControls slug={trip.slug} dayId={activeDay!.id} itemId={detail.item.id} itemIds={itemIds} locked={Boolean(detail.item.lockedAt)} />
           <ItineraryItemControl slug={trip.slug} item={detail.item} days={dayLabels} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} participantStates={detail.participantStates} participantOverrides={detail.participantOverrides} dayPresenceState={workspace.dayPresenceByDay?.[activeDay!.id] || {}} allowOpeningHours={detail.item.itemType !== "lodging" && !/酒店|住宿|入住/.test(detail.item.title)} />
         </>}
-        {entryBooking && node.nodeKind === "anchor" && <p>{entryBooking.status === "confirmed" ? "已确认订单" : bookingStatus(entryBooking.status, entryBooking.type)}，成员与费用分别记录。{entryBooking.totalAmountMinor != null ? ` · ${money(entryBooking.totalAmountMinor)}` : ""}{memberNames.length ? ` · ${memberNames.join("、")}` : ""}</p>}
-        {entryBooking && node.nodeKind === "endpoint" && node.endpoint === "origin" && <><p>{entryBooking.title} · {entryBooking.status === "confirmed" ? "已确认订单" : bookingStatus(entryBooking.status, entryBooking.type)}{entryBooking.totalAmountMinor != null ? ` · ${money(entryBooking.totalAmountMinor)}` : ""}{memberNames.length ? ` · ${memberNames.join("、")}` : ""}</p><BookingEditControl slug={trip.slug} booking={entryBookingRecord!} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} existingPlaces={existingPlaceChoices} /></>}
-        {entryBooking?.type === "hotel" && node.nodeKind === "anchor" && <div className="transport-endpoint booking-place"><span>{bookingPlace?.name || "酒店地点待确认"}</span><BookingEditControl slug={trip.slug} booking={entryBookingRecord!} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} existingPlaces={existingPlaceChoices} /></div>}
+        {entryBooking && node.nodeKind === "anchor" && <p>{entryBooking.status === "confirmed" ? "已确认订单" : bookingStatus(entryBooking.status, entryBooking.type)}，成员与费用分别记录。{entryBooking.totalAmountMinor != null ? ` · ${money(entryBooking.totalAmountMinor)}` : ""}</p>}
       </div>
     </article>;
   };
 
-  const timelineView = visibleTimeline.map((node, index) => <div className="timeline-sequence" key={node.id}>{index > 0 && (() => { const previous = visibleTimeline[index - 1]; const edge = timelineEdges.find((candidate) => candidate.from.id === previous.id && candidate.to.id === node.id); return edge ? renderTimelineEdge(edge) : null; })()}{renderTimelineNode(node)}</div>);
+  const timelineView = visibleTimeline.map((node, index) => {
+    const next = visibleTimeline[index + 1];
+    const edge = next ? timelineEdges.find((candidate) => candidate.from.id === node.id && candidate.to.id === next.id) || null : null;
+    return <div className="timeline-sequence" key={node.id}>{renderTimelineNode(node)}{next ? renderTimelineEdge(edge, node, next) : null}</div>;
+  });
 
   const itinerary = (
     <>

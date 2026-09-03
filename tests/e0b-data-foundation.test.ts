@@ -231,18 +231,19 @@ test("E0B data foundation", async (t) => {
     assert.equal((DB.database.prepare("SELECT count(*) count FROM trip_places WHERE trip_id = 'trip-e0b-a'").get() as { count: number }).count, 0);
   });
 
-  await t.test("builds deterministic Booking + Item timeline including hotel anchors", async () => {
+  await t.test("builds deterministic Booking + Item timeline without accommodation anchors", async () => {
     await bookingRepo.createBooking({ tripId: "trip-e0b-a", type: "train", status: "confirmed", title: "08点列车", temporalKind: "interval", startAt: "2027-01-01T00:00:00.000Z", endAt: "2027-01-01T01:00:00.000Z", timezone: "Asia/Shanghai", participantMemberIds: ["member-nini"] }, "member-nini");
     await itineraryRepo.createItineraryItem({ tripId: "trip-e0b-a", dayId: "e0b-a-day-1", itemType: "activity", title: "08点活动", startTimeLocal: "08:00" }, "member-nini");
     const day1 = await timelineService.getDayTimeline("trip-e0b-a", "e0b-a-day-1");
-    assert.equal(day1[0].anchorKind, "start");
+    assert.equal(day1[0].source, "booking");
+    assert.equal(day1[0].anchorKind, "timed");
     const timed = day1.filter((entry) => entry.bucket === "timed");
     assert.equal(timed[0].source, "booking");
     assert.equal(timed[1].source, "itinerary");
     const day2 = await timelineService.getDayTimeline("trip-e0b-a", "e0b-a-day-2");
-    assert.equal(day2[0].anchorKind, "stay");
+    assert.equal(day2.some((entry) => entry.source === "booking" && entry.anchorKind), false);
     const day3 = await timelineService.getDayTimeline("trip-e0b-a", "e0b-a-day-3");
-    assert.equal(day3.at(-1)?.anchorKind, "end");
+    assert.equal(day3.some((entry) => entry.source === "booking" && entry.anchorKind), false);
   });
 
   await t.test("persists mixed Booking Anchor placement without changing Booking facts", async () => {
@@ -335,7 +336,7 @@ test("E0B data foundation", async (t) => {
       ],
       bookings: [{ id: "hotel-booking", title: "住宿", type: "hotel", startDateLocal: "2027-01-01", endDateLocal: "2027-01-02", originPlace: null, destinationPlace: null }],
     });
-    assert.equal(hotelDoesNotRoute.nodes.find((node) => node.bookingId === "hotel-booking")?.place, null);
+    assert.equal(hotelDoesNotRoute.nodes.some((node) => node.bookingId === "hotel-booking"), false);
     assert.deepEqual(hotelDoesNotRoute.localEdges.map((edge) => [edge.from.id, edge.to.id]), [["hotel-route-a", "hotel-route-b"]]);
   });
 

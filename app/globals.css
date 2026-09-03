@@ -87,12 +87,164 @@
 .booking-add-button:hover{background:#34342f}
 .booking-add-button:disabled{background:#e2dacb;color:#59544c;border-color:#a9a092;opacity:1}
 .booking-edit-control{margin-top:7px}
-.booking-edit-control>summary{cursor:pointer;color:var(--clay);font-size:10px;font-weight:800}
-.booking-edit-sheet{display:grid;gap:8px;margin-top:8px;padding:11px;background:var(--paper);border:1px solid var(--line)}
+.booking-edit-trigger{padding:0;border:0;background:transparent;color:var(--clay);cursor:pointer;font:800 10px inherit;text-align:left}
+.booking-edit-trigger:hover{text-decoration:underline;text-underline-offset:3px}
+.booking-edit-overlay{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:24px;background:rgba(26,26,23,.42)}
+.booking-edit-dialog{width:min(640px,100%);max-height:min(90vh,780px);overflow:auto;background:var(--paper2);border:1px solid var(--line);box-shadow:0 20px 70px rgba(26,26,23,.24)}
+.booking-edit-dialog>header{display:flex;align-items:start;justify-content:space-between;gap:18px;padding:18px 20px;border-bottom:1px solid var(--line);background:var(--paper2)}
+.booking-edit-dialog>header span{display:block;font:800 9px var(--font-geist-mono);letter-spacing:.14em;color:var(--clay)}
+.booking-edit-dialog>header h2{margin:5px 0 0;font-family:"Songti SC","STSong",serif;font-size:24px}
+.booking-edit-dialog>header p{margin:5px 0 0;color:var(--muted);font-size:11px}
+.booking-edit-close{width:34px;height:34px;border:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer;font-size:22px;line-height:1}
+.booking-edit-close:hover{background:var(--ink);color:#fff}
+.booking-edit-sheet{display:grid;gap:10px;margin:0;padding:20px;background:var(--paper2);border:0}
 .booking-edit-sheet label{display:grid;gap:5px;font-size:10px;font-weight:800}
 .booking-edit-sheet input,.booking-edit-sheet select,.booking-edit-sheet textarea{width:100%;padding:8px;border:1px solid var(--line);background:var(--paper2);font:inherit}
 .booking-edit-sheet textarea{min-height:58px;resize:vertical}
 .booking-edit-sheet .plan-add-submit{margin-top:0}
+.booking-edit-cancel{min-height:38px;padding:8px 12px;border:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer;font-size:10px;font-weight:800}
 .booking-danger{min-height:38px;padding:8px 12px;border:1px solid #a45d4d;background:transparent;color:#8d2f27;cursor:pointer;font-size:10px;font-weight:800}
 .booking-danger:disabled{color:#716a62;border-color:#b9b0a4}
 .booking-place-clear{padding:7px 9px;border:1px solid #a45d4d;background:transparent;color:#8d2f27;cursor:pointer;font-size:10px}
+
+/* V2.4-R1 timeline composition: one continuous rail with lightweight nodes
+   and edges.  Booking facts render in the edge between endpoint nodes; they
+   are not numbered cards of their own. */
+.plan-timeline{position:relative}
+.plan-timeline:before{content:"";position:absolute;left:22px;top:16px;bottom:16px;border-left:1px solid var(--line);pointer-events:none}
+.timeline-sequence{position:relative}
+.plan-timeline article.timeline-node{position:relative;z-index:1;padding:16px 6px;border-bottom:0;background:transparent}
+.timeline-node-content{min-width:0}
+.timeline-node-action{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px}
+.timeline-edge{position:relative;z-index:1;display:grid;grid-template-columns:38px 1fr;gap:12px;padding:4px 6px 13px}
+.timeline-edge-rail{display:flex;justify-content:center;align-items:flex-start;padding-top:8px}
+.timeline-edge-rail>span{display:grid;place-items:center;width:28px;height:28px;border:1px solid var(--clay);border-radius:50%;background:var(--paper2);color:var(--clay)}
+.timeline-edge-content{display:grid;gap:4px;min-width:0;padding:9px 12px;border-left:3px solid var(--clay);background:rgba(234,223,201,.62)}
+.timeline-edge-heading{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:11px}
+.timeline-edge-heading b{color:var(--clay);font-size:12px}
+.timeline-edge-heading span{color:var(--muted)}
+.timeline-edge-route{font-size:11px;font-weight:800;overflow-wrap:anywhere}
+.timeline-edge-content small{color:var(--muted);font-size:10px}
+.timeline-edge-local{padding-top:1px;padding-bottom:13px}
+.timeline-edge-local:before{content:"";grid-column:1;justify-self:center;width:1px;height:28px;background:var(--line)}
+.timeline-edge-local>span{grid-column:2;display:block;padding:9px 12px;border:1px dashed var(--line);color:var(--clay);font-size:10px;font-weight:800}
+.timeline-edge-local>small{grid-column:2;display:block;padding:5px 12px;color:var(--muted);font-size:10px}
+.timeline-node-endpoint .timeline-title{font-size:17px}
+.timeline-node-endpoint .timeline-index{background:var(--clay)}
+@media(max-width:680px){
+  .booking-edit-overlay{place-items:stretch;padding:0}
+  .booking-edit-dialog{width:100%;max-height:100dvh;height:100dvh;border:0;box-shadow:none}
+  .booking-edit-dialog>header{padding:16px}
+  .booking-edit-sheet{padding:16px;min-height:calc(100dvh - 78px)}
+  .booking-edit-sheet .edit-actions{position:sticky;bottom:0;margin:4px -16px -16px;padding:12px 16px;background:var(--paper2);border-top:1px solid var(--line)}
+  .timeline-edge{gap:8px;padding-left:2px;padding-right:2px}
+  .timeline-edge-content{padding:8px 10px}
+}
+
+/* V2.4-R1-UI: one shared editor surface.  The page remains the only main
+   scroll container; an open modal/drawer owns one readable scroll surface. */
+.button-primary,.button-secondary,.button-ghost,.button-danger{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:9px 13px;border-radius:8px;cursor:pointer;font-size:10px;font-weight:800;line-height:1.2;transition:background-color .15s ease,border-color .15s ease,color .15s ease,transform .15s ease}
+.button-primary{border:1px solid var(--ink);background:var(--ink);color:#fff}
+.button-primary:hover,.button-primary:focus-visible{background:#34342f;border-color:#34342f}
+.button-primary:active{transform:translateY(1px)}
+.button-secondary{border:1px solid var(--line);background:var(--paper);color:var(--ink)}
+.button-secondary:hover,.button-secondary:focus-visible{border-color:var(--ink);background:var(--paper2)}
+.button-ghost{border:0;background:transparent;color:var(--clay);padding-inline:0}
+.button-ghost:hover,.button-ghost:focus-visible{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
+.button-danger{border:1px solid #a45d4d;background:#fff8f3;color:#8d2f27}
+.button-danger:hover,.button-danger:focus-visible{background:#8d2f27;border-color:#8d2f27;color:#fff}
+.button-primary:disabled,.button-secondary:disabled,.button-ghost:disabled,.button-danger:disabled{opacity:.52;cursor:not-allowed;transform:none}
+.button-primary:focus-visible,.button-secondary:focus-visible,.button-ghost:focus-visible,.button-danger:focus-visible,.workspace-close:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+.workspace-overlay{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:24px;background:rgba(26,26,23,.44);overscroll-behavior:contain}
+.workspace-overlay-drawer{place-items:stretch end;padding:0 0 0 24px}
+.workspace-surface{position:relative;display:flex;flex-direction:column;min-width:0;max-width:100%;background:var(--paper2);border:1px solid var(--line);box-shadow:0 20px 70px rgba(26,26,23,.24);overflow:hidden}
+.workspace-modal{width:min(680px,100%);max-height:min(90dvh,820px)}
+.workspace-drawer{width:min(520px,100%);height:100%;max-height:100dvh;border-width:0 0 0 1px}
+.workspace-surface>header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex:0 0 auto;padding:20px 22px;border-bottom:1px solid var(--line);background:var(--paper2)}
+.workspace-surface>header>div{min-width:0}
+.workspace-surface>header span{display:block;font:800 9px var(--font-geist-mono);letter-spacing:.14em;color:var(--clay)}
+.workspace-surface>header h2,.workspace-surface>header h3{margin:5px 0 0;font-family:"Songti SC","STSong",serif;font-size:27px;line-height:1.1}
+.workspace-surface>header p{margin:6px 0 0;color:var(--muted);font-size:10px;line-height:1.5}
+.workspace-close{display:grid;place-items:center;flex:0 0 auto;width:34px;height:34px;border:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer;font-size:22px;line-height:1}
+.workspace-close:hover{background:var(--ink);color:#fff}
+.workspace-surface.plan-add-sheet{width:min(680px,100%);max-height:min(90dvh,820px);padding:0;overflow:auto}
+.workspace-surface.booking-edit-dialog{width:min(520px,100%);height:100%;max-height:100dvh;padding:0;overflow:hidden}
+.workspace-surface.day-presence-panel{width:min(560px,100%);max-height:min(90dvh,760px);padding:0;overflow:auto;position:relative;top:auto;left:auto;z-index:auto;margin:0;display:flex}
+.workspace-surface.plan-add-sheet>label,.workspace-surface.plan-add-sheet>.plan-add-search,.workspace-surface.plan-add-sheet>.plan-add-transport,.workspace-surface.plan-add-sheet>.plan-add-note,.workspace-surface.plan-add-sheet>.plan-add-participants,.workspace-surface.plan-add-sheet>.form-error,.workspace-surface.plan-add-sheet>fieldset,.workspace-surface.plan-add-sheet>textarea,.workspace-surface.plan-add-sheet>label{margin-left:22px;margin-right:22px}
+.workspace-surface.plan-add-sheet>label{margin-top:14px}
+.workspace-surface.plan-add-sheet>.plan-add-search,.workspace-surface.plan-add-sheet>.plan-add-transport,.workspace-surface.plan-add-sheet>.plan-add-note{display:grid;gap:12px;margin-top:14px}
+.workspace-surface.plan-add-sheet>.plan-add-participants{margin-top:14px}
+.workspace-surface.plan-add-sheet>.form-error{margin-top:14px}
+.workspace-surface .generic-place-picker .plan-add-pois,.workspace-surface .plan-add-pois{max-height:none;overflow:visible}
+.workspace-surface .booking-edit-sheet{flex:1 1 auto;min-height:0;overflow:auto;margin:0;padding:20px 22px;display:grid;gap:12px;border:0;background:var(--paper2)}
+.workspace-surface .booking-edit-sheet .plan-add-two-columns{gap:10px}
+.workspace-footer{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex:0 0 auto;position:sticky;bottom:0;margin-top:4px;padding:12px 22px;border-top:1px solid var(--line);background:rgba(255,250,240,.96);z-index:2}
+.workspace-footer .button-primary,.workspace-footer .plan-add-submit{width:auto;min-width:120px;margin:0}
+.workspace-footer .button-secondary{min-width:76px}
+.booking-danger-zone{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:6px;padding:12px 0;border-top:1px dashed #c8a090}
+.booking-danger-zone>span{font:800 9px var(--font-geist-mono);letter-spacing:.1em;color:#8d2f27}
+.booking-danger-zone .booking-danger{min-height:36px}
+.workspace-surface.day-presence-panel>p,.workspace-surface.day-presence-panel>.presence-member-list,.workspace-surface.day-presence-panel>.presence-actions,.workspace-surface.day-presence-panel>.form-error{margin-left:18px;margin-right:18px}
+.workspace-surface.day-presence-panel>p{margin-top:14px}
+.workspace-surface.day-presence-panel>.presence-actions{margin-bottom:18px}
+.workspace-surface.day-presence-panel>header{margin-bottom:0}
+.add-itinerary-button.button-primary,.booking-add-button.button-primary{background:var(--ink);border-color:var(--ink);color:#fff}
+.add-itinerary-button.button-primary:hover,.booking-add-button.button-primary:hover{background:#34342f;border-color:#34342f;color:#fff}
+.plan-add-submit.button-primary{background:var(--ink);border-color:var(--ink);color:#fff}
+.plan-add-submit.button-primary:hover{background:#34342f;border-color:#34342f;color:#fff}
+.plan-add-target-day{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:10px}
+.plan-add-target-day>span{font-size:10px;font-weight:800}
+.plan-add-target-day select{margin:0}
+.plan-add-section-heading{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.plan-add-section-heading b{font-size:12px}
+.plan-add-section-heading small{color:var(--muted);font-size:9px;font-weight:500}
+.plan-add-quick-places,.plan-add-search-section{display:grid;gap:8px}
+.plan-add-choice-list{display:grid;gap:5px}
+.plan-add-choice-row{display:grid;grid-template-columns:28px minmax(0,1fr) 20px;align-items:center;gap:8px;width:100%;padding:9px 10px;border:1px solid var(--line);background:var(--paper);text-align:left;cursor:pointer}
+.plan-add-choice-row:hover,.plan-add-choice-row:focus-visible{border-color:var(--clay);background:var(--paper2)}
+.plan-add-choice-row.selected{border-color:var(--clay);background:#eadfc9}
+.plan-add-choice-row>span{display:grid;gap:3px;min-width:0}
+.plan-add-choice-row b{font-size:10px;overflow-wrap:anywhere}
+.plan-add-choice-row small{color:var(--muted);font-size:9px;overflow-wrap:anywhere}
+.plan-add-choice-row i{font-style:normal;color:var(--clay);font-weight:800;text-align:center}
+.plan-add-muted{margin:0;padding:10px;background:var(--paper);color:var(--muted);font-size:10px}
+.plan-add-search-section{padding-top:12px;border-top:1px dashed var(--line)}
+.plan-add-kind{display:flex;gap:6px;margin:16px 22px 0;overflow:auto}
+.plan-add-kind button{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:88px;padding:9px 12px;border:1px solid var(--line);border-radius:7px;background:var(--paper);cursor:pointer;font-size:10px;font-weight:800;white-space:nowrap}
+.plan-add-kind button.active{border-color:var(--ink);background:var(--ink);color:#fff}
+.workspace-surface .plan-add-submit{border-radius:8px}
+.workspace-surface .edit-actions{align-items:center}
+.workspace-surface .edit-actions .plan-add-submit{width:auto;margin:0}
+.workspace-surface .presence-actions button{border-radius:7px}
+.workspace-surface .presence-actions button:last-child{margin-left:auto}
+.trip-console{align-items:start}
+.trip-console-side{align-content:start}
+.booking-console{align-content:start;align-items:start}
+.booking-console .booking-add-button{grid-column:1/-1;width:auto;justify-self:start;margin-top:2px}
+.booking-console .booking-console-empty{grid-column:1/-1}
+.plan-timeline{border-top:0;padding-top:8px}
+.plan-timeline article.timeline-node{border-bottom:0}
+.timeline-edge-content{border-radius:3px;background:rgba(234,223,201,.5)}
+.timeline-edge-local>span{border-radius:3px;background:rgba(255,250,240,.56)}
+.timeline-node-action .item-order-controls{margin-top:4px}
+@media(max-width:680px){
+  .workspace-overlay{place-items:stretch;padding:0}
+  .workspace-overlay-drawer{padding:0}
+  .workspace-surface.workspace-modal,.workspace-surface.workspace-drawer{width:100%;height:100dvh;max-height:none;border-width:0;box-shadow:none}
+  .workspace-surface>header{padding:16px}
+  .workspace-surface.plan-add-sheet{width:100%;max-height:none}
+  .workspace-surface.booking-edit-dialog{width:100%;height:100dvh}
+  .workspace-surface.day-presence-panel{width:100%;max-height:none}
+  .workspace-surface.plan-add-sheet>label,.workspace-surface.plan-add-sheet>.plan-add-search,.workspace-surface.plan-add-sheet>.plan-add-transport,.workspace-surface.plan-add-sheet>.plan-add-note,.workspace-surface.plan-add-sheet>.plan-add-participants,.workspace-surface.plan-add-sheet>.form-error,.workspace-surface.plan-add-sheet>fieldset,.workspace-surface.plan-add-sheet>textarea{margin-left:16px;margin-right:16px}
+  .plan-add-kind{margin-left:16px;margin-right:16px}
+  .workspace-surface .booking-edit-sheet{padding:16px;gap:11px}
+  .workspace-footer{padding:12px 16px;margin-left:0;margin-right:0}
+  .workspace-footer .button-primary,.workspace-footer .plan-add-submit{flex:1;min-width:0}
+  .workspace-surface.day-presence-panel>p,.workspace-surface.day-presence-panel>.presence-member-list,.workspace-surface.day-presence-panel>.presence-actions,.workspace-surface.day-presence-panel>.form-error{margin-left:14px;margin-right:14px}
+  .workspace-surface.day-presence-panel>.presence-actions{padding-bottom:2px}
+  .booking-console{display:flex;flex-wrap:wrap;overflow:visible}
+  .booking-console article{flex:1 1 100%;min-width:0}
+  .booking-console .booking-add-button{flex:0 0 auto;width:auto}
+  .trip-console-side{padding-top:46px}
+  .plan-add-target-day{grid-template-columns:1fr}
+}

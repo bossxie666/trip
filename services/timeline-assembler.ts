@@ -177,19 +177,6 @@ function compareNodes(a: TimelineNode, b: TimelineNode) {
   return a.sortOrder - b.sortOrder || a.id.localeCompare(b.id);
 }
 
-function localDate(value: string | null | undefined) {
-  return value?.slice(0, 10) || null;
-}
-
-function dateRange(start: string | null | undefined, end: string | null | undefined) {
-  if (!start) return [] as string[];
-  const from = new Date(`${start}T00:00:00Z`), to = new Date(`${(end || start)}T00:00:00Z`);
-  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to < from) return [start];
-  const dates: string[] = [];
-  for (const cursor = from; cursor <= to; cursor.setUTCDate(cursor.getUTCDate() + 1)) dates.push(cursor.toISOString().slice(0, 10));
-  return dates;
-}
-
 /** Assemble one trip's deterministic timeline from persisted facts. */
 export function assembleTimeline(input: {
   days: Array<{ id: string; date?: string | null; dayNumber?: number }>;
@@ -231,31 +218,6 @@ export function assembleTimeline(input: {
       });
     }
 
-    // Accommodation contributes only explicit booking anchors.  The anchor is
-    // deliberately place-less, so it can be shown in Planning without
-    // becoming a route node or changing the user's hand-authored order.
-    for (const booking of input.bookings) {
-      if (booking.type !== "hotel") continue;
-      const startDate = booking.startDateLocal || localDate(booking.startAt);
-      const endDate = booking.endDateLocal || localDate(booking.endAt) || startDate;
-      if (!startDate || !day.date || !dateRange(startDate, endDate).includes(day.date)) continue;
-      const anchorKind = day.date === startDate ? "start" : day.date === endDate ? "end" : "stay";
-      nodes.push({
-        id: `${booking.id}:${anchorKind}`,
-        source: "booking",
-        nodeKind: "anchor",
-        anchorKind,
-        title: `${booking.title} · ${anchorKind === "start" ? "入住" : anchorKind === "end" ? "退房" : "住宿中"}`,
-        dayId: day.id,
-        sortOrder: anchorKind === "end" ? 10000 : -10000,
-        place: null,
-        bookingId: booking.id,
-        timeLocal: anchorKind === "start" ? timeFromInstant(booking.startAt, booking.timezone) : anchorKind === "end" ? timeFromInstant(booking.endAt, booking.timezone) : null,
-        memberStates: booking.memberStates,
-        booking,
-      });
-    }
-
     nodes.sort(compareNodes);
     const longDistanceEdges: TimelineEdge[] = [];
     for (const booking of input.bookings) {
@@ -266,10 +228,11 @@ export function assembleTimeline(input: {
     }
 
     const localEdges: TimelineEdge[] = [];
-    // Accommodation anchors are display-only Booking facts. They neither
-    // enter nor break the local route. A place-less ordinary Item remains in
-    // this sequence and intentionally blocks inference across unknown data.
-    const routeNodes = nodes.filter((node) => node.nodeKind !== "anchor");
+    // Only concrete endpoint and ItineraryItem nodes participate in local
+    // route inference. Accommodation bookings are deliberately absent from
+    // this formal timeline; a hotel becomes a node only after the user adds a
+    // Hotel Place as an ItineraryItem.
+    const routeNodes = nodes;
     for (let index = 1; index < routeNodes.length; index += 1) {
       const from = routeNodes[index - 1], to = routeNodes[index];
       // A long-distance endpoint is a boundary. The item before an origin and

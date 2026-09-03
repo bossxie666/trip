@@ -143,11 +143,29 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   assert.match(css, /\.recommendation-panel,\.itinerary-panel\{overflow:visible;max-height:none\}/);
   assert.match(css, /\.booking-add-button\{[^}]*background:var\(--ink\);[^}]*color:#fff/);
   assert.match(css, /\.add-itinerary-button\{[^}]*background:var\(--ink\);[^}]*color:#fff/);
+  assert.match(css, /\.workspace-overlay\{position:fixed;inset:0/);
+  assert.match(css, /\.workspace-drawer\{width:min\(520px,100%\);height:100%/);
+  assert.match(css, /\.button-primary\{border:1px solid var\(--ink\);background:var\(--ink\);color:#fff/);
   assert.doesNotMatch(accommodation, /添加长途交通/);
   assert.match(transport, /modalOwner = `plan-add:\$\{slug\}`/);
+  assert.match(transport, /添加到 \{targetDayLabel\}/);
+  assert.match(transport, /想把什么加入今天/);
+  assert.match(transport, /交通会作为两个地点之间的路线 Edge/);
+  assert.doesNotMatch(transport, /公共交通/);
   assert.match(presence, /modalOwner = `presence:\$\{slug\}:\$\{dayId\}`/);
   assert.match(placeDiscovery, /modalOwner = `place-discovery:\$\{slug\}`/);
   assert.match(bookingEdit, /modalName = `booking-editor:\$\{booking\.id\}`/);
+  assert.match(accommodation, /WorkspaceOverlay/);
+  assert.match(accommodation, /mode="drawer"/);
+  assert.match(transport, /WorkspaceOverlay/);
+  assert.match(presence, /WorkspaceOverlay/);
+  assert.match(placeDiscovery, /WorkspaceOverlay/);
+  assert.match(bookingEdit, /WorkspaceOverlay/);
+  assert.match(bookingEdit, /mode="drawer"/);
+  assert.match(bookingEdit, /booking-danger-zone/);
+  assert.match(bookingEdit, /workspace-close/);
+  assert.match(bookingEdit, /booking-edit-cancel/);
+  assert.doesNotMatch(bookingEdit, /<details className="booking-edit-control"/);
 });
 
 async function createTrip(body) {
@@ -155,6 +173,10 @@ async function createTrip(body) {
   const payload = await response.json();
   assert.equal(response.status, 201, payload.error);
   return payload.trip;
+}
+
+function timelineNodeBlocks(html) {
+  return [...html.matchAll(/<article class="timeline-node[^>]*>[\s\S]*?<\/article>/g)].map(([block]) => block);
 }
 
 test("keeps all Stage A routes available", async () => {
@@ -284,7 +306,7 @@ test("renders the E1 planning workspace from Booking, Recommendation and Itinera
   assert.match(html, /TRIP CONSOLE/); assert.match(html, /2026\.09\.23 — 09\.27/); assert.match(html, /上海4人 · 杭州5人/);
   assert.match(html, /06:35–08:55/); assert.match(html, /¥480/); assert.match(html, /上海南酒店/); assert.match(html, /杭州东酒店/); assert.match(html, /深圳.?→.?上海/); assert.match(html, /开园 → 闭园/); assert.match(html, /营业时间待确认/);
   for (const label of ["09/23", "09/24", "09/25", "09/26", "09/27"]) assert.match(html, new RegExp(label));
-  assert.match(html, /攻略素材/); assert.match(html, /上海迪士尼/); assert.match(html, /已加入 09\/23/); assert.match(html, /已确认订单/); assert.doesNotMatch(html, /Booking Anchor/); assert.match(html, /当天成员/);
+  assert.match(html, /攻略素材/); assert.match(html, /上海迪士尼/); assert.match(html, /已加入 09\/23/); assert.match(html, /data-timeline-edge-kind="long-distance"/); assert.doesNotMatch(html, /已确认订单/); assert.doesNotMatch(html, /Booking Anchor/); assert.match(html, /当天成员/);
   assert.doesNotMatch(html, /SZX-SHA-HGH|开始做选择|跳进地理书的旅行/);
 
   const day2Html = await (await render(`/trips/shanghai-hangzhou-2026/plan?view=planning&day=${day2}`)).text();
@@ -293,6 +315,93 @@ test("renders the E1 planning workspace from Booking, Recommendation and Itinera
   for (const label of ["灵隐寺", "财神庙", "西湖"]) assert.match(day3Html, new RegExp(label));
   assert.match(await (await render(`/trips/shanghai-hangzhou-2026/plan?view=planning&day=${day4}`)).text(), /桐庐一日攻略 \/ 桐庐往返/);
   assert.match(await (await render(`/trips/shanghai-hangzhou-2026/plan?view=planning&day=${day5}`)).text(), /杭州东酒店/);
+});
+
+test("renders a long-distance Booking as an edge between endpoint nodes", async () => {
+  const trip = await createTrip({ title: "Timeline DOM Flight", status: "planning", cities: ["上海"], startDate: "2028-06-01", endDate: "2028-06-01", memberIds: ["member-nini"] });
+  const dayId = DB.database.prepare("SELECT id FROM days WHERE trip_id = ? ORDER BY day_number LIMIT 1").get(trip.id).id;
+  const bookingResponse = await render(`/api/trips/${trip.slug}/bookings`, { method: "POST", body: {
+    type: "flight", status: "confirmed", title: "Y87578", startDateLocal: "2028-06-01", endDateLocal: "2028-06-01",
+    startAt: "2028-05-31T22:35:00.000Z", endAt: "2028-06-01T00:55:00.000Z", originLabel: "深圳宝安国际机场", destinationLabel: "上海浦东国际机场",
+    bookingReference: "Y87578", totalAmountMinor: 48000, participantMemberIds: ["member-nini"],
+  } });
+  assert.equal(bookingResponse.status, 201);
+  const itemResponse = await render(`/api/trips/${trip.slug}/plan/items`, { method: "POST", body: { dayId, title: "上海迪士尼", itemType: "place", providerPlaceId: "B0TESTBUND" } });
+  assert.equal(itemResponse.status, 201);
+  const html = await (await render(`/trips/${trip.slug}/plan?view=planning&day=${dayId}`)).text();
+  const nodes = timelineNodeBlocks(html);
+  const endpoints = nodes.filter((block) => block.includes('data-timeline-node-kind="endpoint"'));
+  assert.equal(endpoints.length, 2);
+  assert.match(endpoints[0], /深圳宝安国际机场/);
+  assert.match(endpoints[0], /timeline-index">01<\/div>/);
+  assert.match(endpoints[1], /上海浦东国际机场/);
+  assert.match(endpoints[1], /timeline-index">02<\/div>/);
+  assert.equal(nodes.filter((block) => block.includes("深圳宝安国际机场 → 上海浦东国际机场")).length, 0);
+  const nodeTitles = nodes.map((block) => block.match(/<h3[^>]*>([\s\S]*?)<\/h3>/)?.[1] || "");
+  assert.equal(nodeTitles.some((title) => title.includes("深圳宝安国际机场 → 上海浦东国际机场") || title.includes("深圳宝安国际机场→上海浦东国际机场")), false);
+  assert.equal((html.match(/data-timeline-edge-kind="long-distance"/g) || []).length, 1);
+  assert.match(html, /data-timeline-edge-kind="long-distance"[\s\S]*?飞机[\s\S]*?深圳宝安国际机场 → 上海浦东国际机场/);
+  assert.equal((html.match(/data-timeline-edge-kind="local"/g) || []).length, 1);
+  assert.match(html, /data-timeline-edge-kind="local"[\s\S]*?data-timeline-edge-state="pending"[\s\S]*?＋选择交通方式/);
+  assert.equal(nodes.filter((block) => block.includes("上海迪士尼") && block.includes('data-timeline-node-kind="item"')).length, 1);
+  assert.ok(html.indexOf('data-timeline-node-id="') < html.indexOf('data-timeline-edge-kind="long-distance"'));
+  assert.equal((await render(`/api/trips/${trip.slug}`, { method: "DELETE" })).status, 200);
+});
+
+test("keeps accommodation Bookings out of Day Plan until a Hotel Item is explicit", async () => {
+  const trip = await createTrip({ title: "Timeline DOM Hotel", status: "planning", cities: ["上海"], startDate: "2028-07-01", endDate: "2028-07-01", memberIds: ["member-nini"] });
+  const dayId = DB.database.prepare("SELECT id FROM days WHERE trip_id = ? ORDER BY day_number LIMIT 1").get(trip.id).id;
+  const bookingResponse = await render(`/api/trips/${trip.slug}/bookings`, { method: "POST", body: {
+    type: "hotel", status: "confirmed", title: "DOM 测试住宿", startDateLocal: "2028-07-01", endDateLocal: "2028-07-02",
+    place: { providerPlaceId: "B0TESTBUND" }, totalAmountMinor: 60000, participantMemberIds: ["member-nini"],
+  } });
+  assert.equal(bookingResponse.status, 201);
+  const hotelPlaceId = DB.database.prepare("SELECT place_id FROM bookings WHERE id = ?").get((await bookingResponse.clone().json()).booking.id).place_id;
+  const before = await (await render(`/trips/${trip.slug}/plan?view=planning&day=${dayId}`)).text();
+  const beforeNodes = timelineNodeBlocks(before);
+  assert.equal(beforeNodes.filter((block) => block.includes('data-timeline-node-kind="anchor"')).length, 0);
+  assert.equal(beforeNodes.filter((block) => block.includes("DOM 测试住宿") || block.includes("入住")).length, 0);
+  assert.doesNotMatch(before, /DOM 测试住宿 · 入住/);
+
+  const titles = ["办理入住", "回酒店休息", "拿行李"];
+  for (const title of titles) {
+    const itemResponse = await render(`/api/trips/${trip.slug}/plan/items`, { method: "POST", body: { dayId, placeId: hotelPlaceId, itemType: "lodging", title } });
+    assert.equal(itemResponse.status, 201);
+  }
+  const after = await (await render(`/trips/${trip.slug}/plan?view=planning&day=${dayId}`)).text();
+  const afterNodes = timelineNodeBlocks(after);
+  assert.equal(afterNodes.filter((block) => block.includes('data-timeline-node-kind="anchor"')).length, 0);
+  const hotelNodes = afterNodes.filter((block) => block.includes('data-timeline-node-kind="item"') && titles.some((title) => block.includes(title)));
+  assert.equal(hotelNodes.length, 3);
+  for (const title of titles) assert.equal(hotelNodes.filter((block) => block.includes(title)).length, 1);
+  assert.equal((await render(`/api/trips/${trip.slug}`, { method: "DELETE" })).status, 200);
+});
+
+test("renders accommodation editor as an independent modal without an inline details block", () => {
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../components/trip/BookingEditControl.tsx", import.meta.url), "utf8");
+  assert.match(source, /<WorkspaceOverlay[\s\S]*mode="drawer"/);
+  assert.match(source, /className="booking-edit-dialog"/);
+  assert.match(source, /ariaLabelledBy=\{headingId\}/);
+  assert.match(source, /booking-edit-cancel/);
+  assert.match(source, /booking-danger-zone/);
+  assert.doesNotMatch(source, /<details className="booking-edit-control"/);
+  assert.match(css, /\.workspace-surface\.booking-edit-dialog\{width:min\(520px,100%\);height:100%;max-height:100dvh/);
+  assert.match(css, /@media\(max-width:680px\)\{[\s\S]*\.workspace-surface\.workspace-modal,\.workspace-surface\.workspace-drawer\{width:100%;height:100dvh/);
+});
+
+test("keeps Add Itinerary types focused on place nodes, long-distance edges, and no-place notes", () => {
+  const source = readFileSync(new URL("../components/trip/PlanAddControl.tsx", import.meta.url), "utf8");
+  const picker = readFileSync(new URL("../components/trip/GenericPlacePicker.tsx", import.meta.url), "utf8");
+  assert.match(source, /role="tablist" aria-label="添加类型"/);
+  for (const label of ["地点", "交通", "事项"]) assert.match(source, new RegExp(`>${label}<`));
+  assert.match(source, /添加长途交通/);
+  assert.match(source, /添加无地点事项/);
+  assert.match(source, /showExisting=\{false\}/);
+  assert.match(picker, /showExisting = true/);
+  assert.match(picker, /autoFocus = false/);
+  assert.match(picker, /placeholder=\{placeholder \|\|/);
+  assert.doesNotMatch(source, /公共交通|打车|步行|骑行/);
 });
 
 test("validates E1 URL state and renders map and budget views", async () => {

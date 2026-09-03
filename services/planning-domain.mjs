@@ -88,6 +88,10 @@ export function buildDayTimeline({ dayDate, timezone, bookings, items, placement
   assertTimezone(timezone);
   const entries = [];
   for (const booking of bookings) {
+    // Accommodation is a Booking/fee fact, not a hand-authored Day node.
+    // Hotel check-in/stay/check-out is surfaced by the accommodation summary;
+    // only an explicit Hotel ItineraryItem may enter the Day Plan timeline.
+    if (booking.type === "hotel") continue;
     if (booking.temporalKind === "date_range") {
       if (booking.startDateLocal === dayDate) entries.push({ source: "booking", sourceId: booking.id, entryType: "booking-anchor", bucket: "start-of-day", title: booking.title, timeLocal: null, sortOrder: null, anchorKind: "start", locked: true });
       else if (booking.endDateLocal === dayDate) entries.push({ source: "booking", sourceId: booking.id, entryType: "booking-anchor", bucket: "end-of-day", title: booking.title, timeLocal: null, sortOrder: null, anchorKind: "end", locked: true });
