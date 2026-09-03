@@ -42,7 +42,7 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
             </a>
             <div className="trip-card-footer">
               <div className="trip-card-delete">
-                <TripDeleteButton slug={trip.slug} title={trip.title} protected={trip.protected} canDelete={actor?.id === tripDeletionMemberId} />
+                <TripDeleteButton slug={trip.slug} title={trip.title} canDelete={actor?.id === tripDeletionMemberId} />
               </div>
               <a className="trip-plan-link" href={`/trips/${trip.slug}/plan`}>规划行程 →</a>
             </div>

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { buildIdentitySwitchReturnTo } from "../services/identity-navigation.ts";
@@ -188,7 +188,7 @@ test("keeps all Stage A routes available", async () => {
   assert.equal(cities.status, 200); assert.equal(city.status, 200); assert.equal(map.status, 200);
 });
 
-test("filters the protected Shanghai Hangzhou trip correctly", async () => {
+test("lists the Shanghai Hangzhou trip through the shared workspace", async () => {
   const [all, planning, inspiration] = await Promise.all([render("/trips"), render("/trips?status=planning"), render("/trips?status=inspiration")]);
   const allHtml = await all.text();
   assert.match(allHtml, /上海 \+ 杭州/);
@@ -250,7 +250,6 @@ test("keeps the confirmed flight personal and leaves airports pending", async ()
 
 test("keeps the generic map fit guard and candidate marker semantics", () => {
   const planMap = readFileSync(new URL("../components/trip/PlanMap.tsx", import.meta.url), "utf8");
-  const map = readFileSync(new URL("../components/trip/GenericTripMap.tsx", import.meta.url), "utf8");
   assert.match(planMap, /markerObjects/);
   assert.match(planMap, /lastFitSignature/);
   assert.match(planMap, /setFitView\(markerObjects\.current\)/);
@@ -258,9 +257,19 @@ test("keeps the generic map fit guard and candidate marker semantics", () => {
   assert.match(planMap, /routeFare/);
   assert.match(planMap, /mainLine/);
   assert.doesNotMatch(planMap, /左转|右转/);
-  assert.match(map, /setMapReady\(true\)/);
-  assert.match(map, /lastFitSignature/);
-  assert.match(map, /place\.planStatus === "candidate" \? 0\.48 : 1/);
+});
+
+test("routes every Trip through the unified planning renderer without Shanghai-specific paths", () => {
+  const route = readFileSync(new URL("../app/trips/[slug]/page.tsx", import.meta.url), "utf8");
+  const workspace = readFileSync(new URL("../components/trip/TripPlanWorkspace.tsx", import.meta.url), "utf8");
+  assert.ok(route.includes("redirect(`/trips/${slug}/plan`)"));
+  assert.doesNotMatch(route, /TripDetailPage|GenericTripDetail|protectedTripSlug|shanghai-hangzhou-2026/);
+  assert.match(workspace, /timelineNodesByDay/);
+  assert.match(workspace, /timelineEdgesByDay/);
+  assert.doesNotMatch(workspace, /!trip\.protected/);
+  for (const file of ["TripDetailPage.tsx", "GenericTripDetail.tsx", "DayPlacesEditor.tsx", "GenericTripMap.tsx", "ItineraryDragHandle.tsx", "BookingDisplayNameControl.tsx", "TimelinePlacementControl.tsx"]) {
+    assert.equal(existsSync(new URL(`../components/trip/${file}`, import.meta.url)), false, `${file} should be retired`);
+  }
 });
 
 test("creates and persists inspiration and planning trips", async () => {
@@ -273,9 +282,12 @@ test("creates and persists inspiration and planning trips", async () => {
   assert.match(await planningPage.text(), /Tokyo Spring/);
   assert.match(await allAfterRefresh.text(), /日本关西/);
   const genericDetail = await render(`/trips/${planningTrip.slug}`);
-  const detailHtml = await genericDetail.text();
-  assert.equal(genericDetail.status, 200);
-  assert.match(detailHtml, /Tokyo Spring/); assert.match(detailHtml, /Day/); assert.match(detailHtml, /高德地点/); assert.match(detailHtml, /规划路线/);
+  assert.equal(genericDetail.status, 307);
+  assert.equal(new URL(genericDetail.headers.get("location"), "http://localhost").pathname, `/trips/${planningTrip.slug}/plan`);
+  const plan = await render(`/trips/${planningTrip.slug}/plan`);
+  const planHtml = await plan.text();
+  assert.equal(plan.status, 200);
+  assert.match(planHtml, /Tokyo Spring/); assert.match(planHtml, /TRIP CONSOLE/); assert.match(planHtml, /规划/);
 });
 
 test("avoids duplicate slugs", async () => {
@@ -567,7 +579,27 @@ test("requires a member session and supports collaborative edit and delete", asy
   const update = await render(`/api/trips/${trip.slug}`, { method: "PUT", body: { title: "朋友旅行更新", status: "completed", cities: ["苏州", "无锡"], undated: true, people: 2, memberIds: ["member-zhu-jingqi"] } });
   assert.equal(update.status, 200); assert.equal((await update.json()).trip.status, "completed");
   const remove = await render(`/api/trips/${trip.slug}`, { method: "DELETE" }); assert.equal(remove.status, 200);
-  const protectedRemove = await render("/api/trips/shanghai-hangzhou-2026", { method: "DELETE" }); assert.equal(protectedRemove.status, 403);
+});
+
+test("deletes ordinary Trips without removing shared Places, Recommendations, or Members", async () => {
+  const tripA = await createTrip({ title: "删除隔离 A", status: "planning", cities: ["上海"], undated: true, people: 1 });
+  const tripB = await createTrip({ title: "删除隔离 B", status: "planning", cities: ["上海"], undated: true, people: 1 });
+  const sharedPlaceId = "place-pvg-t2", unrelatedRecommendationId = "recommendation-west-lake";
+  const placeBefore = DB.database.prepare("SELECT id FROM places WHERE id = ?").get(sharedPlaceId);
+  const recommendationBefore = DB.database.prepare("SELECT id, title FROM recommendations WHERE id = ?").get(unrelatedRecommendationId);
+  const membersBefore = DB.database.prepare("SELECT id FROM members ORDER BY id").all().map((row) => row.id);
+  assert.ok(placeBefore); assert.ok(recommendationBefore);
+  // Exercise the real FK relationship: deleting a Trip removes its link but
+  // must never remove the globally reusable Place row.
+  DB.database.prepare("INSERT INTO trip_places (trip_id, place_id, plan_status, created_at) VALUES (?, ?, 'selected', ?)").run(tripA.id, sharedPlaceId, new Date().toISOString());
+  DB.database.prepare("UPDATE trips SET protected = 1 WHERE id = ?").run(tripA.id);
+  assert.equal((await render(`/api/trips/${tripA.slug}`, { method: "DELETE" })).status, 200);
+  assert.equal(DB.database.prepare("SELECT count(*) AS count FROM trips WHERE id = ?").get(tripA.id).count, 0);
+  assert.equal(DB.database.prepare("SELECT count(*) AS count FROM trips WHERE id = ?").get(tripB.id).count, 1);
+  assert.deepEqual(DB.database.prepare("SELECT id FROM places WHERE id = ?").get(sharedPlaceId), placeBefore);
+  assert.deepEqual(DB.database.prepare("SELECT id, title FROM recommendations WHERE id = ?").get(unrelatedRecommendationId), recommendationBefore);
+  assert.deepEqual(DB.database.prepare("SELECT id FROM members ORDER BY id").all().map((row) => row.id), membersBefore);
+  assert.equal((await render(`/api/trips/${tripB.slug}`, { method: "DELETE" })).status, 200);
 });
 
 test("creates reusable places and keeps stable Day ordering", async () => {

@@ -100,7 +100,6 @@ export type Trip = {
   stages?: TripStage[];
   createdAt: string;
   updatedAt: string;
-  protected?: boolean;
   members?: Member[];
   createdByMemberId?: string | null;
   updatedByMemberId?: string | null;

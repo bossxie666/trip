@@ -7,12 +7,6 @@ import type { Trip } from "@/models/travel";
  */
 export const trips: Trip[] = [];
 
-export const protectedTripSlug = "shanghai-hangzhou-2026";
-
-export function getAllTrips() {
-  return trips;
-}
-
 export function getTripBySlug(slug: string) {
   return trips.find((trip) => trip.slug === slug);
 }

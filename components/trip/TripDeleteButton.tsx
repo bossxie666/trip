@@ -6,21 +6,20 @@ import { useRouter } from "next/navigation";
 type TripDeleteButtonProps = {
   slug: string;
   title: string;
-  protected?: boolean;
   canDelete?: boolean;
 };
 
 /**
  * List-level delete control. Every trip keeps the affordance visible, while
- * the UI and API both enforce the protected-trip and nini-only guards.
+ * the UI and API both enforce the shared nini-only delete permission.
  */
-export function TripDeleteButton({ slug, title, protected: isProtected = false, canDelete = false }: TripDeleteButtonProps) {
+export function TripDeleteButton({ slug, title, canDelete = false }: TripDeleteButtonProps) {
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
 
   async function remove() {
-    if (isProtected || !canDelete) return;
+    if (!canDelete) return;
     if (!window.confirm(`确定删除“${title}”吗？删除后不能恢复。`)) return;
 
     setDeleting(true);
@@ -54,8 +53,8 @@ export function TripDeleteButton({ slug, title, protected: isProtected = false, 
         className="trip-delete-button"
         data-trip-slug={slug}
         aria-label={`删除行程：${title}`}
-        disabled={deleting || isProtected || !canDelete}
-        title={isProtected ? "上海 + 杭州是受保护行程，不能删除。" : !canDelete ? "仅 nini 可以删除行程。" : undefined}
+        disabled={deleting || !canDelete}
+        title={!canDelete ? "仅 nini 可以删除行程。" : undefined}
         onClick={() => void remove()}
       >
         {deleting ? "删除中…" : "删除行程"}

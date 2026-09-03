@@ -133,7 +133,6 @@ async function hydrateTrips(rows: (typeof tripRecords.$inferSelect)[]): Promise<
     })),
     expenses: [],
     photos: [],
-    protected: Boolean(row.protected),
     createdByMemberId: row.createdByMemberId,
     updatedByMemberId: row.updatedByMemberId,
     members: memberLinks.filter((link) => link.tripId === row.id).map((member) => ({ id: member.id, name: member.name, displayName: member.displayName, avatar: member.avatar, active: Boolean(member.active), createdAt: member.createdAt })),
@@ -272,11 +271,7 @@ async function replaceCitiesAndDays(tripId: string, input: UpdateTripInput) {
 export async function updateTrip(slug: string, input: UpdateTripInput, actorMemberId: string) {
   const db = getDb();
   const row = (await db.select().from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1))[0];
-  if (!row) {
-    if (getSeedTripBySlug(slug)) throw new Error("PROTECTED_TRIP");
-    return null;
-  }
-  if (row.protected) throw new Error("PROTECTED_TRIP");
+  if (!row) return null;
   const memberIds = [...new Set([...input.memberIds, actorMemberId])];
   const currentMembers = await db.select().from(tripMemberRecords).where(eq(tripMemberRecords.tripId, row.id));
   const currentIds = new Set(currentMembers.map((member) => member.memberId)), requestedIds = new Set(memberIds);
@@ -308,11 +303,7 @@ export async function updateTrip(slug: string, input: UpdateTripInput, actorMemb
 export async function deleteTrip(slug: string) {
   const db = getDb();
   const row = (await db.select().from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1))[0];
-  if (!row) {
-    if (getSeedTripBySlug(slug)) throw new Error("PROTECTED_TRIP");
-    return false;
-  }
-  if (row.protected) throw new Error("PROTECTED_TRIP");
+  if (!row) return false;
   await db.delete(tripRecords).where(eq(tripRecords.id, row.id));
   return true;
 }

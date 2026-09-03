@@ -1,7 +1,4 @@
 .map-entry-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;background:#eadfc9;border:1px solid var(--clay)}
-.item-drag-handle{border:1px dashed var(--line);background:transparent;color:var(--muted);padding:3px 7px;font:inherit;font-size:10px;cursor:grab;margin:4px 0}
-.item-drag-handle:active{cursor:grabbing}
-.item-drag-handle:disabled{cursor:not-allowed;opacity:.55}
 .map-entry-actions>div:first-child{display:grid;gap:3px}
 .map-entry-actions small{color:var(--muted);font-size:10px}
 .map-entry-actions>div:last-child{display:flex;gap:5px;flex-wrap:wrap}
