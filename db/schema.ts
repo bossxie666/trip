@@ -195,6 +195,11 @@ export const bookingRecords = sqliteTable("bookings", {
   placeId: text("place_id").references(() => placeRecords.id, { onDelete: "restrict" }),
   originPlaceId: text("origin_place_id").references(() => placeRecords.id, { onDelete: "restrict" }),
   destinationPlaceId: text("destination_place_id").references(() => placeRecords.id, { onDelete: "restrict" }),
+  // Free-text endpoint labels are independent from concrete Place bindings.
+  // They let a member record a city/station/airport that is not yet resolved
+  // without guessing a POI, and survive clearing/rebinding an endpoint.
+  originLabel: text("origin_label"),
+  destinationLabel: text("destination_label"),
   totalAmountMinor: integer("total_amount_minor"),
   currency: text("currency"),
   bookingReference: text("booking_reference"),

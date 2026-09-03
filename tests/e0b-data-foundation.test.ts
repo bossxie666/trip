@@ -39,7 +39,7 @@ class TestD1Database {
 
 const DB = new TestD1Database();
 (globalThis as typeof globalThis & { __TRIP_TEST_D1__?: unknown; __TRIP_TEST_ENV__?: Record<string, string> }).__TRIP_TEST_D1__ = DB;
-for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql"]) {
+for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql", "0015_v2_4_r1_booking_endpoint_labels.sql"]) {
   DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
 }
 
@@ -70,6 +70,8 @@ const bookingRepo = await import("../services/booking-repository.server.ts");
 const itineraryRepo = await import("../services/itinerary-repository.server.ts");
 const presenceRepo = await import("../services/presence-repository.server.ts");
 const timelineService = await import("../services/day-timeline-service.server.ts");
+const timelineAssembler = await import("../services/timeline-assembler.ts");
+const dayLabel = await import("../services/day-label.ts");
 const timelinePlacementRepo = await import("../services/timeline-placement-repository.server.ts");
 const transitSteps = await import("../services/amap/transit-steps.ts");
 const amapWebService = await import("../services/amap/amap-web-service.server.ts");
@@ -133,6 +135,58 @@ test("E0B data foundation", async (t) => {
     assert.equal(saved.reduce((sum, row) => sum + row.amountMinor, 0), 10000);
   });
 
+  await t.test("clears and rebinds one transport endpoint without changing the other Booking facts", async () => {
+    const transport = await bookingRepo.createBooking({
+      tripId: "trip-e0b-a", type: "flight", status: "tentative", title: "Y8 测试航班", temporalKind: "interval",
+      startAt: "2027-01-01T00:35:00.000Z", endAt: "2027-01-01T02:55:00.000Z", startDateLocal: "2027-01-01", endDateLocal: "2027-01-01", timezone: "Asia/Shanghai",
+      originPlaceId: "e0b-place-a", destinationPlaceId: "e0b-place-other", originLabel: "深圳宝安国际机场", destinationLabel: "上海浦东国际机场",
+      totalAmountMinor: 48000, currency: "CNY", bookingReference: "Y8TEST", notes: "保留行李备注", participantMemberIds: ["member-nini", "member-zhu-jingqi"],
+    }, "member-nini");
+    const line = await bookingRepo.createBookingCostLine({ bookingId: transport.id, title: "机票", amountMinor: 48000, currency: "CNY", allocationMode: "equal", sortOrder: 1 });
+    await bookingRepo.replaceCostAllocations(line.id, ["member-nini", "member-zhu-jingqi"]);
+    const invariantSql = "SELECT title, status, start_at, end_at, start_date_local, end_date_local, origin_place_id, destination_place_id, origin_label, destination_label, total_amount_minor, currency, booking_reference, notes FROM bookings WHERE id = ?";
+    const before = DB.database.prepare(invariantSql).get(transport.id) as Record<string, unknown>;
+    const participantsBefore = DB.database.prepare("SELECT member_id FROM booking_participants WHERE booking_id = ? ORDER BY member_id").all(transport.id);
+    const allocationsBefore = DB.database.prepare("SELECT member_id, amount_minor FROM booking_cost_allocations WHERE cost_line_id = ? ORDER BY member_id").all(line.id);
+
+    await bookingRepo.updateBooking(transport.id, { destinationPlaceId: null }, "member-nini", "e0b-a");
+    const cleared = DB.database.prepare(invariantSql).get(transport.id) as Record<string, unknown>;
+    assert.equal(cleared.destination_place_id, null);
+    assert.deepEqual({ ...cleared, destination_place_id: before.destination_place_id }, { ...before });
+    assert.deepEqual(DB.database.prepare("SELECT member_id FROM booking_participants WHERE booking_id = ? ORDER BY member_id").all(transport.id), participantsBefore);
+    assert.deepEqual(DB.database.prepare("SELECT member_id, amount_minor FROM booking_cost_allocations WHERE cost_line_id = ? ORDER BY member_id").all(line.id), allocationsBefore);
+
+    await bookingRepo.updateBooking(transport.id, { destinationPlaceId: "e0b-place-b" }, "member-nini", "e0b-a");
+    const rebound = DB.database.prepare(invariantSql).get(transport.id) as Record<string, unknown>;
+    assert.equal(rebound.destination_place_id, "e0b-place-b");
+    assert.equal(rebound.destination_label, "上海浦东国际机场");
+  });
+
+  await t.test("edits and soft-deletes accommodation while preserving its Place and ordinary hotel Items", async () => {
+    const hotel = await bookingRepo.createBooking({
+      tripId: "trip-e0b-a", type: "hotel", status: "confirmed", title: "测试住宿", temporalKind: "date_range",
+      startDateLocal: "2027-01-01", endDateLocal: "2027-01-03", timezone: "Asia/Shanghai", placeId: "e0b-place-a",
+      totalAmountMinor: 9000, currency: "CNY", notes: "原备注", participantMemberIds: ["member-nini", "member-zhu-jingqi"],
+    }, "member-nini");
+    const hotelLine = await bookingRepo.createBookingCostLine({ bookingId: hotel.id, title: "房费", amountMinor: 9000, currency: "CNY", allocationMode: "equal", sortOrder: 1 });
+    await bookingRepo.replaceCostAllocations(hotelLine.id, ["member-nini", "member-zhu-jingqi"]);
+    const hotelItem = await itineraryRepo.createItineraryItem({ tripId: "trip-e0b-a", dayId: "e0b-a-day-2", placeId: "e0b-place-a", itemType: "lodging", title: "回酒店休息" }, "member-nini");
+
+    await bookingRepo.updateBooking(hotel.id, {
+      title: "新住宿名", status: "tentative", startDateLocal: "2027-01-02", endDateLocal: "2027-01-03", placeId: "e0b-place-b",
+      totalAmountMinor: 12000, currency: "CNY", participantMemberIds: ["member-nini"], notes: "新备注",
+    }, "member-nini", "e0b-a");
+    const edited = DB.database.prepare("SELECT title, status, start_date_local, end_date_local, place_id, total_amount_minor, notes FROM bookings WHERE id = ?").get(hotel.id);
+    assert.deepEqual({ ...edited }, { title: "新住宿名", status: "tentative", start_date_local: "2027-01-02", end_date_local: "2027-01-03", place_id: "e0b-place-b", total_amount_minor: 12000, notes: "新备注" });
+    assert.deepEqual(DB.database.prepare("SELECT member_id FROM booking_participants WHERE booking_id = ?").all(hotel.id).map((row) => ({ ...row })), [{ member_id: "member-nini" }]);
+    assert.equal((DB.database.prepare("SELECT SUM(amount_minor) total FROM booking_cost_allocations WHERE cost_line_id = ?").get(hotelLine.id) as { total: number }).total, 12000);
+
+    assert.equal(await bookingRepo.deleteBooking(hotel.id), true);
+    assert.ok((DB.database.prepare("SELECT deleted_at FROM bookings WHERE id = ?").get(hotel.id) as { deleted_at: string | null }).deleted_at);
+    assert.equal((DB.database.prepare("SELECT count(*) count FROM places WHERE id IN ('e0b-place-a','e0b-place-b')").get() as { count: number }).count, 2);
+    assert.equal((DB.database.prepare("SELECT count(*) count FROM itinerary_items WHERE id = ? AND place_id = 'e0b-place-a'").get(hotelItem.id) as { count: number }).count, 1);
+  });
+
   await t.test("returns presence unknown/present/absent and rejects overlap", async () => {
     await presenceRepo.createPresenceWindow({ tripId: "trip-e0b-a", memberId: "member-zhu-jingqi", stageId: "e0b-stage-a", startsAt: "2027-01-02T02:00:00.000Z", endsAt: "2027-01-03T02:00:00.000Z", timezone: "Asia/Shanghai" }, "member-nini");
     assert.equal(await presenceRepo.getPresenceState("trip-e0b-a", "member-zhu-jingqi", "2027-01-02T03:00:00.000Z"), "unknown");
@@ -150,7 +204,7 @@ test("E0B data foundation", async (t) => {
     await presenceRepo.replaceDayPresence({ tripId: "trip-e0b-a", dayId: "e0b-a-day-1", members: [
       { memberId: "member-nini", state: "present" },
       { memberId: "member-zhu-jingqi", state: "absent" },
-      { memberId: "member-wang-jingwen", state: "partial", startsAt: "12:00", endsAt: null },
+      { memberId: "member-wang-jingwen", state: "partial", startsAt: "12:00", endsAt: "18:00" },
     ], actorMemberId: "member-nini" });
     assert.equal(await presenceRepo.getPresenceState("trip-e0b-a", "member-zhu-jingqi", "2027-01-01T08:00:00.000Z"), "absent");
     // A Day 1 absence must not leak into Day 2, where the existing window is active.
@@ -242,6 +296,74 @@ test("E0B data foundation", async (t) => {
     assert.equal(subwayColors.subwayLineColor("Shanghai", "99号线"), subwayColors.SUBWAY_NEUTRAL);
     assert.equal(subwayColors.routeStrokeColor("bus", [], "Shanghai"), subwayColors.BUS_NEUTRAL);
     assert.equal(subwayColors.routeStrokeColor("transit", [{ mode: "subway", lineName: "2号线" }], "Shanghai"), subwayColors.subwayLineColor("Shanghai", "2号线"));
+  });
+
+  await t.test("assembles one deterministic Node → Edge → Node timeline", () => {
+    const place = (id: string, cityId = "city-shadow-shanghai") => ({ id, name: id, cityId, address: null, latitude: 31, longitude: 121 });
+    const assembly = timelineAssembler.assembleDayTimeline({
+      day: { id: "timeline-day", date: "2027-01-01" },
+      items: [
+        { id: "timeline-a", dayId: "timeline-day", title: "出发前地点", sortOrder: 1, place: place("timeline-a"), startTimeLocal: "07:00" },
+        { id: "timeline-during", dayId: "timeline-day", title: "航班期间误排事项", sortOrder: 2, place: place("timeline-during"), startTimeLocal: "08:30" },
+        { id: "timeline-b", dayId: "timeline-day", title: "迪士尼", sortOrder: 3, place: place("timeline-b"), startTimeLocal: "10:00" },
+        { id: "timeline-repeat", dayId: "timeline-day", title: "再次到访", sortOrder: 4, place: place("timeline-b"), startTimeLocal: "11:00" },
+      ],
+      bookings: [{ id: "timeline-flight", title: "航班", type: "flight", startDateLocal: "2027-01-01", endDateLocal: "2027-01-01", startAt: "2027-01-01T00:00:00.000Z", endAt: "2027-01-01T01:00:00.000Z", timezone: "Asia/Shanghai", originPlace: place("timeline-origin"), destinationPlace: place("timeline-destination", "city-shadow-hangzhou") }],
+    });
+    assert.deepEqual(assembly.nodes.map((node) => node.id), ["timeline-a", "timeline-flight:origin", "timeline-flight:destination", "timeline-during", "timeline-b", "timeline-repeat"]);
+    assert.deepEqual(assembly.longDistanceEdges.map((edge) => [edge.from.id, edge.to.id]), [["timeline-flight:origin", "timeline-flight:destination"]]);
+    assert.equal(assembly.localEdges.some((edge) => edge.from.endpoint === "origin" || edge.to.endpoint === "destination"), false);
+    assert.deepEqual(assembly.localEdges.map((edge) => [edge.from.id, edge.to.id]), [["timeline-a", "timeline-flight:origin"], ["timeline-flight:destination", "timeline-during"], ["timeline-during", "timeline-b"], ["timeline-b", "timeline-repeat"]]);
+    assert.notEqual(assembly.nodes.find((node) => node.id === "timeline-b"), assembly.nodes.find((node) => node.id === "timeline-repeat"));
+
+    const blocked = timelineAssembler.assembleDayTimeline({
+      day: { id: "blocked-day", date: "2027-01-01" },
+      items: [
+        { id: "blocked-a", dayId: "blocked-day", title: "A", sortOrder: 1, place: place("blocked-a") },
+        { id: "blocked-note", dayId: "blocked-day", title: "待确认事项", sortOrder: 2, place: null },
+        { id: "blocked-b", dayId: "blocked-day", title: "B", sortOrder: 3, place: place("blocked-b") },
+      ],
+      bookings: [],
+    });
+    assert.equal(blocked.localEdges.some((edge) => edge.from.id === "blocked-a" && edge.to.id === "blocked-b"), false);
+
+    const hotelDoesNotRoute = timelineAssembler.assembleDayTimeline({
+      day: { id: "hotel-day", date: "2027-01-01" },
+      items: [
+        { id: "hotel-route-a", dayId: "hotel-day", title: "A", sortOrder: 1, place: place("hotel-route-a") },
+        { id: "hotel-route-b", dayId: "hotel-day", title: "B", sortOrder: 2, place: place("hotel-route-b") },
+      ],
+      bookings: [{ id: "hotel-booking", title: "住宿", type: "hotel", startDateLocal: "2027-01-01", endDateLocal: "2027-01-02", originPlace: null, destinationPlace: null }],
+    });
+    assert.equal(hotelDoesNotRoute.nodes.find((node) => node.bookingId === "hotel-booking")?.place, null);
+    assert.deepEqual(hotelDoesNotRoute.localEdges.map((edge) => [edge.from.id, edge.to.id]), [["hotel-route-a", "hotel-route-b"]]);
+  });
+
+  await t.test("clears stale incomplete Day presence when state becomes present", async () => {
+    DB.database.prepare("UPDATE day_member_presence SET state = 'partial', starts_at = ?, ends_at = NULL WHERE day_id = 'e0b-a-day-1' AND member_id = 'member-wang-jingwen'").run("2027-01-01T04:00:00.000Z");
+    await assert.rejects(() => presenceRepo.replaceDayPresence({ tripId: "trip-e0b-a", dayId: "e0b-a-day-1", members: [
+      { memberId: "member-nini", state: "present" },
+      { memberId: "member-zhu-jingqi", state: "absent" },
+      { memberId: "member-wang-jingwen", state: "partial" },
+    ], actorMemberId: "member-nini" }), /INCOMPLETE_PRESENCE:member-wang-jingwen/);
+    await presenceRepo.replaceDayPresence({ tripId: "trip-e0b-a", dayId: "e0b-a-day-1", members: [
+      { memberId: "member-nini", state: "present" },
+      { memberId: "member-zhu-jingqi", state: "absent" },
+      { memberId: "member-wang-jingwen", state: "present" },
+    ], actorMemberId: "member-nini" });
+    const row = DB.database.prepare("SELECT state, starts_at, ends_at FROM day_member_presence WHERE day_id = 'e0b-a-day-1' AND member_id = 'member-wang-jingwen'").get();
+    assert.deepEqual({ ...row }, { state: "present", starts_at: "2026-12-31T16:00:00.000Z", ends_at: "2027-01-01T16:00:00.000Z" });
+  });
+
+  await t.test("uses reliable endpoint cities for Day labels and safe Day fallback", () => {
+    const cities = [{ id: "city-shadow-shanghai", name: "上海" }, { id: "city-shadow-hangzhou", name: "杭州" }];
+    assert.equal(dayLabel.resolveDayLabel({ id: "label-day", dayNumber: 1, date: "2027-01-01", title: "上海→杭州" }, [], cities), "Day 1");
+    assert.equal(dayLabel.resolveDayLabel({ id: "label-day", dayNumber: 1, date: "2027-01-01", title: "错误旧标题" }, [{ type: "flight", startDateLocal: "2027-01-01", endDateLocal: "2027-01-01", originPlace: { cityId: "city-shadow-shanghai" }, destinationPlace: { cityId: "city-shadow-hangzhou" } }], cities), "上海→杭州");
+    assert.equal(dayLabel.resolveDayLabel({ id: "label-day", dayNumber: 1, date: "2027-01-01", title: "错误旧标题" }, [{ type: "flight", startDateLocal: "2027-01-01", endDateLocal: "2027-01-01", originLabel: "深圳", destinationLabel: "上海" }], cities), "深圳→上海");
+    assert.equal(dayLabel.resolveDayLabel({ id: "label-day", dayNumber: 1, date: "2027-01-01", title: "错误旧标题" }, [
+      { type: "flight", startDateLocal: "2027-01-01", originLabel: "深圳", destinationLabel: "上海" },
+      { type: "train", startDateLocal: "2027-01-01", originLabel: "广州", destinationLabel: "上海" },
+    ], cities), "Day 1");
   });
 
   await t.test("supports all itinerary time modes through the database", async () => {

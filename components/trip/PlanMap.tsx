@@ -3,19 +3,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AMapRouteMode, AMapRouteResult } from "@/services/amap/amap-types";
 import { routeStrokeColor } from "@/services/amap/subway-colors";
+import { filterTimelineForMember, numberTimelineNodes, type TimelineNode } from "@/services/timeline-assembler";
 import { TransportIcon, iconForRouteMode } from "./TransportIcon";
+import { type AMapMarker, type AMapNamespace, type AMapObject } from "./amap-client-types";
 
-type Place = { id: string; name: string; cityId: string; address: string | null; latitude: number | null; longitude: number | null; district?: string | null; providerPlaceId?: string | null };
+type Place = { id: string; name: string; cityId?: string | null; address?: string | null; latitude?: number | null; longitude?: number | null; district?: string | null; providerPlaceId?: string | null };
 type Day = { id: string; dayNumber: number; date: string | null; title: string; items: { item: { id: string; title: string; dayId: string; sortOrder: number; lockedAt: string | null; placeId: string | null; itemType?: string }; place: Place | null }[] };
 type Stop = { id: string; source: "itinerary" | "booking"; title: string; place: Place; sortOrder: number; memberStates?: Record<string, "present" | "absent" | "partial" | "unknown"> };
 type Segment = { id: string; from: Stop; to: Stop; crossCity: boolean };
-type MapEntry = { place: Place; kind: "itinerary" | "booking" | "recommendation" | "saved" | "candidate"; planStatus: "candidate" | "selected" | "locked"; category?: string | null; areaKey?: string | null; recommendationTitle?: string | null };
-type Workspace = { days: Day[]; cities: { id: string; name: string }[]; members?: { id: string; displayName: string }[]; currentMemberId?: string | null; memberFilter?: string; bookings?: { id: string; title: string; type: string; placeId?: string | null }[]; mapPlaces?: MapEntry[]; savedPlaces?: { id: string; place: Place; note?: string | null }[]; routeStopsByDay?: Record<string, Stop[]>; routeSegmentsByDay?: Record<string, Segment[]>; routePreferences?: { dayId: string; fromId: string; toId: string; memberId: string | null; preferredMode: AMapRouteMode }[] };
-
-type AMapObject = { add(value: unknown): void; remove(value: unknown): void; setFitView(value?: unknown[]): void; setCenter?(value: [number, number]): void; getBounds?(): { getSouthWest?: () => { lng: number; lat: number }; getNorthEast?: () => { lng: number; lat: number } }; on?(event: string, handler: (event?: unknown) => void): void; off?(event: string, handler: (event?: unknown) => void): void; destroy(): void };
-type AMapMarker = { on?(event: string, handler: () => void): void };
-type AMapNamespace = { Map: new (container: HTMLDivElement, options: Record<string, unknown>) => AMapObject; Marker: new (options: Record<string, unknown>) => AMapMarker; Polyline: new (options: Record<string, unknown>) => unknown };
-declare global { interface Window { AMap?: AMapNamespace; _AMapSecurityConfig?: { serviceHost: string } } }
+type MapEntry = { place: Place; kind: "itinerary" | "booking" | "recommendation" | "saved" | "candidate"; planStatus: "candidate" | "selected" | "locked"; category?: string | null; areaKey?: string | null; recommendationTitle?: string | null; timelineId?: string; nodeNumber?: number };
+type Workspace = { days: Day[]; cities: { id: string; name: string }[]; members?: { id: string; displayName: string }[]; currentMemberId?: string | null; memberFilter?: string; bookings?: { id: string; title: string; type: string; placeId?: string | null; originPlace?: Place | null; destinationPlace?: Place | null; originLabel?: string | null; destinationLabel?: string | null; memberStates?: Record<string, "present" | "absent" | "partial" | "unknown"> }[]; mapPlaces?: MapEntry[]; savedPlaces?: { id: string; place: Place; city: { id: string; name: string }; note?: string | null }[]; routeStopsByDay?: Record<string, Stop[]>; routeSegmentsByDay?: Record<string, Segment[]>; routePreferences?: { dayId: string; fromId: string; toId: string; memberId: string | null; preferredMode: AMapRouteMode }[]; timelineNodesByDay?: Record<string, TimelineNode[]> };
 
 let loader: Promise<AMapNamespace> | null = null;
 async function loadAMap() {
@@ -23,13 +20,14 @@ async function loadAMap() {
   if (!loader) loader = (async () => {
     const response = await fetch("/api/amap/config", { signal: AbortSignal.timeout(8_000) }), config = await response.json() as { key?: string; version?: string; serviceHost?: string; error?: string };
     if (!response.ok || !config.key || !config.serviceHost) throw new Error(config.error || "地图配置读取失败。");
+    const jsKey = config.key;
     window._AMapSecurityConfig = { serviceHost: config.serviceHost };
     await new Promise<void>((resolve, reject) => {
       const existing = document.querySelector<HTMLScriptElement>("script[data-trip-amap]");
       let timeout: number | undefined;
       const finish = (caught?: Error) => { if (timeout != null) window.clearTimeout(timeout); if (caught) reject(caught); else resolve(); };
       if (existing) { if (window.AMap) finish(); else { existing.addEventListener("load", () => finish(), { once: true }); existing.addEventListener("error", () => finish(new Error("高德地图加载失败。")), { once: true }); timeout = window.setTimeout(() => finish(new Error("高德地图加载超时，请重试。")), 8_000); } return; }
-      const script = document.createElement("script"); script.dataset.tripAmap = "true"; script.src = `https://webapi.amap.com/maps?v=${encodeURIComponent(config.version || "2.0")}&key=${encodeURIComponent(config.key)}`; script.async = true; script.onload = () => finish(); script.onerror = () => finish(new Error("高德地图加载失败。")); timeout = window.setTimeout(() => finish(new Error("高德地图加载超时，请重试。")), 8_000); document.head.appendChild(script);
+      const script = document.createElement("script"); script.dataset.tripAmap = "true"; script.src = `https://webapi.amap.com/maps?v=${encodeURIComponent(config.version || "2.0")}&key=${encodeURIComponent(jsKey)}`; script.async = true; script.onload = () => finish(); script.onerror = () => finish(new Error("高德地图加载失败。")); timeout = window.setTimeout(() => finish(new Error("高德地图加载超时，请重试。")), 8_000); document.head.appendChild(script);
     });
     if (!window.AMap) throw new Error("高德地图加载失败。"); return window.AMap;
   })().catch((caught) => { loader = null; throw caught; });
@@ -72,17 +70,37 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
   const defaultRouteKey = useRef("");
   const [ready, setReady] = useState(false), [error, setError] = useState(""), [search, setSearch] = useState(""), [searching, setSearching] = useState(false), [searchResults, setSearchResults] = useState<{ id: string; name: string; address: string | null; district: string | null; longitude: number; latitude: number }[]>([]), [selectedSearch, setSelectedSearch] = useState<string | null>(null), [selectedMapEntryId, setSelectedMapEntryId] = useState<string | null>(null), [bindingBookingId, setBindingBookingId] = useState(""), [area, setArea] = useState("all"), [category, setCategory] = useState("all"), [dayFilter, setDayFilter] = useState("all"), [memberFilter, setMemberFilter] = useState(workspace?.memberFilter || workspace?.currentMemberId || "all"), [targetDayId, setTargetDayId] = useState(activeDayId || ""), [routeResults, setRouteResults] = useState<Record<string, AMapRouteResult>>({}), [routeComparisons, setRouteComparisons] = useState<Record<string, Partial<Record<AMapRouteMode, AMapRouteResult>>>>({}), [routeStale, setRouteStale] = useState<Record<string, boolean>>({}), [routing, setRouting] = useState<string | null>(null), [viewport, setViewport] = useState<{ south: number; west: number; north: number; east: number } | null>(null), [manualPoint, setManualPoint] = useState<{ longitude: number; latitude: number } | null>(null), [manualName, setManualName] = useState(""), [manualAddress, setManualAddress] = useState(""), [manualBookingId, setManualBookingId] = useState("");
   const activeDay = workspace?.days.find((day) => day.id === activeDayId) || workspace?.days[0];
-  const allDayStops = activeDay && workspace?.routeStopsByDay?.[activeDay.id] ? workspace.routeStopsByDay[activeDay.id] : [];
-  const dayStops = memberFilter === "all" ? allDayStops : allDayStops.filter((stop) => stop.memberStates?.[memberFilter] !== "absent");
+  const timelineNodes = activeDay ? workspace?.timelineNodesByDay?.[activeDay.id] || [] : [];
+  const visibleTimelineNodes = filterTimelineForMember(timelineNodes, memberFilter);
+  const timelineNumbers = numberTimelineNodes(visibleTimelineNodes);
+  const assembledStops = visibleTimelineNodes.filter((node): node is TimelineNode & { place: Place } => Boolean(node.place)).map((node) => ({ id: node.id, source: node.source, title: node.title, place: node.place, sortOrder: node.sortOrder, memberStates: node.memberStates }));
+  const fallbackStops = activeDay && workspace?.routeStopsByDay?.[activeDay.id] ? workspace.routeStopsByDay[activeDay.id] : [];
+  const allDayStops = workspace?.timelineNodesByDay ? assembledStops : fallbackStops;
+  const dayStops = workspace?.timelineNodesByDay
+    ? allDayStops
+    : memberFilter === "all" ? allDayStops : allDayStops.filter((stop) => stop.memberStates?.[memberFilter] !== "absent");
   const persistedDaySegments = activeDay && workspace?.routeSegmentsByDay?.[activeDay.id] ? workspace.routeSegmentsByDay[activeDay.id] : [];
   const daySegments = persistedDaySegments.length
     ? persistedDaySegments.filter((segment) => memberFilter === "all" || (segment.from.memberStates?.[memberFilter] !== "absent" && segment.to.memberStates?.[memberFilter] !== "absent"))
-    : dayStops.slice(1).map((to, index) => { const from = dayStops[index]; return { id: `${from.id}-${to.id}`, from, to, crossCity: from.place.cityId !== to.place.cityId }; });
-  const entries = useMemo<MapEntry[]>(() => workspace?.mapPlaces || places.map((place) => ({ place: { ...place, cityId: "" }, kind: place.candidate ? "candidate" : "itinerary", planStatus: place.candidate ? "candidate" : "selected" })), [workspace, places]);
+    : workspace ? [] : dayStops.slice(1).map((to, index) => { const from = dayStops[index]; return { id: `${from.id}-${to.id}`, from, to, crossCity: from.place.cityId !== to.place.cityId }; });
+  const entries = useMemo<MapEntry[]>(() => workspace?.mapPlaces || places.map((place) => ({ place: { ...place, cityId: "", address: null }, kind: place.candidate ? "candidate" : "itinerary", planStatus: place.candidate ? "candidate" : "selected" })), [workspace, places]);
   const mapEntries = useMemo(() => {
-    if (!workspace || mapMode === "day") {
+    if (workspace && mapMode === "day") {
+      return dayStops.map((stop, index) => ({
+        place: stop.place,
+        kind: stop.source === "booking" ? "booking" as const : "itinerary" as const,
+        planStatus: "selected" as const,
+        category: null,
+        areaKey: null,
+        recommendationTitle: null,
+        timelineId: stop.id,
+        nodeNumber: timelineNumbers.get(stop.id) || index + 1,
+      }));
+    }
+    if (!workspace) return entries;
+    if (mapMode === "day") {
       const order = new Map(dayStops.map((stop, index) => [stop.place.id, index]));
-      return entries.filter((entry) => !workspace || order.has(entry.place.id)).sort((a, b) => (order.get(a.place.id) ?? 9999) - (order.get(b.place.id) ?? 9999) || a.place.id.localeCompare(b.place.id));
+      return entries.filter((entry) => order.has(entry.place.id)).sort((a, b) => (order.get(a.place.id) ?? 9999) - (order.get(b.place.id) ?? 9999) || a.place.id.localeCompare(b.place.id));
     }
     // A Day filter is a visual highlight, not a hard hide.  The library map is
     // an all-trip spatial overview; non-matching places remain visible but are
@@ -94,9 +112,9 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
     mapMode,
     activeDay?.id || "",
     mapMode === "library" ? `${area}:${category}:${dayFilter}` : memberFilter,
-    visible.map((entry) => `${entry.place.id}:${entry.place.longitude}:${entry.place.latitude}`).join(","),
+    visible.map((entry) => `${entry.timelineId || entry.place.id}:${entry.place.longitude}:${entry.place.latitude}`).join(","),
   ].join("|");
-  const fitContext = [mapMode, activeDay?.id || "", area, category, dayFilter, memberFilter, visible.map((entry) => entry.place.id).join(",")].join("|");
+  const fitContext = [mapMode, activeDay?.id || "", area, category, dayFilter, memberFilter, visible.map((entry) => entry.timelineId || entry.place.id).join(",")].join("|");
   const dayHighlightIds = useMemo(() => new Set((workspace?.days.find((day) => day.id === dayFilter)?.items || []).map(({ item }) => item.placeId).filter((id): id is string => Boolean(id))), [dayFilter, workspace]);
   // Tonglu is an area/region under Hangzhou, not a separate Trip City.  Keep
   // the persisted city relation on Hangzhou while using 桐庐 only as the
@@ -111,9 +129,8 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
     const map = mapRef.current, AMap = window.AMap;
     if (!ready || !map || !AMap) return;
     if (overlays.current.length) map.remove(overlays.current);
-    const itineraryNumbers = new Map(mapEntries.filter((entry) => entry.kind === "itinerary").map((entry, index) => [entry.place.id, index + 1]));
     const markers = visible.map((entry) => {
-      const markerNumber = mapMode === "day" ? itineraryNumbers.get(entry.place.id) : null;
+      const markerNumber = mapMode === "day" ? entry.nodeNumber || null : null;
       const baseOpacity = entry.kind === "candidate" ? .28 : entry.kind === "saved" ? .58 : entry.kind === "recommendation" ? .78 : 1;
       const mutedByDay = mapMode === "library" && dayFilter !== "all" && !dayHighlightIds.has(entry.place.id) ? .38 : 1;
       const marker = new AMap.Marker({ position: [entry.place.longitude!, entry.place.latitude!], title: entry.place.name, opacity: baseOpacity * mutedByDay, label: { content: markerNumber ? `${markerNumber}. ${entry.place.name}` : entry.kind === "booking" ? `订单 · ${entry.place.name}` : entry.place.name, direction: "top" } });
@@ -367,7 +384,7 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
 
     return <div className={`plan-map-surface ${mapMode === "library" ? "library-map" : "route-map"}`}>
     {workspace && <div className="map-filter-bar"><div className="map-search"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索地点、餐厅、酒店…" aria-label="地图搜索地点"/><button type="button" onClick={() => setSearch(search.trim())} disabled={searching}>{searching ? "搜索中…" : "搜索"}</button></div><div className="map-target-day"><label>加入目标 Day<select value={targetDayId || activeDay?.id || ""} onChange={(event) => setTargetDayId(event.target.value)}>{workspace.days.map((day) => <option key={day.id} value={day.id}>{shortDate(day.date)} · {day.title}</option>)}</select></label>{mapMode === "library" && <button type="button" onClick={searchThisArea} disabled={searching}>{searching ? "搜索中…" : "搜索此区域"}</button>}<button type="button" onClick={() => setError("请点击地图上的准确位置来创建手动地点。")}>在地图上选点</button><button type="button" onClick={() => { userHasInteractedWithMap.current = false; lastFitSignature.current = ""; mapRef.current?.setFitView(markerObjects.current); }} disabled={!ready}>适配视野</button></div>{mapMode === "library" && <><div className="map-filter-row"><span>地域</span>{[{ key: "all", label: "全部" }, { key: "shanghai", label: "上海" }, { key: "hangzhou", label: "杭州" }, { key: "tonglu", label: "桐庐" }].map((item) => <button type="button" className={area === item.key ? "active" : ""} key={item.key} onClick={() => setArea(item.key)}>{item.label}</button>)}</div><div className="map-filter-row"><span>分类</span>{categoryLabels.map((item) => <button type="button" className={category === item.key ? "active" : ""} key={item.key} onClick={() => setCategory(item.key)}>{item.label}</button>)}</div><div className="map-filter-row"><span>Day</span><button type="button" className={dayFilter === "all" ? "active" : ""} onClick={() => setDayFilter("all")}>全部</button>{workspace.days.map((day) => <button type="button" className={dayFilter === day.id ? "active" : ""} key={day.id} onClick={() => setDayFilter(day.id)}>{shortDate(day.date)}</button>)}</div></>}{mapMode === "day" && <div className="map-filter-row"><span>路线成员</span><button type="button" className={memberFilter === "all" ? "active" : ""} onClick={() => setMemberFilter("all")}>全体</button>{(workspace.members || []).map((member) => <button type="button" className={memberFilter === member.id ? "active" : ""} key={member.id} onClick={() => setMemberFilter(member.id)}>{member.displayName}</button>)}</div>}</div>}
-    {searchResults.length > 0 && <div className="map-search-results"><b>搜索结果 · 选择后可加入或暂存</b>{searchResults.map((poi) => <article key={poi.id} className={selectedSearch === poi.id ? "selected" : ""} onClick={() => setSelectedSearch(poi.id)}><div><strong>{poi.name}</strong><small>{[poi.district, poi.address].filter(Boolean).join(" · ") || "暂无地址"}</small></div>{selectedSearch === poi.id && <div className="map-search-actions"><button type="button" onClick={() => saveSearch("add")} disabled={!targetDayId}>加入 {shortDate((workspace?.days.find((day) => day.id === targetDayId) || activeDay)?.date || null)}</button><button type="button" onClick={() => saveSearch("save")}>暂存</button><button type="button" onClick={() => saveSearch("recommendation")}>收藏攻略</button>{workspace?.bookings?.length ? <div className="map-binding-actions"><select aria-label="选择要绑定的订单" value={bindingBookingId} onChange={(event) => setBindingBookingId(event.target.value)}><option value="">绑定到订单…</option>{workspace.bookings.map((booking) => <option key={booking.id} value={booking.id}>{booking.title}</option>)}</select><button type="button" onClick={bindSearchToBooking} disabled={!bindingBookingId}>确认绑定地点</button></div> : null}</div>}</article>)}</div>}
+    {searchResults.length > 0 && <div className="map-search-results"><b>搜索结果 · 选择后可加入或暂存</b>{searchResults.map((poi) => <article key={poi.id} className={selectedSearch === poi.id ? "selected" : ""} onClick={() => setSelectedSearch(poi.id)}><div><strong>{poi.name}</strong><small>{[poi.district, poi.address].filter(Boolean).join(" · ") || "暂无地址"}</small></div>{selectedSearch === poi.id && <div className="map-search-actions"><button type="button" onClick={() => saveSearch("add")} disabled={!targetDayId}>加入 {shortDate((workspace?.days.find((day) => day.id === targetDayId) || activeDay)?.date || null)}</button><button type="button" onClick={() => saveSearch("save")}>暂存</button><button type="button" onClick={() => saveSearch("recommendation")}>收藏攻略</button>{workspace?.bookings?.length ? <div className="map-binding-actions"><select aria-label="选择要绑定的订单" value={bindingBookingId} onChange={(event) => setBindingBookingId(event.target.value)}><option value="">绑定到订单…</option>{workspace.bookings.map((booking) => <option key={booking.id} value={booking.id}>{booking.title}</option>)}</select><button type="button" onClick={bindSearchToBooking} disabled={!bindingBookingId}>绑定到订单</button></div> : null}</div>}</article>)}</div>}
     {selectedMapEntryId && mapMode === "library" && (() => { const entry = entries.find((candidate) => candidate.place.id === selectedMapEntryId); if (!entry) return null; const canAdd = entry.kind !== "booking"; return <section className="map-entry-actions"><div><b>{entry.place.name}</b><small>{entry.place.address || "已在旅行地点库中"}</small></div><div><button type="button" onClick={() => saveMapEntry("add")} disabled={!canAdd || !targetDayId}>{canAdd ? `加入 ${shortDate((workspace?.days.find((day) => day.id === targetDayId) || activeDay)?.date || null)}` : "Booking 地点"}</button>{entry.kind !== "saved" && <button type="button" onClick={() => saveMapEntry("save")}>暂存</button>}{entry.kind !== "recommendation" && <button type="button" onClick={() => saveMapEntry("recommendation")}>收藏攻略</button>}<button type="button" className="map-entry-dismiss" onClick={() => setSelectedMapEntryId(null)}>关闭</button></div></section>; })()}
     {manualPoint && workspace && <div className="map-manual-point" role="dialog" aria-label="手动地图选点"><b>手动地点 · {manualPoint.longitude.toFixed(5)}, {manualPoint.latitude.toFixed(5)}</b><label>名称<input value={manualName} onChange={(event) => setManualName(event.target.value)} placeholder="例如：集合点" autoFocus /></label><label>地址或备注<input value={manualAddress} onChange={(event) => setManualAddress(event.target.value)} placeholder="可选" /></label>{workspace.bookings?.length ? <label>同时绑定订单（可选）<select value={manualBookingId} onChange={(event) => setManualBookingId(event.target.value)}><option value="">不绑定订单</option>{workspace.bookings.map((booking) => <option key={booking.id} value={booking.id}>{booking.title}</option>)}</select></label> : null}<div><button type="button" onClick={createManualPoint} disabled={searching || !manualName.trim()}>保存地点</button><button type="button" onClick={() => setManualPoint(null)}>取消</button></div></div>}
     {mapMode === "library" && workspace?.savedPlaces?.length ? <section className="saved-place-list"><header><b>暂存地点</b><small>不属于正式行程，选择后再加入目标 Day</small></header>{workspace.savedPlaces.map((saved) => <article key={saved.id}><div><strong>{saved.place.name}</strong><small>{saved.place.address || saved.note || "暂存地点"}</small></div><div><button type="button" onClick={async () => { const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/plan/items`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ dayId: targetDayId || activeDay?.id, placeId: saved.place.id, itemType: "place" }) }); if (response.ok) location.reload(); }}>加入 Day</button><button type="button" onClick={() => saveSavedAsRecommendation(saved)} disabled={searching}>收藏攻略</button><button type="button" onClick={async () => { const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/saved-places?id=${encodeURIComponent(saved.id)}`, { method: "DELETE" }); if (response.ok) location.reload(); }}>删除</button></div></article>)}</section> : null}

@@ -112,6 +112,9 @@ export async function replaceDayPresence(input: { tripId: string; dayId: string;
     let startsAt: string | null = null, endsAt: string | null = null;
     if (update.state === "present") { startsAt = start; endsAt = end; }
     if (update.state === "partial") {
+      // A partial-presence record is the only state that requires an
+      // interval. Present/absent deliberately clear any stale interval.
+      if (!update.startsAt || !update.endsAt) throw new Error(`INCOMPLETE_PRESENCE:${update.memberId}`);
       startsAt = localTimeToUtc(day.date, update.startsAt, day.timezone, "start");
       endsAt = localTimeToUtc(day.date, update.endsAt, day.timezone, "end");
       if (Date.parse(endsAt) <= Date.parse(startsAt)) throw new Error("INVALID_PRESENCE_RANGE");

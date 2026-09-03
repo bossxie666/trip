@@ -2,7 +2,7 @@ import { getCurrentMember } from "@/services/auth.server";
 import { deleteItineraryItem, replaceItineraryParticipantOverrides, updateItineraryItem } from "@/services/itinerary-repository.server";
 import { getDb } from "@/db";
 import { and, eq } from "drizzle-orm";
-import { dayPresenceRecords, dayRecords, itineraryItemParticipantOverrideRecords, memberPresenceWindowRecords, memberRecords, tripMemberRecords, tripRecords } from "@/db/schema";
+import { dayPresenceRecords, dayRecords, itineraryItemParticipantOverrideRecords, itineraryItemRecords, memberPresenceWindowRecords, memberRecords, tripMemberRecords, tripRecords } from "@/db/schema";
 
 async function tripIdForSlug(slug: string) {
   return (await getDb().select({ id: tripRecords.id }).from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1))[0]?.id;

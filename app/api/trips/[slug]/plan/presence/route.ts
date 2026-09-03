@@ -31,7 +31,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     const state = row.presenceCoverage !== "complete" || !Number.isFinite(start) ? "unknown" : memberWindows.some((window) => window.start <= start && end <= window.end) ? "present" : memberWindows.some((window) => window.start < end && window.end > start) ? "unknown" : "absent";
     return [row.memberId, { state, startsAt: null, endsAt: null }];
   }));
-  return Response.json({ day: { id: day.id, title: day.title, date: day.date }, members, states: Object.fromEntries(Object.entries(details).map(([id, value]) => [id, value.state])), details });
+  return Response.json({ day: { id: day.id, title: day.title, date: day.date }, members, states: Object.fromEntries(Object.entries(details).map(([id, value]) => [id, (value as { state: string }).state])), details });
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ slug: string }> }) {
@@ -51,8 +51,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ slug
     return Response.json({ presence });
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
-    const status = code === "MEMBER_NOT_IN_TRIP" ? 403 : code === "DAY_CONTEXT_INCOMPLETE" || code === "PRESENCE_OVERLAP" ? 409 : 400;
-    const message = status === 403 ? "你不是这条行程的成员。" : status === 409 ? "当天已有不完整的在场区间，请先整理后再确认。" : code === "INVALID_PRESENCE_RANGE" ? "部分在场的时间范围无效。" : code === "INVALID_PRESENCE_TIME" ? "请输入有效的时间。" : "当天成员数据无效。";
+    const status = code === "MEMBER_NOT_IN_TRIP" ? 403 : code === "DAY_CONTEXT_INCOMPLETE" || code === "PRESENCE_OVERLAP" || code.startsWith("INCOMPLETE_PRESENCE:") ? 409 : 400;
+    let incompleteMember = "";
+    if (code.startsWith("INCOMPLETE_PRESENCE:")) {
+      const memberId = code.slice("INCOMPLETE_PRESENCE:".length);
+      incompleteMember = (await getDb().select({ displayName: memberRecords.displayName }).from(memberRecords).where(eq(memberRecords.id, memberId)).limit(1))[0]?.displayName || memberId;
+    }
+    const message = status === 403 ? "你不是这条行程的成员。" : incompleteMember ? `${incompleteMember}的部分在场时间不完整，请填写开始和结束时间。` : status === 409 ? "当天已有不完整的在场区间，请先整理后再确认。" : code === "INVALID_PRESENCE_RANGE" ? "部分在场的时间范围无效。" : code === "INVALID_PRESENCE_TIME" ? "请输入有效的时间。" : "当天成员数据无效。";
     return Response.json({ error: message, code: code || "INVALID_PRESENCE_STATE" }, { status });
   }
 }

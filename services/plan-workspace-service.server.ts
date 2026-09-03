@@ -9,6 +9,7 @@ import {
 import { findTripBySlug } from "@/services/trip-repository.server";
 import { getDayTimeline } from "@/services/day-timeline-service.server";
 import { getPersonalBudgetWorkspace } from "@/services/budget-service.server";
+import { assembleTimeline, type TimelineNode } from "@/services/timeline-assembler";
 
 export async function getPlanWorkspace(slug: string, memberId?: string) {
   const trip = await findTripBySlug(slug);
@@ -70,8 +71,6 @@ export async function getPlanWorkspace(slug: string, memberId?: string) {
     const planStatus = formalItems.some(({ item }) => item.lockedAt != null) ? "locked" as const : formal ? "selected" as const : "candidate" as const;
     return { place, kind: formal ? "itinerary" as const : booking ? "booking" as const : saved ? "saved" as const : recommendation ? "recommendation" as const : "candidate" as const, planStatus, category: recommendationMeta?.category || null, areaKey: recommendationMeta?.areaKey || null, recommendationTitle: recommendationMeta?.title || null };
   });
-  type RouteStop = { id: string; source: "itinerary" | "booking"; title: string; place: typeof placeRecords.$inferSelect; sortOrder: number; memberStates?: Record<string, "present" | "absent" | "partial" | "unknown"> };
-  const routeStopsByDay = new Map<string, RouteStop[]>();
   const memberIds = presenceRows.map((member) => member.memberId);
   const timezoneOffset = stored.timezone === "Asia/Shanghai" ? "+08:00" : stored.timezone === "Asia/Tokyo" ? "+09:00" : "+00:00";
   const dayBounds = (date: string) => {
@@ -116,39 +115,24 @@ export async function getPlanWorkspace(slug: string, memberId?: string) {
     const windows = presenceWindows.filter((window) => window.memberId === memberId).some((window) => Date.parse(window.startsAt) <= instant && (window.endsAt == null || instant < Date.parse(window.endsAt)));
     return windows ? "present" : "absent";
   };
+  const timelineAssembly = assembleTimeline({
+    days: days.map((day) => ({ id: day.id, date: day.date, dayNumber: day.dayNumber })),
+    items: items.map(({ item, place }) => ({ ...item, place, lockedAt: item.lockedAt, memberStates: itemStates(item, days.find((day) => day.id === item.dayId)?.date || null) })),
+    bookings: bookings.map(({ booking }) => ({
+      ...booking,
+      originPlace: booking.originPlaceId ? bookingRelatedPlaces.find((candidate) => candidate.id === booking.originPlaceId) || null : null,
+      destinationPlace: booking.destinationPlaceId ? bookingRelatedPlaces.find((candidate) => candidate.id === booking.destinationPlaceId) || null : null,
+      memberStates: bookingMemberStates(booking.id),
+    })),
+  });
+  type RouteStop = { id: string; source: "itinerary" | "booking"; title: string; place: typeof placeRecords.$inferSelect; sortOrder: number; memberStates?: Record<string, "present" | "absent" | "partial" | "unknown"> };
+  const toRouteStop = (node: TimelineNode): RouteStop | null => node.place ? { id: node.id, source: node.source, title: node.title, place: node.place as typeof placeRecords.$inferSelect, sortOrder: node.sortOrder, memberStates: node.memberStates } : null;
+  const routeStopsByDay = new Map<string, RouteStop[]>(), routeSegmentsByDay = new Map<string, { id: string; from: RouteStop; to: RouteStop; crossCity: boolean }[]>();
   for (const day of days) {
-    const stops = items.filter(({ item, place }) => item.dayId === day.id && Boolean(place)).map(({ item, place }) => ({ id: item.id, source: "itinerary" as const, title: item.title, place: place!, sortOrder: item.sortOrder, memberStates: itemStates(item, day.date) }));
-    const dayBookings: RouteStop[] = [];
-    if (day.date) for (const { booking, place } of bookings) {
-      const directPlace = place || (booking.placeId ? bookingRelatedPlaces.find((candidate) => candidate.id === booking.placeId) : null);
-      // Accommodation contributes only explicit check-in / checkout anchors.
-      // It is never injected as a daily start/end assumption; users add the
-      // same Hotel Place as ordinary Items whenever they actually return.
-      if (directPlace && (booking.startDateLocal === day.date || booking.endDateLocal === day.date)) dayBookings.push({ id: booking.id, source: "booking", title: booking.title, place: directPlace, sortOrder: booking.endDateLocal === day.date && booking.startDateLocal !== day.date ? 10_000 : -100, memberStates: bookingMemberStates(booking.id) });
-      const origin = booking.originPlaceId ? bookingRelatedPlaces.find((candidate) => candidate.id === booking.originPlaceId) : null;
-      const destination = booking.destinationPlaceId ? bookingRelatedPlaces.find((candidate) => candidate.id === booking.destinationPlaceId) : null;
-      if (origin && booking.startDateLocal === day.date) dayBookings.push({ id: `${booking.id}:origin`, source: "booking", title: `${booking.title} · 出发`, place: origin, sortOrder: -100, memberStates: bookingMemberStates(booking.id) });
-      if (destination && booking.endDateLocal === day.date) dayBookings.push({ id: `${booking.id}:destination`, source: "booking", title: `${booking.title} · 到达`, place: destination, sortOrder: -99, memberStates: bookingMemberStates(booking.id) });
-    }
-    const merged = [...dayBookings, ...stops].sort((a, b) => a.sortOrder - b.sortOrder || (a.source === "booking" ? -1 : 1) || a.id.localeCompare(b.id));
-    routeStopsByDay.set(day.id, merged);
-  }
-  const routeSegmentsByDay = new Map<string, { id: string; from: RouteStop; to: RouteStop; crossCity: boolean }[]>();
-  const transportBookingIds = new Set(bookings.filter(({ booking }) => booking.type === "flight" || booking.type === "train").map(({ booking }) => booking.id));
-  for (const [dayId, stops] of routeStopsByDay.entries()) {
-    const segments = [];
-    for (let index = 1; index < stops.length; index += 1) {
-      const from = stops[index - 1], to = stops[index];
-      // A flight/train Booking is the authoritative cross-city leg.  Do not
-      // ask AMap to route across that transport anchor.  A same-city place
-      // immediately before/after an endpoint is still a useful local leg.
-      const fromBookingId = from.source === "booking" ? from.id.split(":")[0] : null;
-      const toBookingId = to.source === "booking" ? to.id.split(":")[0] : null;
-      const crossCity = from.place.cityId !== to.place.cityId;
-      if (crossCity && ((fromBookingId && transportBookingIds.has(fromBookingId)) || (toBookingId && transportBookingIds.has(toBookingId)))) continue;
-      segments.push({ id: `${from.id}-${to.id}`, from, to, crossCity });
-    }
-    routeSegmentsByDay.set(dayId, segments);
+    const assembly = timelineAssembly[day.id];
+    const stops = assembly.nodes.map(toRouteStop).filter((stop): stop is RouteStop => Boolean(stop));
+    routeStopsByDay.set(day.id, stops);
+    routeSegmentsByDay.set(day.id, assembly.localEdges.map((edge) => { const from = toRouteStop(edge.from), to = toRouteStop(edge.to); return from && to ? { id: edge.id, from, to, crossCity: edge.crossCity } : null; }).filter((segment): segment is { id: string; from: RouteStop; to: RouteStop; crossCity: boolean } => Boolean(segment)));
   }
   const bookingPlace = (id: string | null) => {
     const place = id ? bookingRelatedPlaces.find((candidate) => candidate.id === id) : null;
@@ -169,6 +153,8 @@ export async function getPlanWorkspace(slug: string, memberId?: string) {
     mapPlaces,
     routeStopsByDay: Object.fromEntries(routeStopsByDay),
     routeSegmentsByDay: Object.fromEntries(routeSegmentsByDay),
+    timelineNodesByDay: Object.fromEntries(Object.entries(timelineAssembly).map(([dayId, assembly]) => [dayId, assembly.nodes])),
+    timelineEdgesByDay: Object.fromEntries(Object.entries(timelineAssembly).map(([dayId, assembly]) => [dayId, assembly.edges])),
     routePreferences,
   };
 }

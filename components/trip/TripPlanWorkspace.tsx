@@ -7,16 +7,17 @@ import { ItineraryItemControl } from "./ItineraryItemControl";
 import { ItineraryOrderControls } from "./ItineraryOrderControls";
 import { PlanAddControl } from "./PlanAddControl";
 import { BudgetWorkspace } from "./BudgetWorkspace";
-import { TimelinePlacementControl } from "./TimelinePlacementControl";
 import { BookingPlaceControl } from "./BookingPlaceControl";
-import { BookingDisplayNameControl } from "./BookingDisplayNameControl";
 import { BookingCreateControl } from "./BookingCreateControl";
+import { BookingEditControl } from "./BookingEditControl";
 import { PlaceDiscoveryControl } from "./PlaceDiscoveryControl";
 import { ItineraryItemPlaceControl } from "./ItineraryItemPlaceControl";
 import { TransportIcon, iconForBookingType, iconForItemType } from "./TransportIcon";
 import { MemberIdentityControl, type SessionMemberSummary } from "@/components/auth/MemberIdentityControl";
 import { EditTripForm } from "./EditTripForm";
 import type { getPlanWorkspace } from "@/services/plan-workspace-service.server";
+import { resolveDayLabel } from "@/services/day-label";
+import { filterTimelineForMember, numberTimelineNodes, type TimelineEdge, type TimelineNode } from "@/services/timeline-assembler";
 
 type Workspace = NonNullable<Awaited<ReturnType<typeof getPlanWorkspace>>>;
 type View = "planning" | "map" | "budget";
@@ -24,7 +25,6 @@ type MapMode = "day" | "library";
 type AreaFilter = "shanghai" | "hangzhou" | "tonglu";
 type CategoryFilter = "all" | "attraction" | "food" | "cafe" | "shopping" | "guide" | "other";
 type LibrarySort = "core" | "recent";
-type TimelineEntry = Workspace["days"][number]["timeline"][number];
 
 const categoryLabels = { attraction: "景点", food: "美食", cafe: "咖啡", shopping: "购物", hotel: "酒店", experience: "体验", other: "其他" } as const;
 const areaFilters: { key: AreaFilter; label: string }[] = [{ key: "shanghai", label: "上海" }, { key: "hangzhou", label: "杭州" }, { key: "tonglu", label: "桐庐" }];
@@ -33,7 +33,9 @@ const categoryFilters: { key: CategoryFilter; label: string }[] = [{ key: "all",
 function money(value: number | null | undefined) { return value == null ? "—" : `¥${(value / 100).toFixed(2).replace(/\.00$/, "")}`; }
 function shortDate(date: string | null) { return date ? date.slice(5).replace("-", "/") : "日期未定"; }
 function fullRange(start: string | null, end: string | null) { if (!start || !end) return "日期未定"; return `${start.replaceAll("-", ".")} — ${end.slice(5).replaceAll("-", ".")}`; }
-function dayArea(day: Workspace["days"][number]) { if (day.title.includes("桐庐")) return "桐庐"; if (day.title.includes("前往杭州") || day.items.some(({ item }) => item.itemType === "transit")) return "上海→杭州"; if (day.title.includes("杭州")) return "杭州"; if (day.title.includes("上海") || day.title.includes("浦东")) return "上海"; return day.title; }
+function dayArea(day: Workspace["days"][number], bookings: Workspace["bookings"] = [], cities: { id: string; name: string }[] = []) {
+  return resolveDayLabel(day, bookings.map(({ booking, originPlace, destinationPlace }) => ({ ...booking, originPlace, destinationPlace })), cities);
+}
 function bookingStatus(status: string, type: string) { return status === "tentative" ? "计划中" : status === "cancelled" ? "已取消" : type === "flight" || type === "train" ? "已购" : "已订"; }
 function bookingTime(booking: Workspace["bookings"][number]["booking"]) {
   if (booking.startAt && booking.endAt && booking.timezone) {
@@ -46,7 +48,7 @@ function bookingTime(booking: Workspace["bookings"][number]["booking"]) {
 export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query, areaFilter, categoryFilter, libraryMode = false, librarySort = "core", libraryPage = 1, memberFilter = "all", costMode = "expected", currentMember = null }: { workspace: Workspace; activeDayId: string; view: View; mapMode: MapMode; query: string; areaFilter: AreaFilter; categoryFilter: CategoryFilter; libraryMode?: boolean; librarySort?: LibrarySort; libraryPage?: number; memberFilter?: string; costMode?: "expected" | "actual"; currentMember?: SessionMemberSummary | null }) {
   const { trip, days, recommendations, bookings } = workspace;
   const activeDay = days.find((day) => day.id === activeDayId) || days[0];
-  const dayLabels = days.map((day) => ({ id: day.id, label: `${shortDate(day.date)} ${dayArea(day)}` }));
+  const dayLabels = days.map((day) => ({ id: day.id, label: `${shortDate(day.date)} ${dayArea(day, bookings, trip.cities)}` }));
   const stageSummary = trip.stages?.length ? trip.stages.map((stage) => `${stage.city?.name || stage.title}${stage.members?.length || 0}人`).join(" · ") : `${trip.members?.length || trip.people}人参与`;
 
   const filteredRecommendations = recommendations.filter((recommendation) => {
@@ -129,56 +131,67 @@ export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query
     </>
   );
 
-  const timelinePlacementEntries = activeDay?.timeline.map(({ source, sourceId, anchorKind }) => ({ source, sourceId, anchorKind })) || [];
-  const presenceControl = activeDay ? <DayPresenceControl slug={trip.slug} dayId={activeDay.id} dayLabel={`${shortDate(activeDay.date)} · ${dayArea(activeDay)}`} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} initialStates={workspace.dayPresenceByDay?.[activeDay.id] || {}} initialDetails={workspace.dayPresenceDetailsByDay?.[activeDay.id] || {}} /> : null;
-  const visibleTimeline = (activeDay?.timeline || []).filter((entry) => {
-    if (memberFilter === "all") return true;
-    if (entry.source === "booking") return bookings.find(({ booking }) => booking.id === entry.sourceId.split(":")[0])?.memberStates?.[memberFilter] !== "absent";
-    const item = activeDay?.items.find(({ item }) => item.id === entry.sourceId);
-    // Keep unknown items visible so the user can open the participant editor;
-    // only an explicit absence removes an item from a member view.
-    return item?.participantStates?.[memberFilter] !== "absent";
-  });
+  const existingPlaceChoices = [...new Map([...(workspace.savedPlaces || []).map(({ place, city }) => ({ id: place.id, name: place.name, address: place.address, district: place.district, cityName: city.name, source: "existing" as const })), ...(workspace.mapPlaces || []).map(({ place }) => ({ id: place.id, name: place.name, address: place.address, district: place.district, cityName: trip.cities.find((city) => city.id === place.cityId)?.name || null, source: "existing" as const }))].map((place) => [place.id, place])).values()];
+  const existingTransport = workspace.bookings.filter(({ booking, memberStates }) => ["flight", "train", "other"].includes(booking.type) && (!workspace.currentMemberId || memberStates?.[workspace.currentMemberId] !== "absent")).map(({ booking, originPlace, destinationPlace }) => ({ id: booking.id, title: booking.title, origin: booking.originLabel || originPlace?.name || "起点待确认", destination: booking.destinationLabel || destinationPlace?.name || "终点待确认", type: booking.type, totalAmountMinor: booking.totalAmountMinor }));
 
-  const renderTimelineEntry = (entry: TimelineEntry, index: number) => {
-    const detail = entry.source === "itinerary" ? activeDay?.items.find(({ item }) => item.id === entry.sourceId) : null;
-    const itemIds = activeDay?.items.map(({ item }) => item.id) || [];
-    const displayTime = entry.timeMode === "opening_hours" ? "开园 → 闭园" : entry.timeLocal ? `${entry.timeLocal}${entry.endTimeLocal && entry.timeMode === "range" ? `–${entry.endTimeLocal}` : ""}` : (entry.anchorKind === "start" ? "入住" : entry.anchorKind === "stay" ? "住宿中" : entry.anchorKind === "end" ? "退房" : "时间待定");
-    const entryBookingId = entry.source === "booking" ? entry.sourceId.split(":")[0] : null;
+  const presenceControl = activeDay ? <DayPresenceControl slug={trip.slug} dayId={activeDay.id} dayLabel={`${shortDate(activeDay.date)} · ${dayArea(activeDay, bookings, trip.cities)}`} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} initialStates={workspace.dayPresenceByDay?.[activeDay.id] || {}} initialDetails={workspace.dayPresenceDetailsByDay?.[activeDay.id] || {}} /> : null;
+  const timelineNodes = (activeDay ? (workspace.timelineNodesByDay?.[activeDay.id] || []) : []) as TimelineNode[];
+  const timelineEdges = (activeDay ? (workspace.timelineEdgesByDay?.[activeDay.id] || []) : []) as TimelineEdge[];
+  const visibleTimeline = filterTimelineForMember(timelineNodes, memberFilter);
+  const itemIds = activeDay?.items.map(({ item }) => item.id) || [];
+  const nodeNumbers = numberTimelineNodes(visibleTimeline);
+
+  const renderTimelineEdge = (edge: TimelineEdge) => {
+    const bookingRecord = edge.bookingId ? bookings.find(({ booking }) => booking.id === edge.bookingId) : null;
+    if (edge.kind === "long-distance" && bookingRecord) {
+      const members = Object.entries(bookingRecord.memberStates || {}).filter(([, state]) => state === "present").map(([id]) => trip.members?.find((member) => member.id === id)?.displayName).filter((name): name is string => Boolean(name));
+      return <div className="timeline-edge timeline-edge-booking" key={edge.id}><TransportIcon kind={iconForBookingType(bookingRecord.booking.type, bookingRecord.booking.title)} size={15} /><div><b>{bookingRecord.booking.title}</b><span>{bookingStatus(bookingRecord.booking.status, bookingRecord.booking.type)} · {bookingTime(bookingRecord.booking)}{bookingRecord.booking.totalAmountMinor != null ? ` · ${money(bookingRecord.booking.totalAmountMinor)}` : ""}{members.length ? ` · ${members.join("、")}` : ""}</span></div></div>;
+    }
+    return <div className="timeline-edge timeline-edge-local" key={edge.id}><span>交通方式待选择</span><small>相邻地点之间的本地路线由地图视图计算</small></div>;
+  };
+
+  const renderTimelineNode = (node: TimelineNode) => {
+    const entryBookingId = node.bookingId || null;
     const entryBookingRecord = entryBookingId ? bookings.find(({ booking }) => booking.id === entryBookingId) : null;
     const entryBooking = entryBookingRecord?.booking || null;
-    const entryMemberNames = Object.entries(entryBookingRecord?.memberStates || {}).filter(([, state]) => state === "present").map(([memberId]) => trip.members?.find((member) => member.id === memberId)?.displayName).filter((name): name is string => Boolean(name));
-    const isTransportBooking = entry.source === "booking" && (entryBooking?.type === "flight" || entryBooking?.type === "train");
+    const detail = node.itemId ? activeDay?.items.find(({ item }) => item.id === node.itemId) : null;
+    const displayTime = detail?.item.timeMode === "opening_hours" ? "开园 → 闭园" : node.timeLocal || (node.anchorKind === "start" ? "入住" : node.anchorKind === "stay" ? "住宿中" : node.anchorKind === "end" ? "退房" : "时间待定");
+    const memberNames = Object.entries(node.memberStates || {}).filter(([, state]) => state === "present").map(([id]) => trip.members?.find((member) => member.id === id)?.displayName).filter((name): name is string => Boolean(name));
+    const number = nodeNumbers.get(node.id);
+    const isTransportBooking = Boolean(entryBooking && ["flight", "train", "other"].includes(entryBooking.type));
     const bookingPlace = entryBookingRecord?.place;
     const originPlace = entryBookingRecord?.originPlace;
     const destinationPlace = entryBookingRecord?.destinationPlace;
-    return <article key={`${entry.source}-${entry.sourceId}`} className={entry.source === "booking" ? "booking-entry" : "item-entry"}>
-      <div className="timeline-index">{entry.source === "booking" ? <TransportIcon kind={iconForBookingType(entryBooking?.type || "", entryBooking?.title || "")} /> : String(index + 1).padStart(2, "0")}</div>
+    return <article key={`${node.source}-${node.id}`} className={node.nodeKind === "anchor" ? "booking-entry timeline-anchor" : node.source === "booking" ? "booking-entry" : "item-entry"}>
+      <div className="timeline-index">{number ? String(number).padStart(2, "0") : <TransportIcon kind={node.nodeKind === "anchor" ? "hotel" : iconForBookingType(entryBooking?.type || "", entryBooking?.title || "")} />}</div>
       <div>
-        <div className="timeline-meta"><span>{displayTime}</span><span>{entry.source === "booking" ? "已确认订单" : detail?.item.lockedAt ? "已锁定" : "可调整"}</span>{entry.source === "booking" && activeDay && <TimelinePlacementControl slug={trip.slug} dayId={activeDay.id} entries={timelinePlacementEntries} index={index} />}</div>
-        {isTransportBooking && <div className="transport-endpoint transport-origin"><span>{originPlace?.name || "起点待确认"}</span>{entryBookingId && <BookingPlaceControl slug={trip.slug} bookingId={entryBookingId} slot="origin" cities={trip.cities.map((city) => ({ id: city.id, name: city.name }))} currentPlace={originPlace || null} label={originPlace ? "修改起点" : "确认起点"} />}</div>}
-        <h3 className="timeline-title"><TransportIcon kind={detail ? iconForItemType(detail.item.itemType, detail.item.title, detail.item.note || "") : iconForBookingType(entryBooking?.type || "calendar", entryBooking?.title || "")} size={15} />{entry.title}</h3>
+        <div className="timeline-meta"><span>{displayTime}</span><span>{node.nodeKind === "anchor" ? "住宿订单" : node.source === "booking" ? bookingStatus(entryBooking?.status || "tentative", entryBooking?.type || "") : detail?.item.lockedAt ? "已锁定" : "可调整"}</span></div>
+        {isTransportBooking && node.endpoint === "origin" && entryBookingId && <div className="transport-endpoint transport-origin"><span>{originPlace?.name || entryBooking?.originLabel || "起点待确认"}</span><BookingPlaceControl slug={trip.slug} bookingId={entryBookingId} slot="origin" cities={trip.cities.map((city) => ({ id: city.id, name: city.name }))} currentPlace={originPlace || null} currentLabel={entryBooking?.originLabel} label={originPlace ? "修改起点" : "完善起点"} /></div>}
+        {isTransportBooking && node.endpoint === "destination" && entryBookingId && <div className="transport-endpoint transport-destination"><span>{destinationPlace?.name || entryBooking?.destinationLabel || "终点待确认"}</span><BookingPlaceControl slug={trip.slug} bookingId={entryBookingId} slot="destination" cities={trip.cities.map((city) => ({ id: city.id, name: city.name }))} currentPlace={destinationPlace || null} currentLabel={entryBooking?.destinationLabel} label={destinationPlace ? "修改终点" : "完善终点"} /></div>}
+        <h3 className="timeline-title"><TransportIcon kind={detail ? iconForItemType(detail.item.itemType, detail.item.title, detail.item.note || "") : node.nodeKind === "anchor" ? "hotel" : iconForBookingType(entryBooking?.type || "calendar", entryBooking?.title || "")} size={15} />{node.title}</h3>
         {detail && <>
-          <p>{detail.item.placeId ? `地点：${detail.place?.name || "已绑定"}` : "地点待确认"}{detail.recommendationTitle ? ` · 来源：${detail.recommendationTitle}` : ""}{detail.item.timeMode === "opening_hours" ? " · 营业时间待确认" : ""}</p>
+          <p>{detail.item.placeId ? `地点：${detail.place?.name || "已绑定"}` : "地点待确认"}{detail.recommendationTitle ? ` · 来源：${detail.recommendationTitle}` : ""}{detail.item.timeMode === "opening_hours" ? ` · ${detail.item.openingHoursNote || "营业时间待确认"}` : ""}</p>
           {detail.item.placeId ? null : <ItineraryItemPlaceControl slug={trip.slug} itemId={detail.item.id} cities={trip.cities.map((city) => ({ id: city.id, name: city.name }))} currentPlace={null} />}
           <ItineraryOrderControls slug={trip.slug} dayId={activeDay!.id} itemId={detail.item.id} itemIds={itemIds} locked={Boolean(detail.item.lockedAt)} />
           <ItineraryItemControl slug={trip.slug} item={detail.item} days={dayLabels} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} participantStates={detail.participantStates} participantOverrides={detail.participantOverrides} dayPresenceState={workspace.dayPresenceByDay?.[activeDay!.id] || {}} allowOpeningHours={detail.item.itemType !== "lodging" && !/酒店|住宿|入住/.test(detail.item.title)} />
         </>}
-        {entry.source === "booking" && <p>已确认订单，成员与费用分别记录。{entryBooking?.totalAmountMinor != null ? ` · ${money(entryBooking.totalAmountMinor)}` : ""}{entryMemberNames.length ? ` · ${entryMemberNames.join("、")}` : ""}</p>}
-        {isTransportBooking && <div className="transport-endpoint transport-destination"><span>{destinationPlace?.name || "终点待确认"}</span>{entryBookingId && <BookingPlaceControl slug={trip.slug} bookingId={entryBookingId} slot="destination" cities={trip.cities.map((city) => ({ id: city.id, name: city.name }))} currentPlace={destinationPlace || null} label={destinationPlace ? "修改终点" : "确认终点"} />}</div>}
-        {entryBooking?.type === "hotel" && <div className="transport-endpoint booking-place"><span>{bookingPlace?.name || "酒店地点待确认"}</span>{entryBookingId && <BookingPlaceControl slug={trip.slug} bookingId={entryBookingId} slot="place" cities={trip.cities.map((city) => ({ id: city.id, name: city.name }))} currentPlace={bookingPlace || null} label={bookingPlace ? "修改地点" : "确认地点"} />}<BookingDisplayNameControl slug={trip.slug} bookingId={entryBookingId || ""} initialTitle={entryBooking?.title || ""} /></div>}
+        {entryBooking && node.nodeKind === "anchor" && <p>{entryBooking.status === "confirmed" ? "已确认订单" : bookingStatus(entryBooking.status, entryBooking.type)}，成员与费用分别记录。{entryBooking.totalAmountMinor != null ? ` · ${money(entryBooking.totalAmountMinor)}` : ""}{memberNames.length ? ` · ${memberNames.join("、")}` : ""}</p>}
+        {entryBooking && node.nodeKind === "endpoint" && node.endpoint === "origin" && <><p>{entryBooking.title} · {entryBooking.status === "confirmed" ? "已确认订单" : bookingStatus(entryBooking.status, entryBooking.type)}{entryBooking.totalAmountMinor != null ? ` · ${money(entryBooking.totalAmountMinor)}` : ""}{memberNames.length ? ` · ${memberNames.join("、")}` : ""}</p><BookingEditControl slug={trip.slug} booking={entryBookingRecord!} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} existingPlaces={existingPlaceChoices} /></>}
+        {entryBooking?.type === "hotel" && node.nodeKind === "anchor" && <div className="transport-endpoint booking-place"><span>{bookingPlace?.name || "酒店地点待确认"}</span><BookingEditControl slug={trip.slug} booking={entryBookingRecord!} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} existingPlaces={existingPlaceChoices} /></div>}
       </div>
     </article>;
   };
 
+  const timelineView = visibleTimeline.map((node, index) => <div className="timeline-sequence" key={node.id}>{index > 0 && (() => { const previous = visibleTimeline[index - 1]; const edge = timelineEdges.find((candidate) => candidate.from.id === previous.id && candidate.to.id === node.id); return edge ? renderTimelineEdge(edge) : null; })()}{renderTimelineNode(node)}</div>);
+
   const itinerary = (
     <>
       <header className="panel-heading">
-        <div><span>DAY PLAN</span><h2>{activeDay ? `${shortDate(activeDay.date)} · ${dayArea(activeDay)}` : "当天行程"}</h2></div>
-        <div className="day-plan-actions">{presenceControl}<PlanAddControl slug={trip.slug} days={dayLabels} cities={trip.cities.map((city) => ({ id: city.id, name: city.name }))} defaultDayId={activeDayId} currentMemberId={workspace.currentMemberId} /></div>
+        <div><span>DAY PLAN</span><h2>{activeDay ? `${shortDate(activeDay.date)} · ${dayArea(activeDay, bookings, trip.cities)}` : "当天行程"}</h2></div>
+        <div className="day-plan-actions">{presenceControl}<PlanAddControl slug={trip.slug} days={dayLabels} defaultDayId={activeDayId} currentMemberId={workspace.currentMemberId} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} existingTransport={existingTransport} existingPlaces={existingPlaceChoices} /></div>
       </header>
       <div className="plan-member-filter" aria-label="成员视角"><span>成员视角</span><a className={memberFilter === "all" ? "active" : ""} href={link("planning", activeDayId, mapMode, "all")}>全体</a>{(trip.members || []).map((member) => <a className={memberFilter === member.id ? "active" : ""} href={link("planning", activeDayId, mapMode, member.id)} key={member.id}>{member.displayName}</a>)}</div>
-      <div className="plan-timeline">{visibleTimeline.map(renderTimelineEntry)}</div>
+      <div className="plan-timeline">{timelineView}</div>
       {!visibleTimeline.length && <div className="plan-empty"><b>{memberFilter === "all" ? "尚未安排" : "该成员当天暂无已确认事项（尚未安排）"}</b><p>{memberFilter === "all" ? "这一天还没有正式行程事项，可以从左侧攻略素材中添加。" : "可以切换到全体视角查看当天完整安排。"}</p></div>}
     </>
   );
@@ -187,12 +200,14 @@ export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query
     days: workspace.days.map((day) => ({ id: day.id, dayNumber: day.dayNumber, date: day.date, title: day.title, items: day.items.map(({ item, place }) => ({ item: { id: item.id, title: item.title, dayId: item.dayId, sortOrder: item.sortOrder, lockedAt: item.lockedAt, placeId: item.placeId, itemType: item.itemType }, place })) })),
     cities: trip.cities.map((city) => ({ id: city.id, name: city.name })),
     members: (trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName })),
-    bookings: workspace.bookings.map(({ booking, originPlace, destinationPlace, memberStates }) => ({ id: booking.id, title: booking.title, type: booking.type, placeId: booking.placeId, originPlace, destinationPlace, memberStates })),
+    bookings: workspace.bookings.map(({ booking, originPlace, destinationPlace, memberStates }) => ({ id: booking.id, title: booking.title, type: booking.type, placeId: booking.placeId, originPlace, destinationPlace, originLabel: booking.originLabel, destinationLabel: booking.destinationLabel, memberStates })),
     currentMemberId: workspace.currentMemberId,
     mapPlaces: workspace.mapPlaces,
     savedPlaces: workspace.savedPlaces,
     routeStopsByDay: workspace.routeStopsByDay,
     routeSegmentsByDay: workspace.routeSegmentsByDay,
+    timelineNodesByDay: workspace.timelineNodesByDay,
+    timelineEdgesByDay: workspace.timelineEdgesByDay,
     routePreferences: workspace.routePreferences,
     memberFilter,
   };
@@ -200,15 +215,14 @@ export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query
   if (libraryMode) return <main className="trip-plan-page recommendation-library-page"><header className="trip-console library-console"><div className="console-title"><a href={libraryLink(areaFilter, categoryFilter)}>← 返回规划</a><span>TRIP LIBRARY</span><h1>{trip.title} · 攻略资料库</h1><p>浏览素材与攻略，选择目标 Day 后再加入正式行程。</p></div><MemberIdentityControl currentMember={currentMember} /></header><section className="recommendation-library-full">{library}</section></main>;
 
   const hotelBookings = bookings.filter(({ booking }) => booking.type === "hotel");
-  const existingPlaceChoices = [...new Map([...(workspace.savedPlaces || []).map(({ place, city }) => ({ id: place.id, name: place.name, address: place.address, district: place.district, cityName: city.name, source: "existing" as const })), ...(workspace.mapPlaces || []).map(({ place }) => ({ id: place.id, name: place.name, address: place.address, district: place.district, cityName: trip.cities.find((city) => city.id === place.cityId)?.name || null, source: "existing" as const }))].map((place) => [place.id, place])).values()];
   return <main className="trip-plan-page">
     <header className="trip-console">
       <div className="console-title"><a href="/trips">← 攻略中心</a><span>TRIP CONSOLE</span><h1>{trip.title}</h1><p>{fullRange(trip.startDate, trip.endDate)} · {stageSummary}</p></div>
-      <div className="trip-console-side"><MemberIdentityControl currentMember={currentMember} />{!trip.protected && <details className="trip-settings"><summary>编辑旅行</summary><EditTripForm trip={trip} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} /></details>}<div className="booking-console"><span className="booking-console-label">住宿</span>{hotelBookings.map(({ booking }) => <article key={booking.id}><b className="booking-summary-title"><TransportIcon kind="hotel" size={15} />{booking.title.replace("附近", "")}</b><span>{bookingStatus(booking.status, booking.type)} · {bookingTime(booking)}</span><strong><small>总价 {money(booking.totalAmountMinor)}</small></strong><BookingDisplayNameControl slug={trip.slug} bookingId={booking.id} initialTitle={booking.title} /></article>)}{!hotelBookings.length && <p className="booking-console-empty">还没有添加住宿</p>}<BookingCreateControl slug={trip.slug} kind="hotel" members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} existingPlaces={existingPlaceChoices} /></div></div>
+      <div className="trip-console-side"><MemberIdentityControl currentMember={currentMember} />{!trip.protected && <details className="trip-settings"><summary>编辑旅行</summary><EditTripForm trip={trip} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} /></details>}<div className="booking-console"><span className="booking-console-label">住宿</span>{hotelBookings.map((record) => <article key={record.booking.id}><b className="booking-summary-title"><TransportIcon kind="hotel" size={15} />{record.booking.title.replace("附近", "")}</b><span>{bookingStatus(record.booking.status, record.booking.type)} · {bookingTime(record.booking)}</span><strong><small>总价 {money(record.booking.totalAmountMinor)}</small></strong><BookingEditControl slug={trip.slug} booking={record} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} existingPlaces={existingPlaceChoices} /></article>)}{!hotelBookings.length && <p className="booking-console-empty">还没有添加住宿</p>}<BookingCreateControl slug={trip.slug} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} existingPlaces={existingPlaceChoices} /></div></div>
     </header>
-    <nav className="day-navigation" aria-label="选择日期">{days.map((day) => <a className={day.id === activeDayId ? "active" : ""} key={day.id} href={link(view, day.id)}><b>{shortDate(day.date)}</b><span>{dayArea(day)}</span></a>)}</nav>
+    <nav className="day-navigation" aria-label="选择日期">{days.map((day) => <a className={day.id === activeDayId ? "active" : ""} key={day.id} href={link(view, day.id)}><b>{shortDate(day.date)}</b><span>{dayArea(day, bookings, trip.cities)}</span></a>)}</nav>
     <nav className="plan-view-tabs" aria-label="工作台视图"><a className={view === "planning" ? "active" : ""} href={link("planning")}>规划</a><a className={view === "map" ? "active" : ""} href={link("map")}>地图</a><a className={view === "budget" ? "active" : ""} href={link("budget")}>费用</a></nav>
-    {view === "planning" && <><div className="empty-trip-actions"><PlaceDiscoveryControl slug={trip.slug} days={dayLabels} existingPlaces={existingPlaceChoices} /><BookingCreateControl slug={trip.slug} kind="transport" members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} existingPlaces={existingPlaceChoices} /></div><PlanningPanels library={library} itinerary={itinerary} /></>}
+    {view === "planning" && <><div className="empty-trip-actions"><PlaceDiscoveryControl slug={trip.slug} days={dayLabels} existingPlaces={existingPlaceChoices} /></div><PlanningPanels library={library} itinerary={itinerary} /></>}
     {view === "map" && <section className="map-view"><header className="workspace-view-heading"><div><span>MAP</span><h2>{mapMode === "day" ? "行程路线" : "攻略地图"}</h2></div><nav><a className={mapMode === "day" ? "active" : ""} href={link("map", activeDayId, "day")}>行程路线</a><a className={mapMode === "library" ? "active" : ""} href={link("map", activeDayId, "library")}>攻略地图</a></nav></header><PlanMap slug={trip.slug} places={[]} workspace={mapWorkspace} activeDayId={activeDayId} mapMode={mapMode} /></section>}
     {view === "budget" && <BudgetWorkspace slug={trip.slug} budget={workspace.budget} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} days={dayLabels} cities={trip.cities.map((city) => ({ id: city.id, name: city.name }))} routeSegmentsByDay={workspace.routeSegmentsByDay} routePreferences={workspace.routePreferences} costMode={costMode} />}
   </main>;

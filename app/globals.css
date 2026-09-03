@@ -79,3 +79,20 @@
 .empty-trip-actions{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}.booking-add-button{min-height:40px;padding:9px 12px;border:1px solid var(--ink);background:var(--paper2);cursor:pointer;font-size:10px;font-weight:800}.generic-place-picker{display:grid;gap:7px;margin-top:6px}.generic-place-picker>input{width:100%;padding:11px;border:1px solid var(--line);background:var(--paper2)}.generic-place-picker>small{color:var(--muted);font-size:9px}.generic-place-picker .plan-add-pois{max-height:260px;overflow:auto}.booking-console .booking-add-button{width:100%;margin-top:7px}.edit-actions .plan-add-submit{margin-left:auto}
 .trip-settings{width:100%;border:1px solid var(--line);background:var(--paper2)}.trip-settings>summary{padding:10px 12px;cursor:pointer;font-size:10px;font-weight:800}.trip-settings .edit-trip-form{margin:0;padding:14px;border:0}.trip-settings .edit-trip-form h2{font-size:16px}
 @media(max-width:680px){.empty-trip-actions{display:grid;grid-template-columns:1fr 1fr}.empty-trip-actions>button{width:100%}.generic-place-picker .plan-add-pois{max-height:42vh}}
+
+/* V2.4-R1: the browser page owns the vertical scroll; editors remain readable. */
+.plan-columns{height:auto;min-height:0}
+.recommendation-panel,.itinerary-panel{overflow:visible;max-height:none}
+.booking-add-button{min-height:42px;padding:10px 14px;border:2px solid var(--ink);border-radius:999px;background:var(--ink);color:#fff}
+.booking-add-button:hover{background:#34342f}
+.booking-add-button:disabled{background:#e2dacb;color:#59544c;border-color:#a9a092;opacity:1}
+.booking-edit-control{margin-top:7px}
+.booking-edit-control>summary{cursor:pointer;color:var(--clay);font-size:10px;font-weight:800}
+.booking-edit-sheet{display:grid;gap:8px;margin-top:8px;padding:11px;background:var(--paper);border:1px solid var(--line)}
+.booking-edit-sheet label{display:grid;gap:5px;font-size:10px;font-weight:800}
+.booking-edit-sheet input,.booking-edit-sheet select,.booking-edit-sheet textarea{width:100%;padding:8px;border:1px solid var(--line);background:var(--paper2);font:inherit}
+.booking-edit-sheet textarea{min-height:58px;resize:vertical}
+.booking-edit-sheet .plan-add-submit{margin-top:0}
+.booking-danger{min-height:38px;padding:8px 12px;border:1px solid #a45d4d;background:transparent;color:#8d2f27;cursor:pointer;font-size:10px;font-weight:800}
+.booking-danger:disabled{color:#716a62;border-color:#b9b0a4}
+.booking-place-clear{padding:7px 9px;border:1px solid #a45d4d;background:transparent;color:#8d2f27;cursor:pointer;font-size:10px}

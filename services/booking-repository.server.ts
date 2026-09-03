@@ -19,6 +19,8 @@ export type CreateBookingInput = {
   placeId?: string | null;
   originPlaceId?: string | null;
   destinationPlaceId?: string | null;
+  originLabel?: string | null;
+  destinationLabel?: string | null;
   totalAmountMinor?: number | null;
   currency?: string | null;
   bookingReference?: string | null;
@@ -62,7 +64,7 @@ export async function createBooking(input: CreateBookingInput, actorMemberId: st
   }
   const id = crypto.randomUUID(), now = new Date().toISOString();
   const d1 = getRuntimeEnv().DB;
-  const statements = [d1.prepare("INSERT INTO bookings (id, trip_id, type, status, title, provider, temporal_kind, start_at, end_at, start_date_local, end_date_local, timezone, place_id, origin_place_id, destination_place_id, total_amount_minor, currency, booking_reference, notes, protected, created_by_member_id, updated_by_member_id, created_at, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)").bind(id, input.tripId, input.type, input.status, input.title.trim(), input.provider ?? null, input.temporalKind, input.startAt ?? null, input.endAt ?? null, input.startDateLocal ?? null, input.endDateLocal ?? null, input.timezone ?? null, input.placeId ?? null, input.originPlaceId ?? null, input.destinationPlaceId ?? null, input.totalAmountMinor ?? null, input.currency ?? null, input.bookingReference ?? null, input.notes ?? null, input.protected ? 1 : 0, actorMemberId, actorMemberId, now, now)];
+  const statements = [d1.prepare("INSERT INTO bookings (id, trip_id, type, status, title, provider, temporal_kind, start_at, end_at, start_date_local, end_date_local, timezone, place_id, origin_place_id, destination_place_id, origin_label, destination_label, total_amount_minor, currency, booking_reference, notes, protected, created_by_member_id, updated_by_member_id, created_at, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)").bind(id, input.tripId, input.type, input.status, input.title.trim(), input.provider ?? null, input.temporalKind, input.startAt ?? null, input.endAt ?? null, input.startDateLocal ?? null, input.endDateLocal ?? null, input.timezone ?? null, input.placeId ?? null, input.originPlaceId ?? null, input.destinationPlaceId ?? null, input.originLabel?.trim() || null, input.destinationLabel?.trim() || null, input.totalAmountMinor ?? null, input.currency ?? null, input.bookingReference ?? null, input.notes ?? null, input.protected ? 1 : 0, actorMemberId, actorMemberId, now, now)];
   for (const memberId of participants) statements.push(d1.prepare("INSERT INTO booking_participants (booking_id, member_id, role, created_at) VALUES (?, ?, 'covered', ?)").bind(id, memberId, now));
   await d1.batch(statements);
   return (await db.select().from(bookingRecords).where(eq(bookingRecords.id, id)).limit(1))[0];
@@ -121,6 +123,8 @@ export type UpdateBookingInput = {
   placeId?: string | null;
   originPlaceId?: string | null;
   destinationPlaceId?: string | null;
+  originLabel?: string | null;
+  destinationLabel?: string | null;
   /** Replace the people who use this order; this is independent of cost allocations. */
   participantMemberIds?: string[];
   /** Replace one or more cost-line splits. Equal lines accept memberIds; custom lines accept allocations. */
@@ -148,13 +152,21 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
   if ((nextAmount == null) !== (nextCurrency == null)) throw new Error("BOOKING_MONEY_INCOMPLETE");
   if (input.title !== undefined && !input.title.trim()) throw new Error("BOOKING_TITLE_REQUIRED");
   if (input.status !== undefined && !["tentative", "confirmed", "cancelled"].includes(input.status)) throw new Error("INVALID_BOOKING_STATUS");
-  assertUtcInstant(input.startAt === undefined ? booking.startAt : input.startAt, "start_at");
-  assertUtcInstant(input.endAt === undefined ? booking.endAt : input.endAt, "end_at");
-  assertLocalDate(input.startDateLocal === undefined ? booking.startDateLocal : input.startDateLocal, "start_date");
-  assertLocalDate(input.endDateLocal === undefined ? booking.endDateLocal : input.endDateLocal, "end_date");
+  const nextStartAt = input.startAt === undefined ? booking.startAt : input.startAt;
+  const nextEndAt = input.endAt === undefined ? booking.endAt : input.endAt;
+  const nextStartDate = input.startDateLocal === undefined ? booking.startDateLocal : input.startDateLocal;
+  const nextEndDate = input.endDateLocal === undefined ? booking.endDateLocal : input.endDateLocal;
+  assertUtcInstant(nextStartAt, "start_at");
+  assertUtcInstant(nextEndAt, "end_at");
+  assertLocalDate(nextStartDate, "start_date");
+  assertLocalDate(nextEndDate, "end_date");
+  if (nextEndAt && nextStartAt && Date.parse(nextEndAt) <= Date.parse(nextStartAt)) throw new Error("INVALID_BOOKING_RANGE");
+  if (nextEndDate && nextStartDate && nextEndDate < nextStartDate) throw new Error("INVALID_BOOKING_DATE_RANGE");
   const nextPlaceId = input.placeId === undefined ? booking.placeId : input.placeId;
   const nextOriginPlaceId = input.originPlaceId === undefined ? booking.originPlaceId : input.originPlaceId;
   const nextDestinationPlaceId = input.destinationPlaceId === undefined ? booking.destinationPlaceId : input.destinationPlaceId;
+  const nextOriginLabel = input.originLabel === undefined ? booking.originLabel : (input.originLabel?.trim() || null);
+  const nextDestinationLabel = input.destinationLabel === undefined ? booking.destinationLabel : (input.destinationLabel?.trim() || null);
   const placeIds = [...new Set([nextPlaceId, nextOriginPlaceId, nextDestinationPlaceId].filter((value): value is string => Boolean(value)))];
   if (placeIds.length) {
     const valid = await db.select({ id: placeRecords.id }).from(placeRecords).where(inArray(placeRecords.id, placeIds));
@@ -176,6 +188,7 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
     linesById.set(row.line.id, current);
   }
   const normalizedCostUpdates = new Map<string, MoneyAllocation[]>();
+  const normalizedCostLineAmounts = new Map<string, number>();
   if (input.costLineAllocations !== undefined) {
     const seen = new Set<string>();
     for (const update of input.costLineAllocations) {
@@ -192,19 +205,44 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
       normalizedCostUpdates.set(update.costLineId, allocations);
     }
   }
+  if (nextAmount !== booking.totalAmountMinor && linesById.size) {
+    // A booking editor changes the order total, not individual cost lines. A
+    // single cost line can therefore be updated safely in one transaction. A
+    // multi-line booking (for example the two hotel stay segments) must still
+    // be edited through its explicit cost-line editor so we never guess which
+    // line the user intended to change.
+    if (nextAmount == null || linesById.size !== 1) throw new Error("COST_ALLOCATION_UNBALANCED");
+    const [lineId, row] = [...linesById.entries()][0];
+    const currentTotal = row.allocations.reduce((sum, allocation) => sum + allocation.amountMinor, 0);
+    if (currentTotal !== row.line.amountMinor) throw new Error(`COST_ALLOCATION_UNBALANCED:${currentTotal}`);
+    let updatedAllocations: MoneyAllocation[];
+    if (row.line.allocationMode === "equal") {
+      updatedAllocations = stableEqualSplit(nextAmount, row.allocations.map((allocation) => allocation.memberId));
+    } else {
+      if (row.line.amountMinor === 0 && nextAmount !== 0) throw new Error("COST_ALLOCATION_UNBALANCED");
+      const sorted = [...row.allocations].sort((a, b) => a.memberId.localeCompare(b.memberId));
+      const base = sorted.map((allocation) => ({ ...allocation, amountMinor: Math.floor((allocation.amountMinor * nextAmount) / row.line.amountMinor) }));
+      let remainder = nextAmount - base.reduce((sum, allocation) => sum + allocation.amountMinor, 0);
+      for (const allocation of base) { if (remainder <= 0) break; allocation.amountMinor += 1; remainder -= 1; }
+      updatedAllocations = base;
+    }
+    normalizedCostUpdates.set(lineId, updatedAllocations);
+    normalizedCostLineAmounts.set(lineId, nextAmount);
+  }
   if (nextAmount !== booking.totalAmountMinor || normalizedCostUpdates.size) {
     const allocated = [...linesById.entries()].reduce((sum, [lineId, row]) => sum + (normalizedCostUpdates.get(lineId) || row.allocations).reduce((lineSum, allocation) => lineSum + allocation.amountMinor, 0), 0);
-    if (lineRows.length && allocated !== (nextAmount ?? 0)) throw new Error(`COST_ALLOCATION_UNBALANCED:${allocated}`);
+    if (linesById.size && allocated !== (nextAmount ?? 0)) throw new Error(`COST_ALLOCATION_UNBALANCED:${allocated}`);
   }
   const now = new Date().toISOString();
   const d1 = getRuntimeEnv().DB;
-  const statements = [d1.prepare("UPDATE bookings SET title = ?, provider = ?, status = ?, start_at = ?, end_at = ?, start_date_local = ?, end_date_local = ?, total_amount_minor = ?, currency = ?, booking_reference = ?, notes = ?, place_id = ?, origin_place_id = ?, destination_place_id = ?, updated_at = ?, updated_by_member_id = ? WHERE id = ?").bind(
-    input.title === undefined ? booking.title : input.title.trim(), input.provider === undefined ? booking.provider : input.provider, input.status === undefined ? booking.status : input.status, input.startAt === undefined ? booking.startAt : input.startAt, input.endAt === undefined ? booking.endAt : input.endAt, input.startDateLocal === undefined ? booking.startDateLocal : input.startDateLocal, input.endDateLocal === undefined ? booking.endDateLocal : input.endDateLocal, nextAmount, nextCurrency, input.bookingReference === undefined ? booking.bookingReference : input.bookingReference, input.notes === undefined ? booking.notes : input.notes, nextPlaceId, nextOriginPlaceId, nextDestinationPlaceId, now, actorMemberId, id)];
+  const statements = [d1.prepare("UPDATE bookings SET title = ?, provider = ?, status = ?, start_at = ?, end_at = ?, start_date_local = ?, end_date_local = ?, total_amount_minor = ?, currency = ?, booking_reference = ?, notes = ?, place_id = ?, origin_place_id = ?, destination_place_id = ?, origin_label = ?, destination_label = ?, updated_at = ?, updated_by_member_id = ? WHERE id = ?").bind(
+    input.title === undefined ? booking.title : input.title.trim(), input.provider === undefined ? booking.provider : input.provider, input.status === undefined ? booking.status : input.status, nextStartAt, nextEndAt, nextStartDate, nextEndDate, nextAmount, nextCurrency, input.bookingReference === undefined ? booking.bookingReference : input.bookingReference, input.notes === undefined ? booking.notes : input.notes, nextPlaceId, nextOriginPlaceId, nextDestinationPlaceId, nextOriginLabel, nextDestinationLabel, now, actorMemberId, id)];
   if (nextParticipantIds !== undefined) {
     statements.push(d1.prepare("DELETE FROM booking_participants WHERE booking_id = ?").bind(id));
     for (const memberId of nextParticipantIds) statements.push(d1.prepare("INSERT INTO booking_participants (booking_id, member_id, role, created_at) VALUES (?, ?, 'covered', ?)").bind(id, memberId, now));
   }
   for (const [costLineId, allocations] of normalizedCostUpdates) {
+    if (normalizedCostLineAmounts.has(costLineId)) statements.push(d1.prepare("UPDATE booking_cost_lines SET amount_minor = ?, updated_at = ? WHERE id = ?").bind(normalizedCostLineAmounts.get(costLineId), now, costLineId));
     statements.push(d1.prepare("DELETE FROM booking_cost_allocations WHERE cost_line_id = ?").bind(costLineId));
     for (const allocation of allocations) statements.push(d1.prepare("INSERT INTO booking_cost_allocations (id, cost_line_id, member_id, amount_minor, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), costLineId, allocation.memberId, allocation.amountMinor, allocation.notes ?? null, now, now));
   }

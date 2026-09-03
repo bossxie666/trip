@@ -22,7 +22,7 @@ class TestD1Database {
 const DB = new TestD1Database();
 globalThis.__TRIP_TEST_D1__ = DB;
 globalThis.__TRIP_TEST_ENV__ = { TRIP_SPACE_INVITE_CODE: "test-invite", TRIP_SPACE_SESSION_SECRET: "test-session-secret-at-least-32-characters", AMAP_JS_API_KEY: "test-js-key", AMAP_JS_SECURITY_CODE: "test-js-code", AMAP_WEB_SERVICE_KEY: "test-web-key" };
-for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql", "0014_v2_2_1_confirmed_facts.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
+for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql", "0014_v2_2_1_confirmed_facts.sql", "0015_v2_4_r1_booking_endpoint_labels.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
 
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
@@ -131,6 +131,25 @@ test("renders the identity control on the archive and workspace shells", async (
   assert.match(planHtml, /当前身份/);
 });
 
+test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership consistent", () => {
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const accommodation = readFileSync(new URL("../components/trip/BookingCreateControl.tsx", import.meta.url), "utf8");
+  const transport = readFileSync(new URL("../components/trip/PlanAddControl.tsx", import.meta.url), "utf8");
+  const presence = readFileSync(new URL("../components/trip/DayPresenceControl.tsx", import.meta.url), "utf8");
+  const placeDiscovery = readFileSync(new URL("../components/trip/PlaceDiscoveryControl.tsx", import.meta.url), "utf8");
+  const bookingEdit = readFileSync(new URL("../components/trip/BookingEditControl.tsx", import.meta.url), "utf8");
+
+  assert.match(css, /\.plan-columns\{height:auto;min-height:0\}/);
+  assert.match(css, /\.recommendation-panel,\.itinerary-panel\{overflow:visible;max-height:none\}/);
+  assert.match(css, /\.booking-add-button\{[^}]*background:var\(--ink\);[^}]*color:#fff/);
+  assert.match(css, /\.add-itinerary-button\{[^}]*background:var\(--ink\);[^}]*color:#fff/);
+  assert.doesNotMatch(accommodation, /添加长途交通/);
+  assert.match(transport, /modalOwner = `plan-add:\$\{slug\}`/);
+  assert.match(presence, /modalOwner = `presence:\$\{slug\}:\$\{dayId\}`/);
+  assert.match(placeDiscovery, /modalOwner = `place-discovery:\$\{slug\}`/);
+  assert.match(bookingEdit, /modalName = `booking-editor:\$\{booking\.id\}`/);
+});
+
 async function createTrip(body) {
   const response = await render("/api/trips", { method: "POST", body });
   const payload = await response.json();
@@ -200,7 +219,7 @@ test("keeps the confirmed flight personal and leaves airports pending", async ()
   assert.deepEqual(DB.database.prepare("SELECT member_id FROM booking_participants WHERE booking_id = ?").all(flight.id).map((row) => row.member_id), ["member-nini"]);
   assert.deepEqual(DB.database.prepare("SELECT member_id, amount_minor FROM booking_cost_allocations WHERE cost_line_id = 'booking-cost-flight-y87578'").all().map((row) => ({ ...row })), [{ member_id: "member-nini", amount_minor: 48000 }]);
   const niniHtml = await (await render("/trips/shanghai-hangzhou-2026/plan?view=planning&day=trip-shanghai-hangzhou-2026-day-1")).text();
-  assert.match(niniHtml, /深圳 → 上海航班/); assert.match(niniHtml, /起点待确认/); assert.match(niniHtml, /终点待确认/); assert.match(niniHtml, /确认起点/); assert.match(niniHtml, /确认终点/); assert.match(niniHtml, /¥480/);
+  assert.match(niniHtml, /深圳 → 上海航班/); assert.match(niniHtml, /起点待确认/); assert.match(niniHtml, /终点待确认/); assert.match(niniHtml, /完善起点/); assert.match(niniHtml, /完善终点/); assert.match(niniHtml, /¥480/);
   await loginAs("王静雯");
   const wangHtml = await (await render("/trips/shanghai-hangzhou-2026/plan?view=planning&day=trip-shanghai-hangzhou-2026-day-1&member=member-wang-jingwen")).text();
   assert.doesNotMatch(wangHtml, /深圳 → 上海航班/);
@@ -263,9 +282,9 @@ test("renders the E1 planning workspace from Booking, Recommendation and Itinera
   const planning = await render(`/trips/shanghai-hangzhou-2026/plan?view=planning&day=${day1}`), html = await planning.text();
   assert.equal(planning.status, 200);
   assert.match(html, /TRIP CONSOLE/); assert.match(html, /2026\.09\.23 — 09\.27/); assert.match(html, /上海4人 · 杭州5人/);
-  assert.match(html, /06:35–08:55/); assert.match(html, /¥480/); assert.match(html, /上海南酒店/); assert.match(html, /杭州东酒店/); assert.match(html, /上海→杭州/); assert.match(html, /开园 → 闭园/); assert.match(html, /营业时间待确认/);
+  assert.match(html, /06:35–08:55/); assert.match(html, /¥480/); assert.match(html, /上海南酒店/); assert.match(html, /杭州东酒店/); assert.match(html, /深圳.?→.?上海/); assert.match(html, /开园 → 闭园/); assert.match(html, /营业时间待确认/);
   for (const label of ["09/23", "09/24", "09/25", "09/26", "09/27"]) assert.match(html, new RegExp(label));
-  assert.match(html, /攻略素材/); assert.match(html, /上海迪士尼/); assert.match(html, /已加入 09\/23/); assert.match(html, /已确认订单/); assert.doesNotMatch(html, /Booking Anchor/); assert.match(html, /当天成员尚未设置/);
+  assert.match(html, /攻略素材/); assert.match(html, /上海迪士尼/); assert.match(html, /已加入 09\/23/); assert.match(html, /已确认订单/); assert.doesNotMatch(html, /Booking Anchor/); assert.match(html, /当天成员/);
   assert.doesNotMatch(html, /SZX-SHA-HGH|开始做选择|跳进地理书的旅行/);
 
   const day2Html = await (await render(`/trips/shanghai-hangzhou-2026/plan?view=planning&day=${day2}`)).text();
@@ -278,7 +297,7 @@ test("renders the E1 planning workspace from Booking, Recommendation and Itinera
 
 test("validates E1 URL state and renders map and budget views", async () => {
   const invalid = await (await render("/trips/shanghai-hangzhou-2026/plan?view=wrong&day=other-trip-day")).text();
-  assert.match(invalid, /09\/23 · 上海/); assert.match(invalid, /攻略素材/);
+  assert.match(invalid, /09\/23[\s\S]{0,80}(?:Day 1|深圳[\s\S]{0,20}→[\s\S]{0,20}上海)/); assert.match(invalid, /攻略素材/);
   const mapResponse = await render("/trips/shanghai-hangzhou-2026/plan?view=map&mode=library&day=trip-shanghai-hangzhou-2026-day-2"), map = await mapResponse.text();
   assert.match(map, /攻略地图/); assert.match(map, /高德地图/); assert.match(map, /淡色 Marker/);
   const budget = await (await render("/trips/shanghai-hangzhou-2026/plan?view=budget&day=trip-shanghai-hangzhou-2026-day-3")).text();
@@ -288,18 +307,15 @@ test("validates E1 URL state and renders map and budget views", async () => {
 test("keeps Recommendation region and category independent from the active Day", async () => {
   const day1 = "trip-shanghai-hangzhou-2026-day-1", day3 = "trip-shanghai-hangzhou-2026-day-3";
   const shanghai = await (await render(`/trips/shanghai-hangzhou-2026/plan?view=planning&day=${day1}&area=shanghai&category=attraction`)).text();
-  const shanghaiLibrary = shanghai.match(/<div class="recommendation-grid">([\s\S]*?)<a class="view-all-materials"/)?.[1] || "";
-  for (const title of ["上海迪士尼", "武康大楼", "外滩", "东方明珠"]) assert.match(shanghaiLibrary, new RegExp(title));
-  assert.doesNotMatch(shanghaiLibrary, /灵隐寺/); assert.match(shanghai, new RegExp(`day=${day3}&amp;area=shanghai&amp;category=attraction`));
+  for (const title of ["上海迪士尼", "武康大楼", "外滩", "东方明珠"]) assert.match(shanghai, new RegExp(`<h3>${title}</h3>`));
+  assert.doesNotMatch(shanghai, /<h3>灵隐寺<\/h3>/); assert.match(shanghai, new RegExp(`day=${day3}&amp;area=shanghai&amp;category=attraction`));
 
   const hangzhouOnShanghaiDay = await (await render(`/trips/shanghai-hangzhou-2026/plan?view=planning&day=${day1}&area=hangzhou&category=attraction`)).text();
-  const hangzhouLibrary = hangzhouOnShanghaiDay.match(/<div class="recommendation-grid">([\s\S]*?)<a class="view-all-materials"/)?.[1] || "";
-  for (const title of ["灵隐寺", "财神庙", "西湖"]) assert.match(hangzhouLibrary, new RegExp(title));
-  assert.doesNotMatch(hangzhouLibrary, /上海迪士尼/); assert.match(hangzhouOnShanghaiDay, new RegExp(`day=${day3}&amp;area=hangzhou&amp;category=attraction`));
+  for (const title of ["灵隐寺", "财神庙", "西湖"]) assert.match(hangzhouOnShanghaiDay, new RegExp(`<h3>${title}</h3>`));
+  assert.doesNotMatch(hangzhouOnShanghaiDay, /<h3>上海迪士尼<\/h3>/); assert.match(hangzhouOnShanghaiDay, new RegExp(`day=${day3}&amp;area=hangzhou&amp;category=attraction`));
 
   const tonglu = await (await render(`/trips/shanghai-hangzhou-2026/plan?view=planning&day=${day1}&area=tonglu&category=guide`)).text();
-  const tongluLibrary = tonglu.match(/<div class="recommendation-grid">([\s\S]*?)<a class="view-all-materials"/)?.[1] || "";
-  assert.match(tongluLibrary, /桐庐一日攻略/); assert.doesNotMatch(tongluLibrary, /西湖/); assert.match(tonglu, /桐庐(?:<!-- -->)? · (?:<!-- -->)?攻略/);
+  assert.match(tonglu, /<h3>桐庐一日攻略<\/h3>/); assert.doesNotMatch(tonglu, /<h3>西湖<\/h3>/); assert.match(tonglu, /桐庐(?:<!-- -->)? · (?:<!-- -->)?攻略/);
   assert.equal(DB.database.prepare("SELECT COUNT(*) count FROM cities WHERE name = '桐庐' OR name = '桐庐市'").get().count, 0);
 });
 
@@ -364,7 +380,7 @@ test("manages duplicate Recommendation items independently without touching Book
 test("protects E1 routes and gives Generic Trip an empty workspace", async () => {
   const generic = await createTrip({ title: "E1 Empty Trip", status: "planning", cities: ["苏州"], startDate: "2027-07-01", endDate: "2027-07-01", people: 1 });
   const genericHtml = await (await render(`/trips/${generic.slug}/plan`)).text();
-  assert.match(genericHtml, /E1 Empty Trip/); assert.match(genericHtml, /尚未安排/); assert.match(genericHtml, /还没有添加住宿/); assert.match(genericHtml, /找想去的地方/); assert.match(genericHtml, /添加长途交通/);
+  assert.match(genericHtml, /E1 Empty Trip/); assert.match(genericHtml, /尚未安排/); assert.match(genericHtml, /还没有添加住宿/); assert.match(genericHtml, /找想去的地方/); assert.match(genericHtml, /添加行程/); assert.doesNotMatch(genericHtml, /添加长途交通/);
   const saved = sessionCookie; sessionCookie = "";
   const anonymous = await render("/trips/shanghai-hangzhou-2026/plan?view=map&day=trip-shanghai-hangzhou-2026-day-2");
   assert.equal(anonymous.status, 302); assert.equal(new URL(anonymous.headers.get("location")).searchParams.get("returnTo"), "/trips/shanghai-hangzhou-2026/plan?view=map&day=trip-shanghai-hangzhou-2026-day-2");

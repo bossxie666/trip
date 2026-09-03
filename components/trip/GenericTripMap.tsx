@@ -3,18 +3,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { AMapRouteMode, AMapRouteResult } from "@/services/amap/amap-types";
 import type { TripPlaceStatus } from "@/models/travel";
 import { TransportIcon, iconForRouteMode } from "./TransportIcon";
+import { type AMapNamespace, type AMapObject } from "./amap-client-types";
 
 type MapPlace = { id: string; cityId: string; name: string; address: string | null; latitude: number | null; longitude: number | null; coordinateSystem?: string | null; planStatus?: TripPlaceStatus };
 type MapWorkspace = { days: { id: string; dayNumber: number; title: string; places: { sortOrder: number; planStatus?: TripPlaceStatus; place: MapPlace }[] }[] };
-type AMapObject = { add(value: unknown): void; remove(value: unknown): void; setFitView(value?: unknown[]): void; on?(event: string, handler: () => void): void; off?(event: string, handler: () => void): void; destroy(): void };
-type AMapNamespace = {
-  Map: new (container: HTMLDivElement, options: Record<string, unknown>) => AMapObject;
-  Marker: new (options: Record<string, unknown>) => unknown;
-  Polyline: new (options: Record<string, unknown>) => unknown;
-};
-
-declare global { interface Window { AMap?: AMapNamespace; _AMapSecurityConfig?: { serviceHost: string } } }
-
 let loader: Promise<AMapNamespace> | null = null;
 async function loadAMap() {
   if (window.AMap) return window.AMap;

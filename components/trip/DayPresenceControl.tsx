@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import { requestTripModalOpen, useExclusiveTripModal } from "./modal-events";
 
 type PresenceState = "present" | "absent" | "partial" | "unknown";
 type Member = { id: string; displayName: string };
@@ -24,6 +25,8 @@ export function DayPresenceControl({ slug: providedSlug, dayId: providedDayId, d
   })));
   const [saving, setSaving] = useState(false), [error, setError] = useState("");
   const hasUnknown = useMemo(() => members.some((member) => !states[member.id] || states[member.id] === "unknown"), [members, states]);
+  const modalOwner = `presence:${slug}:${dayId}`;
+  useExclusiveTripModal(modalOwner, () => setOpen(false));
 
   function setDraft(memberId: string, patch: Partial<Draft>) {
     setDrafts((current) => ({ ...current, [memberId]: { ...(current[memberId] || { state: null, startsAt: "", endsAt: "" }), ...patch } }));
@@ -46,11 +49,11 @@ export function DayPresenceControl({ slug: providedSlug, dayId: providedDayId, d
         }).catch(() => undefined);
       }
     }
-    const openFromHash = () => { if (window.location.hash === `#day-presence-${dayId}`) setOpen(true); };
+    const openFromHash = () => { if (window.location.hash === `#day-presence-${dayId}`) { requestTripModalOpen(modalOwner); setOpen(true); } };
     window.addEventListener("hashchange", openFromHash);
     openFromHash();
     return () => window.removeEventListener("hashchange", openFromHash);
-  }, [context.dayId, context.slug, dayId]);
+  }, [context.dayId, context.slug, dayId, modalOwner]);
 
   async function save() {
     setSaving(true); setError("");
@@ -65,12 +68,12 @@ export function DayPresenceControl({ slug: providedSlug, dayId: providedDayId, d
   }
 
   return <div id={`day-presence-${dayId}`} className="day-presence-control">
-    <button type="button" className="day-presence-trigger" onClick={() => setOpen((current) => !current)}>{hasUnknown ? "当天成员尚未设置 · 确认成员" : "当天成员 · 已确认"}</button>
+    <button type="button" className="day-presence-trigger" onClick={() => { if (!open) requestTripModalOpen(modalOwner); setOpen((current) => !current); }}>{hasUnknown ? "设置当天成员" : "当天成员 · 已确认"}</button>
     {open && <div className="day-presence-panel" role="dialog" aria-label={`${dayLabel}当天成员`}>
       <header><div><span>DAY PRESENCE</span><b>{dayLabel}</b></div><button type="button" onClick={() => setOpen(false)} aria-label="关闭">×</button></header>
       <p>这里确认这一天谁实际在场。部分在场可以只填抵达或离开时间；未填写的成员不会被默认为在场。</p>
       <div className="presence-member-list">{members.map((member) => { const draft = drafts[member.id] || { state: null, startsAt: "", endsAt: "" }; const currentState = states[member.id] || "unknown"; return <fieldset key={member.id} className="presence-member-row"><legend>{member.displayName}<small>{currentState === "unknown" ? "当天成员尚未设置" : currentState === "partial" ? "部分在场" : currentState === "present" ? "在场" : "不在场"}</small></legend><div className="presence-state-options"><label><input type="radio" name={`presence-${member.id}`} checked={draft.state === "present"} onChange={() => setDraft(member.id, { state: "present" })}/>在场</label><label><input type="radio" name={`presence-${member.id}`} checked={draft.state === "absent"} onChange={() => setDraft(member.id, { state: "absent" })}/>不在场</label><label><input type="radio" name={`presence-${member.id}`} checked={draft.state === "partial"} onChange={() => setDraft(member.id, { state: "partial" })}/>部分在场</label></div>{draft.state === "partial" && <div className="presence-time-fields"><label>开始时间<input type="time" value={draft.startsAt} onChange={(event) => setDraft(member.id, { startsAt: event.target.value })}/></label><label>结束时间<input type="time" value={draft.endsAt} onChange={(event) => setDraft(member.id, { endsAt: event.target.value })}/></label></div>}</fieldset>; })}</div>
-      <div className="presence-actions"><button type="button" onClick={() => setDrafts(Object.fromEntries(members.map((member) => [member.id, { state: "present" as const, startsAt: "", endsAt: "" }]))) }>全员参与</button><button type="button" onClick={() => setDrafts(Object.fromEntries(members.map((member) => [member.id, { state: "absent" as const, startsAt: "", endsAt: "" }]))) }>全员不在场</button><button type="button" onClick={save} disabled={saving}>{saving ? "保存中…" : "保存当天成员"}</button></div>
+      <div className="presence-actions"><button type="button" onClick={() => setDrafts(Object.fromEntries(members.map((member) => [member.id, { state: "present" as const, startsAt: "", endsAt: "" }]))) }>全员在场</button><button type="button" onClick={() => setDrafts(Object.fromEntries(members.map((member) => [member.id, { state: "absent" as const, startsAt: "", endsAt: "" }]))) }>全员不在场</button><button type="button" onClick={save} disabled={saving}>{saving ? "保存中…" : "保存当天成员"}</button></div>
       {error && <small className="form-error" role="alert">{error}</small>}
     </div>}
   </div>;
