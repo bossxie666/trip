@@ -2,14 +2,19 @@
 "use client";
 
 import { useState } from "react";
-import { GenericPlacePicker, type GenericPlaceChoice } from "./GenericPlacePicker";
+import dynamic from "next/dynamic";
+import type { GenericPlaceChoice } from "./GenericPlacePicker";
 import { requestTripModalOpen, useExclusiveTripModal } from "./modal-events";
-import { WorkspaceOverlay } from "./WorkspaceOverlay";
+import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
+
+const GenericPlacePicker = dynamic(() => import("./GenericPlacePicker").then((module) => module.GenericPlacePicker), { ssr: false });
+const WorkspaceOverlay = dynamic(() => import("./WorkspaceOverlay").then((module) => module.WorkspaceOverlay), { ssr: false });
 
 type MemberOption = { id: string; displayName: string };
 
 /** Accommodation creation only; long-distance transport has one entry in PlanAddControl. */
 export function BookingCreateControl({ slug, members, existingPlaces = [] }: { slug: string; members: MemberOption[]; existingPlaces?: GenericPlaceChoice[] }) {
+  const { refreshWorkspace } = useWorkspaceNavigation();
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<"tentative" | "confirmed">("tentative");
   const [title, setTitle] = useState("");
@@ -53,7 +58,8 @@ export function BookingCreateControl({ slug, members, existingPlaces = [] }: { s
       });
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error || "保存失败。");
-      location.reload();
+      setOpen(false);
+      refreshWorkspace();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存失败。");
       setSaving(false);
@@ -62,7 +68,7 @@ export function BookingCreateControl({ slug, members, existingPlaces = [] }: { s
 
   return <>
     <button type="button" className="booking-add-button button-primary" onClick={() => { requestTripModalOpen(modalOwner); setOpen(true); }}>＋ 添加住宿</button>
-    <WorkspaceOverlay open={open} onClose={() => setOpen(false)} mode="drawer" ariaLabel="添加住宿" className="plan-add-sheet">
+    {open && <WorkspaceOverlay open={open} onClose={() => setOpen(false)} mode="drawer" ariaLabel="添加住宿" className="plan-add-sheet">
       <header><div><span>ACCOMMODATION</span><h3>添加住宿</h3><p>先记录计划，预订状态之后也可以修改。</p></div><button type="button" className="workspace-close" aria-label="关闭" onClick={() => setOpen(false)}>×</button></header>
       <label>住哪里？<GenericPlacePicker slug={slug} existing={existingPlaces} value={place} onChange={setPlace} autoFocus /></label>
       <div className="plan-add-two-columns"><label>入住日期<input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label>退房日期<input type="date" min={startDate} value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label></div>
@@ -74,6 +80,6 @@ export function BookingCreateControl({ slug, members, existingPlaces = [] }: { s
       <label>备注（可选）<textarea value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
       {error && <p className="form-error" role="alert">{error}</p>}
       <footer className="workspace-footer"><button type="button" className="button-secondary" disabled={saving} onClick={() => setOpen(false)}>取消</button><button type="button" className="plan-add-submit button-primary" disabled={saving} onClick={save}>{saving ? "保存中…" : "保存住宿"}</button></footer>
-    </WorkspaceOverlay>
+    </WorkspaceOverlay>}
   </>;
 }

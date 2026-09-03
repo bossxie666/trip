@@ -69,44 +69,46 @@ async function hydrateTrips(rows: (typeof tripRecords.$inferSelect)[]): Promise<
   if (!rows.length) return [];
   const db = getDb();
   const tripIds = rows.map((row) => row.id);
-  const cityLinks = await db
-    .select({ tripId: tripCityRecords.tripId, id: cityRecords.id, slug: cityRecords.slug, name: cityRecords.name })
-    .from(tripCityRecords)
-    .innerJoin(cityRecords, eq(tripCityRecords.cityId, cityRecords.id))
-    .where(inArray(tripCityRecords.tripId, tripIds))
-    .orderBy(asc(tripCityRecords.position));
-  const stageLinks = await db
-    .select({
-      tripId: tripStageRecords.tripId,
-      id: tripStageRecords.id,
-      cityId: tripStageRecords.cityId,
-      citySlug: cityRecords.slug,
-      cityName: cityRecords.name,
-      title: tripStageRecords.title,
-      sortOrder: tripStageRecords.sortOrder,
-      createdAt: tripStageRecords.createdAt,
-      updatedAt: tripStageRecords.updatedAt,
-    })
-    .from(tripStageRecords)
-    .innerJoin(cityRecords, eq(tripStageRecords.cityId, cityRecords.id))
-    .where(inArray(tripStageRecords.tripId, tripIds))
-    .orderBy(asc(tripStageRecords.sortOrder));
+  const [cityLinks, stageLinks, storedDays, memberLinks] = await Promise.all([
+    db.select({ tripId: tripCityRecords.tripId, id: cityRecords.id, slug: cityRecords.slug, name: cityRecords.name })
+      .from(tripCityRecords)
+      .innerJoin(cityRecords, eq(tripCityRecords.cityId, cityRecords.id))
+      .where(inArray(tripCityRecords.tripId, tripIds))
+      .orderBy(asc(tripCityRecords.position)),
+    db.select({
+        tripId: tripStageRecords.tripId,
+        id: tripStageRecords.id,
+        cityId: tripStageRecords.cityId,
+        citySlug: cityRecords.slug,
+        cityName: cityRecords.name,
+        title: tripStageRecords.title,
+        sortOrder: tripStageRecords.sortOrder,
+        createdAt: tripStageRecords.createdAt,
+        updatedAt: tripStageRecords.updatedAt,
+      })
+      .from(tripStageRecords)
+      .innerJoin(cityRecords, eq(tripStageRecords.cityId, cityRecords.id))
+      .where(inArray(tripStageRecords.tripId, tripIds))
+      .orderBy(asc(tripStageRecords.sortOrder)),
+    db.select().from(dayRecords).where(inArray(dayRecords.tripId, tripIds)).orderBy(asc(dayRecords.dayNumber)),
+    db.select({ tripId: tripMemberRecords.tripId, id: memberRecords.id, name: memberRecords.name, displayName: memberRecords.displayName, avatar: memberRecords.avatar, active: memberRecords.active, createdAt: memberRecords.createdAt })
+      .from(tripMemberRecords)
+      .innerJoin(memberRecords, eq(tripMemberRecords.memberId, memberRecords.id))
+      .where(inArray(tripMemberRecords.tripId, tripIds)),
+  ]);
   const stageIds = stageLinks.map((stage) => stage.id);
-  const stageMemberLinks = stageIds.length
-    ? await db.select({ stageId: tripStageMemberRecords.stageId, id: memberRecords.id, name: memberRecords.name, displayName: memberRecords.displayName, avatar: memberRecords.avatar, active: memberRecords.active, createdAt: memberRecords.createdAt })
-      .from(tripStageMemberRecords)
-      .innerJoin(memberRecords, eq(tripStageMemberRecords.memberId, memberRecords.id))
-      .where(inArray(tripStageMemberRecords.stageId, stageIds))
-    : [];
-  const storedDays = await db
-    .select()
-    .from(dayRecords)
-    .where(inArray(dayRecords.tripId, tripIds))
-    .orderBy(asc(dayRecords.dayNumber));
   const storedDayIds = storedDays.map((day) => day.id);
-  const dayPlaceLinks = storedDayIds.length ? await db.select().from(dayPlaceRecords).where(inArray(dayPlaceRecords.dayId, storedDayIds)).orderBy(asc(dayPlaceRecords.sortOrder)) : [];
-  const memberLinks = await db.select({ tripId: tripMemberRecords.tripId, id: memberRecords.id, name: memberRecords.name, displayName: memberRecords.displayName, avatar: memberRecords.avatar, active: memberRecords.active, createdAt: memberRecords.createdAt })
-    .from(tripMemberRecords).innerJoin(memberRecords, eq(tripMemberRecords.memberId, memberRecords.id)).where(inArray(tripMemberRecords.tripId, tripIds));
+  const [stageMemberLinks, dayPlaceLinks] = await Promise.all([
+    stageIds.length
+      ? db.select({ stageId: tripStageMemberRecords.stageId, id: memberRecords.id, name: memberRecords.name, displayName: memberRecords.displayName, avatar: memberRecords.avatar, active: memberRecords.active, createdAt: memberRecords.createdAt })
+        .from(tripStageMemberRecords)
+        .innerJoin(memberRecords, eq(tripStageMemberRecords.memberId, memberRecords.id))
+        .where(inArray(tripStageMemberRecords.stageId, stageIds))
+      : Promise.resolve([]),
+    storedDayIds.length
+      ? db.select().from(dayPlaceRecords).where(inArray(dayPlaceRecords.dayId, storedDayIds)).orderBy(asc(dayPlaceRecords.sortOrder))
+      : Promise.resolve([]),
+  ]);
 
   return rows.map((row) => ({
     ...row,
@@ -156,6 +158,18 @@ export async function findTripBySlug(slug: string) {
   const stored = (await hydrateTrips(rows))[0];
   if (stored) return stored;
   return seedFallbackAllowed() ? getSeedTripBySlug(slug) : undefined;
+}
+
+/** Minimal read used by route metadata; deliberately avoids hydrating Trip relations. */
+export async function findTripMetadataBySlug(slug: string) {
+  const row = (await getDb()
+    .select({ title: tripRecords.title, slug: tripRecords.slug, status: tripRecords.status })
+    .from(tripRecords)
+    .where(eq(tripRecords.slug, slug))
+    .limit(1))[0];
+  if (row) return row;
+  const seed = seedFallbackAllowed() ? getSeedTripBySlug(slug) : undefined;
+  return seed ? { title: seed.title, slug: seed.slug, status: seed.status } : undefined;
 }
 
 async function slugExists(slug: string) {

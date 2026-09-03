@@ -14,8 +14,8 @@ class TestD1Statement {
 }
 
 class TestD1Database {
-  constructor() { this.database = new DatabaseSync(":memory:"); this.database.exec("PRAGMA foreign_keys = ON"); }
-  prepare(sql) { return new TestD1Statement(this.database, sql); }
+  constructor() { this.database = new DatabaseSync(":memory:"); this.database.exec("PRAGMA foreign_keys = ON"); this.prepareCount = 0; }
+  prepare(sql) { this.prepareCount += 1; return new TestD1Statement(this.database, sql); }
   async batch(statements) { this.database.exec("BEGIN IMMEDIATE"); try { const results = []; for (const statement of statements) results.push(await statement.all()); this.database.exec("COMMIT"); return results; } catch (error) { this.database.exec("ROLLBACK"); throw error; } }
 }
 
@@ -103,12 +103,12 @@ test("keeps Session Member separate from Member View and safely resets view on i
     const switched = await render("/trips/shanghai-hangzhou-2026/plan?view=planning&day=trip-shanghai-hangzhou-2026-day-1");
     const switchedHtml = await switched.text();
     assert.match(switchedHtml, /当前身份[\s\S]{0,120}刘徐/);
-    assert.match(switchedHtml, /<a class="active"[^>]+member=member-liu-xu[^>]*>刘徐<\/a>/);
+    assert.match(switchedHtml, /<a[^>]+member=member-liu-xu[^>]+class="active"[^>]*>刘徐<\/a>/);
 
     const viewedAgain = await render("/trips/shanghai-hangzhou-2026/plan?view=planning&day=trip-shanghai-hangzhou-2026-day-1&member=member-wang-jingwen");
     const viewedAgainHtml = await viewedAgain.text();
     assert.match(viewedAgainHtml, /当前身份[\s\S]{0,120}刘徐/);
-    assert.match(viewedAgainHtml, /<a class="active"[^>]+member=member-wang-jingwen[^>]*>王静雯<\/a>/);
+    assert.match(viewedAgainHtml, /<a[^>]+member=member-wang-jingwen[^>]+class="active"[^>]*>王静雯<\/a>/);
 
     const loggedOut = await render("/api/session", { method: "DELETE", headers: { accept: "application/json" } });
     assert.equal(loggedOut.status, 200);
@@ -172,6 +172,34 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   assert.match(css, /\.trip-console\{gap:10px\}/);
   assert.match(css, /\.trip-console-side\{padding-top:12px\}/);
   assert.match(css, /\.trip-plan-page,\.plan-columns,\.recommendation-panel,\.itinerary-panel\{overflow:visible\}/);
+});
+
+test("keeps the performance boundaries for metadata, workspace views, and client navigation", async () => {
+  const metadataPage = readFileSync(new URL("../app/trips/[slug]/plan/page.tsx", import.meta.url), "utf8");
+  const workspaceService = readFileSync(new URL("../services/plan-workspace-service.server.ts", import.meta.url), "utf8");
+  const workspace = readFileSync(new URL("../components/trip/TripPlanWorkspace.tsx", import.meta.url), "utf8");
+  assert.match(metadataPage, /findTripMetadataBySlug/);
+  assert.doesNotMatch(metadataPage, /generateMetadata[\s\S]{0,300}getPlanWorkspace/);
+  assert.match(workspaceService, /Promise\.all\(/);
+  assert.match(workspaceService, /view === "budget"/);
+  assert.match(workspaceService, /budgetPromise/);
+  assert.doesNotMatch(workspaceService, /getDayTimeline/);
+  assert.match(workspace, /from "next\/link"/);
+  assert.doesNotMatch(workspace, /location\.(reload|assign)/);
+  const budgetWorkspace = readFileSync(new URL("../components/trip/BudgetWorkspace.tsx", import.meta.url), "utf8");
+  const planMap = readFileSync(new URL("../components/trip/PlanMap.tsx", import.meta.url), "utf8");
+  assert.match(budgetWorkspace, /from "next\/link"/);
+  assert.doesNotMatch(budgetWorkspace, /<a\b[^>]*href=/);
+  assert.match(planMap, /from "next\/link"/);
+  assert.doesNotMatch(planMap, /<a\b[^>]*href=/);
+  for (const file of ["PlanAddControl.tsx", "ItineraryItemControl.tsx", "ItineraryOrderControls.tsx", "BookingCreateControl.tsx", "BookingEditControl.tsx", "BookingPlaceControl.tsx", "DayPresenceControl.tsx", "PlaceDiscoveryControl.tsx", "ItineraryItemPlaceControl.tsx", "RecommendationAddControl.tsx", "BudgetWorkspace.tsx", "PlanMap.tsx"]) {
+    const source = readFileSync(new URL(`../components/trip/${file}`, import.meta.url), "utf8");
+    assert.doesNotMatch(source, /location\.(reload|assign)/, `${file} should use router invalidation`);
+  }
+  DB.prepareCount = 0;
+  const response = await render("/trips/shanghai-hangzhou-2026/plan?view=planning");
+  assert.equal(response.status, 200);
+  assert.ok(DB.prepareCount < 30, `Planning should stay below 30 D1 statements (got ${DB.prepareCount})`);
 });
 
 async function createTrip(body) {

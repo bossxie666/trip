@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { requestTripModalOpen, useExclusiveTripModal } from "./modal-events";
+import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
 
 type City = { id: string; name: string };
 type Place = { id: string; name: string; address: string | null; cityId: string } | null;
@@ -16,6 +17,7 @@ type SearchResult = { id: string; name: string; address: string | null; district
  * explicit state rather than a guessed airport.
  */
 export function BookingPlaceControl({ slug, bookingId, slot, cities, currentPlace, currentLabel = null, label = "修改地点", defaultCityId }: { slug: string; bookingId: string; slot: Slot; cities: City[]; currentPlace: Place; currentLabel?: string | null; label?: string; defaultCityId?: string | null }) {
+  const { refreshWorkspace } = useWorkspaceNavigation();
   const [open, setOpen] = useState(false), [cityId, setCityId] = useState(defaultCityId || currentPlace?.cityId || cities[0]?.id || ""), [keywords, setKeywords] = useState(""), [results, setResults] = useState<SearchResult[]>([]), [loading, setLoading] = useState(false), [error, setError] = useState("");
   const modalOwner = `booking-place:${bookingId}:${slot}`;
   useExclusiveTripModal(modalOwner, () => setOpen(false));
@@ -44,7 +46,7 @@ export function BookingPlaceControl({ slug, bookingId, slot, cities, currentPlac
       const bookingResponse = await fetch(`/api/trips/${encodeURIComponent(slug)}/bookings/${encodeURIComponent(bookingId)}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ [field]: { placeId: placePayload.place.id } }) });
       const bookingPayload = await bookingResponse.json() as { error?: string };
       if (!bookingResponse.ok) throw new Error(bookingPayload.error || "订单地点绑定失败。");
-      location.reload();
+      refreshWorkspace();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "订单地点绑定失败。"); setLoading(false); }
   }
 
@@ -55,7 +57,7 @@ export function BookingPlaceControl({ slug, bookingId, slot, cities, currentPlac
       const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/bookings/${encodeURIComponent(bookingId)}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ [field]: null }) });
       const payload = await response.json() as { error?: string };
       if (!response.ok) throw new Error(payload.error || "清除地点失败。");
-      location.reload();
+      refreshWorkspace();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "清除地点失败。"); setLoading(false); }
   }
 

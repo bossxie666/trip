@@ -1,7 +1,10 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { requestTripModalOpen, useExclusiveTripModal } from "./modal-events";
-import { WorkspaceOverlay } from "./WorkspaceOverlay";
+import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
+
+const WorkspaceOverlay = dynamic(() => import("./WorkspaceOverlay").then((module) => module.WorkspaceOverlay), { ssr: false });
 
 type PresenceState = "present" | "absent" | "partial" | "unknown";
 type Member = { id: string; displayName: string };
@@ -16,6 +19,7 @@ function timeValue(value: string | null | undefined) {
 }
 
 export function DayPresenceControl({ slug: providedSlug, dayId: providedDayId, dayLabel: providedDayLabel, members: providedMembers, initialStates: providedStates, initialDetails: providedDetails }: { slug?: string; dayId?: string; dayLabel?: string; members?: Member[]; initialStates?: Record<string, PresenceState>; initialDetails?: Record<string, PresenceDetail> }) {
+  const { refreshWorkspace } = useWorkspaceNavigation();
   const [context, setContext] = useState<{ slug: string; dayId: string; dayLabel: string; members: Member[]; states: Record<string, PresenceState>; details: Record<string, PresenceDetail> }>(() => ({ slug: providedSlug || "", dayId: providedDayId || "", dayLabel: providedDayLabel || "当天行程", members: providedMembers || [], states: providedStates || {}, details: providedDetails || {} }));
   const { slug, dayId, dayLabel, members, states } = context;
   const [open, setOpen] = useState(false);
@@ -64,18 +68,19 @@ export function DayPresenceControl({ slug: providedSlug, dayId: providedDayId, d
       const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/plan/presence`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const payload = await response.json() as { error?: string };
       if (!response.ok) throw new Error(payload.error || "当天成员保存失败");
-      location.assign(`/trips/${encodeURIComponent(slug)}/plan?view=planning&day=${encodeURIComponent(dayId)}`);
+      setOpen(false);
+      refreshWorkspace();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "当天成员保存失败"); setSaving(false); }
   }
 
   return <div id={`day-presence-${dayId}`} className="day-presence-control">
     <button type="button" className="day-presence-trigger" onClick={() => { if (!open) requestTripModalOpen(modalOwner); setOpen((current) => !current); }}>{hasUnknown ? "设置当天成员" : "当天成员 · 已确认"}</button>
-    <WorkspaceOverlay open={open} onClose={() => setOpen(false)} mode="modal" ariaLabel={`${dayLabel}当天成员`} className="day-presence-panel">
+    {open && <WorkspaceOverlay open={open} onClose={() => setOpen(false)} mode="modal" ariaLabel={`${dayLabel}当天成员`} className="day-presence-panel">
       <header><div><span>DAY PRESENCE</span><b>{dayLabel}</b></div><button type="button" className="workspace-close" onClick={() => setOpen(false)} aria-label="关闭">×</button></header>
       <p>这里确认这一天谁实际在场。部分在场可以只填抵达或离开时间；未填写的成员不会被默认为在场。</p>
       <div className="presence-member-list">{members.map((member) => { const draft = drafts[member.id] || { state: null, startsAt: "", endsAt: "" }; const currentState = states[member.id] || "unknown"; return <fieldset key={member.id} className="presence-member-row"><legend>{member.displayName}<small>{currentState === "unknown" ? "当天成员尚未设置" : currentState === "partial" ? "部分在场" : currentState === "present" ? "在场" : "不在场"}</small></legend><div className="presence-state-options"><label><input type="radio" name={`presence-${member.id}`} checked={draft.state === "present"} onChange={() => setDraft(member.id, { state: "present" })}/>在场</label><label><input type="radio" name={`presence-${member.id}`} checked={draft.state === "absent"} onChange={() => setDraft(member.id, { state: "absent" })}/>不在场</label><label><input type="radio" name={`presence-${member.id}`} checked={draft.state === "partial"} onChange={() => setDraft(member.id, { state: "partial" })}/>部分在场</label></div>{draft.state === "partial" && <div className="presence-time-fields"><label>开始时间<input type="time" value={draft.startsAt} onChange={(event) => setDraft(member.id, { startsAt: event.target.value })}/></label><label>结束时间<input type="time" value={draft.endsAt} onChange={(event) => setDraft(member.id, { endsAt: event.target.value })}/></label></div>}</fieldset>; })}</div>
       <div className="presence-actions"><button type="button" className="button-secondary" onClick={() => setDrafts(Object.fromEntries(members.map((member) => [member.id, { state: "present" as const, startsAt: "", endsAt: "" }]))) }>全员在场</button><button type="button" className="button-secondary" onClick={() => setDrafts(Object.fromEntries(members.map((member) => [member.id, { state: "absent" as const, startsAt: "", endsAt: "" }]))) }>全员不在场</button><button type="button" className="button-primary" onClick={save} disabled={saving}>{saving ? "保存中…" : "保存当天成员"}</button></div>
       {error && <small className="form-error" role="alert">{error}</small>}
-    </WorkspaceOverlay>
+    </WorkspaceOverlay>}
   </div>;
 }

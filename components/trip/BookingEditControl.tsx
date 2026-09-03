@@ -2,9 +2,13 @@
 "use client";
 
 import { useState } from "react";
-import { GenericPlacePicker, type GenericPlaceChoice } from "./GenericPlacePicker";
+import dynamic from "next/dynamic";
+import type { GenericPlaceChoice } from "./GenericPlacePicker";
 import { requestTripModalOpen, useExclusiveTripModal } from "./modal-events";
-import { WorkspaceOverlay } from "./WorkspaceOverlay";
+import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
+
+const GenericPlacePicker = dynamic(() => import("./GenericPlacePicker").then((module) => module.GenericPlacePicker), { ssr: false });
+const WorkspaceOverlay = dynamic(() => import("./WorkspaceOverlay").then((module) => module.WorkspaceOverlay), { ssr: false });
 
 type Member = { id: string; displayName: string };
 type Place = { id: string; name: string; address: string | null; district?: string | null; cityId?: string | null; latitude?: number | null; longitude?: number | null } | null;
@@ -40,6 +44,7 @@ function localDateTimeToUtc(date: string, time: string, timezone: string) {
 }
 
 export function BookingEditControl({ slug, booking: record, members, existingPlaces = [], placeUsageCount = 0 }: { slug: string; booking: BookingRecord; members: Member[]; existingPlaces?: GenericPlaceChoice[]; placeUsageCount?: number }) {
+  const { refreshWorkspace } = useWorkspaceNavigation();
   const booking = record.booking;
   const modalName = `booking-editor:${booking.id}`;
   const timezone = booking.timezone || "Asia/Shanghai";
@@ -61,7 +66,8 @@ export function BookingEditControl({ slug, booking: record, members, existingPla
       const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/bookings/${encodeURIComponent(booking.id)}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const payload = await response.json() as { error?: string };
       if (!response.ok) throw new Error(payload.error || "保存失败。");
-      location.reload();
+      setOpen(false);
+      refreshWorkspace();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "保存失败。"); setSaving(false); }
   }
   async function remove() {
@@ -72,13 +78,14 @@ export function BookingEditControl({ slug, booking: record, members, existingPla
       const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/bookings/${encodeURIComponent(booking.id)}`, { method: "DELETE" });
       const payload = await response.json() as { error?: string };
       if (!response.ok) throw new Error(payload.error || "删除失败。");
-      location.reload();
+      setOpen(false);
+      refreshWorkspace();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "删除失败。"); setSaving(false); }
   }
   const headingId = `booking-edit-title-${booking.id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   return <>
     <div className="booking-edit-control"><button type="button" className="booking-edit-trigger button-ghost" onClick={openEditor}>{booking.type === "hotel" ? "编辑住宿" : "编辑交通"}</button></div>
-    <WorkspaceOverlay open={open} onClose={closeEditor} mode="drawer" ariaLabel={booking.type === "hotel" ? "编辑住宿" : "编辑交通"} ariaLabelledBy={headingId} className="booking-edit-dialog">
+    {open && <WorkspaceOverlay open={open} onClose={closeEditor} mode="drawer" ariaLabel={booking.type === "hotel" ? "编辑住宿" : "编辑交通"} ariaLabelledBy={headingId} className="booking-edit-dialog">
         <header><div><span>BOOKING</span><h2 id={headingId}>{booking.type === "hotel" ? "编辑住宿" : "编辑交通"}</h2><p>{booking.title}</p></div><button type="button" className="workspace-close booking-edit-close" aria-label="关闭编辑器" onClick={closeEditor}>×</button></header>
         <div className="booking-edit-sheet">
           <label>显示名称<input value={title} onChange={(event) => setTitle(event.target.value)} /></label>
@@ -97,6 +104,6 @@ export function BookingEditControl({ slug, booking: record, members, existingPla
           <div className="booking-danger-zone"><span>DANGER ZONE</span><button type="button" className="button-danger booking-danger" disabled={saving} onClick={() => void remove()}>删除{booking.type === "hotel" ? "住宿" : "交通"}</button></div>
           <footer className="workspace-footer"><button type="button" className="button-secondary booking-edit-cancel" disabled={saving} onClick={closeEditor}>取消</button><button type="button" className="button-primary plan-add-submit" disabled={saving} onClick={() => void save()}>{saving ? "保存中…" : `保存${booking.type === "hotel" ? "住宿" : "交通"}`}</button></footer>
         </div>
-    </WorkspaceOverlay>
+    </WorkspaceOverlay>}
   </>;
 }

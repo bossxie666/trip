@@ -2,10 +2,14 @@
 "use client";
 
 import { useState } from "react";
-import { GenericPlacePicker, type GenericPlaceChoice } from "./GenericPlacePicker";
+import dynamic from "next/dynamic";
+import type { GenericPlaceChoice } from "./GenericPlacePicker";
 import { requestTripModalOpen, useExclusiveTripModal } from "./modal-events";
 import { TransportIcon } from "./TransportIcon";
-import { WorkspaceOverlay } from "./WorkspaceOverlay";
+import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
+
+const GenericPlacePicker = dynamic(() => import("./GenericPlacePicker").then((module) => module.GenericPlacePicker), { ssr: false });
+const WorkspaceOverlay = dynamic(() => import("./WorkspaceOverlay").then((module) => module.WorkspaceOverlay), { ssr: false });
 
 type DayOption = { id: string; label: string };
 type MemberOption = { id: string; displayName: string };
@@ -16,6 +20,7 @@ type ExistingTransport = { id: string; title: string; origin: string; destinatio
 const transportLabels: Record<TransportKind, string> = { flight: "飞机", high_speed_rail: "高铁", train: "火车", other: "其他长途交通" };
 
 export function PlanAddControl({ slug, days, defaultDayId, currentMemberId, existingTransport = [], members = [], existingPlaces = [] }: { slug: string; days: DayOption[]; defaultDayId: string; currentMemberId?: string | null; existingTransport?: ExistingTransport[]; members?: MemberOption[]; existingPlaces?: GenericPlaceChoice[] }) {
+  const { openPlanningDay } = useWorkspaceNavigation();
   const [open, setOpen] = useState(false), [kind, setKind] = useState<"place" | "transport" | "note">("place"), [dayId, setDayId] = useState(defaultDayId);
   const [place, setPlace] = useState<GenericPlaceChoice | null>(null), [title, setTitle] = useState(""), [note, setNote] = useState("");
   const [origin, setOrigin] = useState<GenericPlaceChoice | null>(null), [destination, setDestination] = useState<GenericPlaceChoice | null>(null), [originLabel, setOriginLabel] = useState(""), [destinationLabel, setDestinationLabel] = useState("");
@@ -50,14 +55,14 @@ export function PlanAddControl({ slug, days, defaultDayId, currentMemberId, exis
       const response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error || "保存失败。");
-      setOpen(false); reset(); location.assign(`/trips/${encodeURIComponent(slug)}/plan?view=planning&day=${encodeURIComponent(dayId)}`);
+      setOpen(false); reset(); openPlanningDay(slug, dayId);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "保存失败。"); setSaving(false); }
   }
   const targetDayLabel = days.find((day) => day.id === dayId)?.label.split(/\s+/, 1)[0] || "今天";
   const quickPlaces = existingPlaces.slice(0, 8);
   return <>
     <button type="button" className="add-itinerary-button button-primary" onClick={() => { setDayId(defaultDayId); requestTripModalOpen(modalOwner); setOpen(true); }}>＋ 添加行程</button>
-    <WorkspaceOverlay open={open} onClose={() => setOpen(false)} ariaLabel="添加行程" className="plan-add-sheet" mode="modal">
+    {open && <WorkspaceOverlay open={open} onClose={() => setOpen(false)} ariaLabel="添加行程" className="plan-add-sheet" mode="modal">
       <header><div><span>ADD TO DAY</span><h3>添加到 {targetDayLabel}</h3><p>想把什么加入今天？</p></div><button type="button" className="workspace-close" aria-label="关闭" onClick={() => setOpen(false)}>×</button></header>
       <label className="plan-add-target-day"><span>目标日期</span><select value={dayId} onChange={(event) => setDayId(event.target.value)}>{days.map((day) => <option key={day.id} value={day.id}>{day.label}</option>)}</select></label>
       <div className="plan-add-kind" role="tablist" aria-label="添加类型"><button type="button" role="tab" aria-selected={kind === "place"} className={kind === "place" ? "active" : ""} onClick={() => setKind("place")}><TransportIcon kind="attraction" size={14}/>地点</button><button type="button" role="tab" aria-selected={kind === "transport"} className={kind === "transport" ? "active" : ""} onClick={() => setKind("transport")}><TransportIcon kind="train" size={14}/>交通</button><button type="button" role="tab" aria-selected={kind === "note"} className={kind === "note" ? "active" : ""} onClick={() => setKind("note")}><TransportIcon kind="calendar" size={14}/>事项</button></div>
@@ -68,6 +73,6 @@ export function PlanAddControl({ slug, days, defaultDayId, currentMemberId, exis
       {kind === "transport" && <label>备注（可选）<textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="行李、提前到站、检票提醒…" /></label>}
       {error && <p className="form-error" role="alert">{error}</p>}
       <footer className="workspace-footer"><button type="button" className="button-secondary plan-add-cancel" disabled={saving} onClick={() => setOpen(false)}>取消</button><button type="button" className="plan-add-submit button-primary" disabled={saving} onClick={() => void submit()}>{saving ? "保存中…" : `加入 ${targetDayLabel}`}</button></footer>
-    </WorkspaceOverlay>
+    </WorkspaceOverlay>}
   </>;
 }
