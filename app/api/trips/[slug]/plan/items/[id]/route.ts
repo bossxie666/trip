@@ -27,7 +27,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
     db.select().from(dayPresenceRecords).where(and(eq(dayPresenceRecords.tripId, tripId), eq(dayPresenceRecords.dayId, item.dayId))),
   ]);
   const overrideMap = Object.fromEntries(overrides.map((entry) => [entry.memberId, entry.participation]));
-  const offset = trip[0]?.timezone === "Asia/Shanghai" ? "+08:00" : trip[0]?.timezone === "Asia/Tokyo" ? "+09:00" : "+00:00";
+  const timezone = trip[0]?.timezone || "Asia/Shanghai";
+  const offset = timezone === "Asia/Shanghai" ? "+08:00" : timezone === "Asia/Tokyo" ? "+09:00" : "+00:00";
   const dayStart = day[0]?.date ? new Date(`${day[0].date}T00:00:00${offset}`).getTime() : Number.NaN, dayEnd = dayStart + 86_400_000;
   const states = Object.fromEntries(presenceRows.map((row) => {
     const explicit = dayPresence.find((entry) => entry.memberId === row.memberId);

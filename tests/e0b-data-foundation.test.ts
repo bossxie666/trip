@@ -356,6 +356,22 @@ test("E0B data foundation", async (t) => {
     assert.deepEqual({ ...row }, { state: "present", starts_at: "2026-12-31T16:00:00.000Z", ends_at: "2027-01-01T16:00:00.000Z" });
   });
 
+  await t.test("uses the default timezone when a legacy Trip has no timezone", async () => {
+    const previous = (DB.database.prepare("SELECT timezone FROM trips WHERE id = 'trip-e0b-a'").get() as { timezone: string | null }).timezone;
+    DB.database.prepare("UPDATE trips SET timezone = NULL WHERE id = 'trip-e0b-a'").run();
+    try {
+      await presenceRepo.replaceDayPresence({ tripId: "trip-e0b-a", dayId: "e0b-a-day-3", members: [
+        { memberId: "member-nini", state: "present" },
+        { memberId: "member-zhu-jingqi", state: "absent" },
+        { memberId: "member-wang-jingwen", state: "partial", startsAt: "10:00", endsAt: "12:00" },
+      ], actorMemberId: "member-nini" });
+      const row = DB.database.prepare("SELECT state, starts_at, ends_at FROM day_member_presence WHERE day_id = 'e0b-a-day-3' AND member_id = 'member-wang-jingwen'").get();
+      assert.deepEqual({ ...row }, { state: "partial", starts_at: "2027-01-03T02:00:00.000Z", ends_at: "2027-01-03T04:00:00.000Z" });
+    } finally {
+      DB.database.prepare("UPDATE trips SET timezone = ? WHERE id = 'trip-e0b-a'").run(previous);
+    }
+  });
+
   await t.test("uses reliable endpoint cities for Day labels and safe Day fallback", () => {
     const cities = [{ id: "city-shadow-shanghai", name: "上海" }, { id: "city-shadow-hangzhou", name: "杭州" }];
     assert.equal(dayLabel.resolveDayLabel({ id: "label-day", dayNumber: 1, date: "2027-01-01", title: "上海→杭州" }, [], cities), "Day 1");

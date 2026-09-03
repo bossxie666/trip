@@ -99,13 +99,18 @@ export async function replaceDayPresence(input: { tripId: string; dayId: string;
     if (!(await db.select({ memberId: tripMemberRecords.memberId }).from(tripMemberRecords).where(and(eq(tripMemberRecords.tripId, input.tripId), eq(tripMemberRecords.memberId, input.actorMemberId))).limit(1))[0]) throw new Error("MEMBER_NOT_IN_TRIP");
   })();
   const day = (await db.select({ date: dayRecords.date, timezone: tripRecords.timezone }).from(dayRecords).innerJoin(tripRecords, eq(tripRecords.id, dayRecords.tripId)).where(and(eq(dayRecords.id, input.dayId), eq(dayRecords.tripId, input.tripId))).limit(1))[0];
-  if (!day?.date || !day.timezone) throw new Error("DAY_CONTEXT_INCOMPLETE");
+  if (!day?.date) throw new Error("DAY_CONTEXT_INCOMPLETE");
+  // Older and newly-created Trips may have a nullable timezone.  Presence
+  // confirmation is still a local-calendar operation; use the product's
+  // default timezone instead of misreporting the missing metadata as an
+  // incomplete presence interval.
+  const timezone = day.timezone || "Asia/Shanghai";
   const members = await db.select({ memberId: tripMemberRecords.memberId }).from(tripMemberRecords).where(eq(tripMemberRecords.tripId, input.tripId));
   const memberSet = new Set(members.map((member) => member.memberId));
   const legacySelected = new Set((input.memberIds || []).map(String));
   const updates: DayPresenceUpdate[] = input.members?.length ? input.members.map((entry) => ({ memberId: String(entry.memberId), state: entry.state, startsAt: entry.startsAt ?? null, endsAt: entry.endsAt ?? null })) : members.map((member) => ({ memberId: member.memberId, state: legacySelected.has(member.memberId) ? "present" as const : "absent" as const }));
   if (updates.length !== members.length || new Set(updates.map((entry) => entry.memberId)).size !== members.length || updates.some((entry) => !memberSet.has(entry.memberId) || !["present", "absent", "partial"].includes(entry.state))) throw new Error("INVALID_PRESENCE_STATE");
-  const { start, end } = localDayBounds(day.date, day.timezone);
+  const { start, end } = localDayBounds(day.date, timezone);
   const now = new Date().toISOString(), d1 = getRuntimeEnv().DB;
   const statements = [] as D1PreparedStatement[];
   for (const update of updates) {
@@ -115,8 +120,8 @@ export async function replaceDayPresence(input: { tripId: string; dayId: string;
       // A partial-presence record is the only state that requires an
       // interval. Present/absent deliberately clear any stale interval.
       if (!update.startsAt || !update.endsAt) throw new Error(`INCOMPLETE_PRESENCE:${update.memberId}`);
-      startsAt = localTimeToUtc(day.date, update.startsAt, day.timezone, "start");
-      endsAt = localTimeToUtc(day.date, update.endsAt, day.timezone, "end");
+      startsAt = localTimeToUtc(day.date, update.startsAt, timezone, "start");
+      endsAt = localTimeToUtc(day.date, update.endsAt, timezone, "end");
       if (Date.parse(endsAt) <= Date.parse(startsAt)) throw new Error("INVALID_PRESENCE_RANGE");
     }
     statements.push(d1.prepare("INSERT INTO day_member_presence (id, trip_id, day_id, member_id, state, starts_at, ends_at, created_by_member_id, updated_by_member_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(day_id, member_id) DO UPDATE SET state = excluded.state, starts_at = excluded.starts_at, ends_at = excluded.ends_at, updated_by_member_id = excluded.updated_by_member_id, updated_at = excluded.updated_at").bind(crypto.randomUUID(), input.tripId, input.dayId, update.memberId, update.state, startsAt, endsAt, input.actorMemberId, input.actorMemberId, now, now));

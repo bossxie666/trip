@@ -241,3 +241,13 @@
   .trip-console-side{padding-top:46px}
   .plan-add-target-day{grid-template-columns:1fr}
 }
+
+/* Mobile follow-up: the identity trigger is absolutely positioned against the
+   console header, so the second grid row does not need a trigger-sized spacer.
+   Keep the browser page as the only main vertical scroll container. */
+@media(max-width:680px){
+  .trip-console{gap:10px}
+  .trip-console-side{padding-top:12px}
+}
+.trip-plan-page,.plan-columns,.recommendation-panel,.itinerary-panel{overflow:visible}
+.plan-columns{height:auto;min-height:0;max-height:none}

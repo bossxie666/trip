@@ -192,6 +192,7 @@ export async function createTrip(input: CreateTripInput, actorMemberId: string) 
     cover: input.cover,
     createdAt: now,
     updatedAt: now,
+    timezone: "Asia/Shanghai",
     createdByMemberId: actorMemberId,
     updatedByMemberId: actorMemberId,
   });

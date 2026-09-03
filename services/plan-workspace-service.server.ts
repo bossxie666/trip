@@ -36,9 +36,10 @@ export async function getPlanWorkspace(slug: string, memberId?: string) {
     db.select({ place: placeRecords, planStatus: tripPlaceRecords.planStatus }).from(tripPlaceRecords).innerJoin(placeRecords, eq(tripPlaceRecords.placeId, placeRecords.id)).where(eq(tripPlaceRecords.tripId, stored.id)),
   ]);
 
+  const timezone = stored.timezone || "Asia/Shanghai";
   const timelineByDay = new Map<string, Awaited<ReturnType<typeof getDayTimeline>>>();
   for (const day of days) {
-    if (day.date && stored.timezone) timelineByDay.set(day.id, await getDayTimeline(stored.id, day.id));
+    if (day.date) timelineByDay.set(day.id, await getDayTimeline(stored.id, day.id));
     else timelineByDay.set(day.id, items.filter(({ item }) => item.dayId === day.id).map(({ item }) => ({ source: "itinerary" as const, sourceId: item.id, entryType: "itinerary-item" as const, bucket: "untimed" as const, title: item.title, timeLocal: item.startTimeLocal, sortOrder: item.sortOrder, locked: item.lockedAt != null })));
   }
 
@@ -72,7 +73,7 @@ export async function getPlanWorkspace(slug: string, memberId?: string) {
     return { place, kind: formal ? "itinerary" as const : booking ? "booking" as const : saved ? "saved" as const : recommendation ? "recommendation" as const : "candidate" as const, planStatus, category: recommendationMeta?.category || null, areaKey: recommendationMeta?.areaKey || null, recommendationTitle: recommendationMeta?.title || null };
   });
   const memberIds = presenceRows.map((member) => member.memberId);
-  const timezoneOffset = stored.timezone === "Asia/Shanghai" ? "+08:00" : stored.timezone === "Asia/Tokyo" ? "+09:00" : "+00:00";
+  const timezoneOffset = timezone === "Asia/Shanghai" ? "+08:00" : timezone === "Asia/Tokyo" ? "+09:00" : "+00:00";
   const dayBounds = (date: string) => {
     const start = new Date(`${date}T00:00:00${timezoneOffset}`);
     return { start: start.getTime(), end: start.getTime() + 86_400_000 };
@@ -82,7 +83,7 @@ export async function getPlanWorkspace(slug: string, memberId?: string) {
     const explicit = dayPresenceDetail(dayId, memberId);
     if (explicit) return explicit.state as "present" | "absent" | "partial";
     const coverage = presenceRows.find((row) => row.memberId === memberId)?.presenceCoverage;
-    if (coverage !== "complete" || !dayDate || !stored.timezone) return "unknown" as const;
+    if (coverage !== "complete" || !dayDate) return "unknown" as const;
     const { start, end } = dayBounds(dayDate);
     const windows = presenceWindows.filter((window) => window.memberId === memberId).map((window) => ({ start: Date.parse(window.startsAt), end: window.endsAt == null ? Number.POSITIVE_INFINITY : Date.parse(window.endsAt) }));
     if (windows.some((window) => window.start <= start && end <= window.end)) return "present" as const;

@@ -138,6 +138,7 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   const presence = readFileSync(new URL("../components/trip/DayPresenceControl.tsx", import.meta.url), "utf8");
   const placeDiscovery = readFileSync(new URL("../components/trip/PlaceDiscoveryControl.tsx", import.meta.url), "utf8");
   const bookingEdit = readFileSync(new URL("../components/trip/BookingEditControl.tsx", import.meta.url), "utf8");
+  const overlay = readFileSync(new URL("../components/trip/WorkspaceOverlay.tsx", import.meta.url), "utf8");
 
   assert.match(css, /\.plan-columns\{height:auto;min-height:0\}/);
   assert.match(css, /\.recommendation-panel,\.itinerary-panel\{overflow:visible;max-height:none\}/);
@@ -166,6 +167,11 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   assert.match(bookingEdit, /workspace-close/);
   assert.match(bookingEdit, /booking-edit-cancel/);
   assert.doesNotMatch(bookingEdit, /<details className="booking-edit-control"/);
+  assert.match(overlay, /createPortal/);
+  assert.match(overlay, /document\.body\.style\.overflow = "hidden"/);
+  assert.match(css, /\.trip-console\{gap:10px\}/);
+  assert.match(css, /\.trip-console-side\{padding-top:12px\}/);
+  assert.match(css, /\.trip-plan-page,\.plan-columns,\.recommendation-panel,\.itinerary-panel\{overflow:visible\}/);
 });
 
 async function createTrip(body) {
