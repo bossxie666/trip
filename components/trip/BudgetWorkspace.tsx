@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState, type FormEvent } from "react";
-import Link from "next/link";
+import { WorkspaceNavLink as Link } from "./WorkspaceNavLink";
 import type { PersonalBudgetWorkspace } from "@/services/budget-service.server";
 import type { BudgetCategory } from "@/models/planning";
 import { EstimatedTransport, type EstimateSnapshot } from "./EstimatedTransport";

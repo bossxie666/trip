@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps, jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-autofocus */
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import { WorkspaceNavLink as Link } from "./WorkspaceNavLink";
 import type { AMapRouteMode, AMapRouteResult } from "@/services/amap/amap-types";
 import { routeStrokeColor } from "@/services/amap/subway-colors";
 import { filterTimelineForMember, numberTimelineNodes, type TimelineNode } from "@/services/timeline-assembler";

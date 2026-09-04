@@ -103,12 +103,12 @@ test("keeps Session Member separate from Member View and safely resets view on i
     const switched = await render("/trips/shanghai-hangzhou-2026/plan?view=planning&day=trip-shanghai-hangzhou-2026-day-1");
     const switchedHtml = await switched.text();
     assert.match(switchedHtml, /当前身份[\s\S]{0,120}刘徐/);
-    assert.match(switchedHtml, /<a[^>]+member=member-liu-xu[^>]+class="active"[^>]*>刘徐<\/a>/);
+    assert.match(switchedHtml, /<a(?=[^>]*member=member-liu-xu)(?=[^>]*class="active")[^>]*>刘徐<\/a>/);
 
     const viewedAgain = await render("/trips/shanghai-hangzhou-2026/plan?view=planning&day=trip-shanghai-hangzhou-2026-day-1&member=member-wang-jingwen");
     const viewedAgainHtml = await viewedAgain.text();
     assert.match(viewedAgainHtml, /当前身份[\s\S]{0,120}刘徐/);
-    assert.match(viewedAgainHtml, /<a[^>]+member=member-wang-jingwen[^>]+class="active"[^>]*>王静雯<\/a>/);
+    assert.match(viewedAgainHtml, /<a(?=[^>]*member=member-wang-jingwen)(?=[^>]*class="active")[^>]*>王静雯<\/a>/);
 
     const loggedOut = await render("/api/session", { method: "DELETE", headers: { accept: "application/json" } });
     assert.equal(loggedOut.status, 200);
@@ -184,13 +184,19 @@ test("keeps the performance boundaries for metadata, workspace views, and client
   assert.match(workspaceService, /view === "budget"/);
   assert.match(workspaceService, /budgetPromise/);
   assert.doesNotMatch(workspaceService, /getDayTimeline/);
-  assert.match(workspace, /from "next\/link"/);
+  assert.match(workspace, /from "\.\/WorkspaceNavLink"/);
+  assert.match(workspace, /plan-member-filter[\s\S]{0,700}<WorkspaceNavLink/);
+  assert.match(workspace, /day-navigation[\s\S]{0,300}<WorkspaceNavLink/);
+  assert.match(workspace, /plan-view-tabs[\s\S]{0,500}<WorkspaceNavLink/);
+  const workspaceNavLink = readFileSync(new URL("../components/trip/WorkspaceNavLink.tsx", import.meta.url), "utf8");
+  assert.match(workspaceNavLink, /router\.push\(href\)/);
+  assert.doesNotMatch(workspaceNavLink, /location\.(reload|assign)/);
   assert.doesNotMatch(workspace, /location\.(reload|assign)/);
   const budgetWorkspace = readFileSync(new URL("../components/trip/BudgetWorkspace.tsx", import.meta.url), "utf8");
   const planMap = readFileSync(new URL("../components/trip/PlanMap.tsx", import.meta.url), "utf8");
-  assert.match(budgetWorkspace, /from "next\/link"/);
+  assert.match(budgetWorkspace, /WorkspaceNavLink as Link/);
   assert.doesNotMatch(budgetWorkspace, /<a\b[^>]*href=/);
-  assert.match(planMap, /from "next\/link"/);
+  assert.match(planMap, /WorkspaceNavLink as Link/);
   assert.doesNotMatch(planMap, /<a\b[^>]*href=/);
   for (const file of ["PlanAddControl.tsx", "ItineraryItemControl.tsx", "ItineraryOrderControls.tsx", "BookingCreateControl.tsx", "BookingEditControl.tsx", "BookingPlaceControl.tsx", "DayPresenceControl.tsx", "PlaceDiscoveryControl.tsx", "ItineraryItemPlaceControl.tsx", "RecommendationAddControl.tsx", "BudgetWorkspace.tsx", "PlanMap.tsx"]) {
     const source = readFileSync(new URL(`../components/trip/${file}`, import.meta.url), "utf8");
@@ -457,6 +463,33 @@ test("validates E1 URL state and renders map and budget views", async () => {
   assert.match(map, /攻略地图/); assert.match(map, /高德地图/); assert.match(map, /淡色 Marker/);
   const budget = await (await render("/trips/shanghai-hangzhou-2026/plan?view=budget&day=trip-shanghai-hangzhou-2026-day-3")).text();
   assert.match(budget, /我的费用/); assert.match(budget, /¥639\.11/); assert.match(budget, /我的费用待确认/); assert.match(budget, /订单总价不会直接算入个人费用/);
+});
+
+test("keeps production workspace navigation targets and member perspective semantics", async () => {
+  const savedSession = sessionCookie;
+  try {
+    await loginAs("nini");
+    const base = "/trips/shanghai-hangzhou-2026/plan";
+    const day1 = "trip-shanghai-hangzhou-2026-day-1";
+    const day2 = "trip-shanghai-hangzhou-2026-day-2";
+    const [planning, map, budget, nextDay, memberView] = await Promise.all([
+      render(`${base}?view=planning&day=${day1}&member=member-nini`),
+      render(`${base}?view=map&day=${day1}&member=member-nini&mode=day`),
+      render(`${base}?view=budget&day=${day1}&member=member-nini&cost=expected`),
+      render(`${base}?view=planning&day=${day2}&member=member-nini`),
+      render(`${base}?view=planning&day=${day1}&member=member-liu-xu`),
+    ]);
+    for (const response of [planning, map, budget, nextDay, memberView]) assert.equal(response.status, 200);
+    const [planningHtml, mapHtml, budgetHtml, nextDayHtml, memberHtml] = await Promise.all([planning.text(), map.text(), budget.text(), nextDay.text(), memberView.text()]);
+    assert.match(planningHtml, /aria-label="工作台视图"[\s\S]*view=map/);
+    assert.match(mapHtml, /<h2>行程路线<\/h2>/);
+    assert.match(budgetHtml, /<h2>我的费用<\/h2>/);
+    assert.match(nextDayHtml, /<h2>09\/24/);
+    assert.match(memberHtml, /当前身份[\s\S]{0,120}nini/);
+    assert.match(memberHtml, /<a(?=[^>]*member=member-liu-xu)(?=[^>]*class="active")[^>]*>刘徐<\/a>/);
+  } finally {
+    sessionCookie = savedSession;
+  }
 });
 
 test("keeps Recommendation region and category independent from the active Day", async () => {

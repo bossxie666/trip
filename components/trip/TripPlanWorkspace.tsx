@@ -1,6 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 import { PlanningPanels } from "./PlanningPanels";
-import Link from "next/link";
+import { WorkspaceNavLink } from "./WorkspaceNavLink";
 import { RecommendationAddControl } from "./RecommendationAddControl";
 import { PlanMap } from "./PlanMap";
 import { DayPresenceControl } from "./DayPresenceControl";
@@ -28,6 +28,7 @@ type CategoryFilter = "all" | "attraction" | "food" | "cafe" | "shopping" | "gui
 type LibrarySort = "core" | "recent";
 
 const categoryLabels = { attraction: "景点", food: "美食", cafe: "咖啡", shopping: "购物", hotel: "酒店", experience: "体验", other: "其他" } as const;
+const Link = WorkspaceNavLink;
 const areaFilters: { key: AreaFilter; label: string }[] = [{ key: "shanghai", label: "上海" }, { key: "hangzhou", label: "杭州" }, { key: "tonglu", label: "桐庐" }];
 const categoryFilters: { key: CategoryFilter; label: string }[] = [{ key: "all", label: "全部" }, { key: "attraction", label: "景点" }, { key: "food", label: "美食" }, { key: "cafe", label: "咖啡" }, { key: "shopping", label: "购物" }, { key: "guide", label: "攻略" }, { key: "other", label: "其他" }];
 
@@ -205,7 +206,7 @@ export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query
         <div><span>DAY PLAN</span><h2>{activeDay ? `${shortDate(activeDay.date)} · ${dayArea(activeDay, bookings, trip.cities)}` : "当天行程"}</h2></div>
         <div className="day-plan-actions">{presenceControl}<PlanAddControl slug={trip.slug} days={dayLabels} defaultDayId={activeDayId} currentMemberId={workspace.currentMemberId} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} existingTransport={existingTransport} existingPlaces={existingPlaceChoices} /></div>
       </header>
-      <div className="plan-member-filter" aria-label="成员视角"><span>成员视角</span><Link className={memberFilter === "all" ? "active" : ""} href={link("planning", activeDayId, mapMode, "all")}>全体</Link>{(trip.members || []).map((member) => <Link className={memberFilter === member.id ? "active" : ""} href={link("planning", activeDayId, mapMode, member.id)} key={member.id}>{member.displayName}</Link>)}</div>
+      <div className="plan-member-filter" aria-label="成员视角"><span>成员视角</span><WorkspaceNavLink className={memberFilter === "all" ? "active" : ""} href={link("planning", activeDayId, mapMode, "all")}>全体</WorkspaceNavLink>{(trip.members || []).map((member) => <WorkspaceNavLink className={memberFilter === member.id ? "active" : ""} href={link("planning", activeDayId, mapMode, member.id)} key={member.id}>{member.displayName}</WorkspaceNavLink>)}</div>
       <div className="plan-timeline">{timelineView}</div>
       {!visibleTimeline.length && <div className="plan-empty"><b>{memberFilter === "all" ? "尚未安排" : "该成员当天暂无已确认事项（尚未安排）"}</b><p>{memberFilter === "all" ? "这一天还没有正式行程事项，可以从左侧攻略素材中添加。" : "可以切换到全体视角查看当天完整安排。"}</p></div>}
     </>
@@ -235,8 +236,8 @@ export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query
       <div className="console-title"><Link href="/trips">← 攻略中心</Link><span>TRIP CONSOLE</span><h1>{trip.title}</h1><p>{fullRange(trip.startDate, trip.endDate)} · {stageSummary}</p></div>
       <div className="trip-console-side"><MemberIdentityControl currentMember={currentMember} /><details className="trip-settings"><summary>编辑旅行</summary><EditTripForm trip={trip} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} /></details><div className="booking-console"><span className="booking-console-label">住宿</span>{hotelBookings.map((record) => <article key={record.booking.id}><b className="booking-summary-title"><TransportIcon kind="hotel" size={15} />{record.booking.title.replace("附近", "")}</b><span>{bookingStatus(record.booking.status, record.booking.type)} · {bookingTime(record.booking)}</span><strong><small>总价 {money(record.booking.totalAmountMinor)}</small></strong><BookingEditControl slug={trip.slug} booking={record} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} existingPlaces={existingPlaceChoices} /></article>)}{!hotelBookings.length && <p className="booking-console-empty">还没有添加住宿</p>}<BookingCreateControl slug={trip.slug} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} existingPlaces={existingPlaceChoices} /></div></div>
     </header>
-    <nav className="day-navigation" aria-label="选择日期">{days.map((day) => <Link className={day.id === activeDayId ? "active" : ""} key={day.id} href={link(view, day.id)}><b>{shortDate(day.date)}</b><span>{dayArea(day, bookings, trip.cities)}</span></Link>)}</nav>
-    <nav className="plan-view-tabs" aria-label="工作台视图"><Link className={view === "planning" ? "active" : ""} href={link("planning")}>规划</Link><Link className={view === "map" ? "active" : ""} href={link("map")}>地图</Link><Link className={view === "budget" ? "active" : ""} href={link("budget")}>费用</Link></nav>
+    <nav className="day-navigation" aria-label="选择日期">{days.map((day) => <WorkspaceNavLink className={day.id === activeDayId ? "active" : ""} key={day.id} href={link(view, day.id)}><b>{shortDate(day.date)}</b><span>{dayArea(day, bookings, trip.cities)}</span></WorkspaceNavLink>)}</nav>
+    <nav className="plan-view-tabs" aria-label="工作台视图"><WorkspaceNavLink className={view === "planning" ? "active" : ""} href={link("planning")}>规划</WorkspaceNavLink><WorkspaceNavLink className={view === "map" ? "active" : ""} href={link("map")}>地图</WorkspaceNavLink><WorkspaceNavLink className={view === "budget" ? "active" : ""} href={link("budget")}>费用</WorkspaceNavLink></nav>
     {view === "planning" && <><div className="empty-trip-actions"><PlaceDiscoveryControl slug={trip.slug} days={dayLabels} existingPlaces={existingPlaceChoices} /></div><PlanningPanels library={library} itinerary={itinerary} /></>}
     {view === "map" && <section className="map-view"><header className="workspace-view-heading"><div><span>MAP</span><h2>{mapMode === "day" ? "行程路线" : "攻略地图"}</h2></div><nav><Link className={mapMode === "day" ? "active" : ""} href={link("map", activeDayId, "day")}>行程路线</Link><Link className={mapMode === "library" ? "active" : ""} href={link("map", activeDayId, "library")}>攻略地图</Link></nav></header><PlanMap slug={trip.slug} places={[]} workspace={mapWorkspace} activeDayId={activeDayId} mapMode={mapMode} /></section>}
     {view === "budget" && <BudgetWorkspace slug={trip.slug} budget={workspace.budget} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} days={dayLabels} cities={trip.cities.map((city) => ({ id: city.id, name: city.name }))} routeSegmentsByDay={workspace.routeSegmentsByDay} routePreferences={workspace.routePreferences} costMode={costMode} />}
