@@ -192,6 +192,11 @@ test("keeps the performance boundaries for metadata, workspace views, and client
   assert.match(workspaceNavLink, /router\.push\(href\)/);
   assert.doesNotMatch(workspaceNavLink, /location\.(reload|assign)/);
   assert.doesNotMatch(workspace, /location\.(reload|assign)/);
+  for (const file of ["app/trips/page.tsx", "app/trips/new/page.tsx", "app/trips/[slug]/not-found.tsx"]) {
+    const source = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+    assert.match(source, /WorkspaceNavLink as Link/);
+    assert.doesNotMatch(source, /from "next\/link"/);
+  }
   const budgetWorkspace = readFileSync(new URL("../components/trip/BudgetWorkspace.tsx", import.meta.url), "utf8");
   const planMap = readFileSync(new URL("../components/trip/PlanMap.tsx", import.meta.url), "utf8");
   assert.match(budgetWorkspace, /WorkspaceNavLink as Link/);

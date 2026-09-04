@@ -1,6 +1,6 @@
 import { MemberIdentityControl } from "@/components/auth/MemberIdentityControl";
 import { getCurrentMember } from "@/services/auth.server";
-import Link from "next/link";
+import { WorkspaceNavLink as Link } from "@/components/trip/WorkspaceNavLink";
 
 export default async function TripNotFound() {
   const current = await getCurrentMember();

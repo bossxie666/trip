@@ -4,7 +4,7 @@ import { getCurrentMember, tripDeletionMemberId } from "@/services/auth.server";
 import type { TripStatus } from "@/models/travel";
 import { TripDeleteButton } from "@/components/trip/TripDeleteButton";
 import { MemberIdentityControl } from "@/components/auth/MemberIdentityControl";
-import Link from "next/link";
+import { WorkspaceNavLink as Link } from "@/components/trip/WorkspaceNavLink";
 
 const statusLabels = {
   inspiration: "灵感",

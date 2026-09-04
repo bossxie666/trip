@@ -3,7 +3,7 @@ import { MemberIdentityControl } from "@/components/auth/MemberIdentityControl";
 import { getCurrentMember } from "@/services/auth.server";
 import { listActiveMembers } from "@/services/member-repository.server";
 import { redirect } from "next/navigation";
-import Link from "next/link";
+import { WorkspaceNavLink as Link } from "@/components/trip/WorkspaceNavLink";
 
 export default async function NewTripPage() {
   const [current, members] = await Promise.all([getCurrentMember(), listActiveMembers()]);
