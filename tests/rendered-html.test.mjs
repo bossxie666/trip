@@ -138,6 +138,7 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   const presence = readFileSync(new URL("../components/trip/DayPresenceControl.tsx", import.meta.url), "utf8");
   const placeDiscovery = readFileSync(new URL("../components/trip/PlaceDiscoveryControl.tsx", import.meta.url), "utf8");
   const bookingEdit = readFileSync(new URL("../components/trip/BookingEditControl.tsx", import.meta.url), "utf8");
+  const budget = readFileSync(new URL("../components/trip/BudgetWorkspace.tsx", import.meta.url), "utf8");
   const overlay = readFileSync(new URL("../components/trip/WorkspaceOverlay.tsx", import.meta.url), "utf8");
 
   assert.match(css, /\.plan-columns\{height:auto;min-height:0\}/);
@@ -152,6 +153,7 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   assert.match(transport, /添加到 \{targetDayLabel\}/);
   assert.match(transport, /想把什么加入今天/);
   assert.match(transport, /交通会作为两个地点之间的路线 Edge/);
+  assert.match(transport, /setSaving\(false\); setOpen\(false\); reset\(\)/);
   assert.doesNotMatch(transport, /公共交通/);
   assert.match(presence, /modalOwner = `presence:\$\{slug\}:\$\{dayId\}`/);
   assert.match(placeDiscovery, /modalOwner = `place-discovery:\$\{slug\}`/);
@@ -167,6 +169,8 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   assert.match(bookingEdit, /workspace-close/);
   assert.match(bookingEdit, /booking-edit-cancel/);
   assert.doesNotMatch(bookingEdit, /<details className="booking-edit-control"/);
+  assert.match(budget, /allocationMode: "custom"/);
+  assert.match(budget, /自定义金额/);
   assert.match(overlay, /createPortal/);
   assert.match(overlay, /document\.body\.style\.overflow = "hidden"/);
   assert.match(css, /\.trip-console\{gap:10px\}/);
@@ -302,6 +306,8 @@ test("keeps the generic map fit guard and candidate marker semantics", () => {
   assert.match(planMap, /routeFare/);
   assert.match(planMap, /mainLine/);
   assert.doesNotMatch(planMap, /左转|右转/);
+  assert.match(planMap, /mapMode === "library" && searchCity/);
+  assert.match(planMap, /cityId = mapMode === "library" \? searchCity\?\.id : undefined/);
 });
 
 test("routes every Trip through the unified planning renderer without Shanghai-specific paths", () => {

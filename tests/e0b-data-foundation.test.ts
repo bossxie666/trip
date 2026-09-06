@@ -133,6 +133,12 @@ test("E0B data foundation", async (t) => {
     await assert.rejects(() => bookingRepo.replaceCostAllocations(custom.id, [{ memberId: "member-nini", amountMinor: 9999 }]), /ALLOCATION_TOTAL_MISMATCH/);
     const saved = await bookingRepo.replaceCostAllocations(custom.id, [{ memberId: "member-nini", amountMinor: 7000 }, { memberId: "member-zhu-jingqi", amountMinor: 3000 }]);
     assert.equal(saved.reduce((sum, row) => sum + row.amountMinor, 0), 10000);
+    const modeBooking = await bookingRepo.createBooking({ tripId: "trip-e0b-a", type: "hotel", status: "confirmed", title: "切换分摊模式", temporalKind: "date_range", startDateLocal: "2027-01-02", endDateLocal: "2027-01-03", timezone: "Asia/Shanghai", totalAmountMinor: 10000, currency: "CNY", participantMemberIds: ["member-nini", "member-zhu-jingqi"] }, "member-nini");
+    const modeLine = await bookingRepo.createBookingCostLine({ bookingId: modeBooking.id, title: "房费", amountMinor: 10000, currency: "CNY", allocationMode: "equal", sortOrder: 1 });
+    await bookingRepo.replaceCostAllocations(modeLine.id, ["member-nini", "member-zhu-jingqi"]);
+    await bookingRepo.updateBooking(modeBooking.id, { costLineAllocations: [{ costLineId: modeLine.id, allocationMode: "custom", allocations: [{ memberId: "member-nini", amountMinor: 6000 }, { memberId: "member-zhu-jingqi", amountMinor: 4000 }] }] }, "member-nini", "e0b-a");
+    assert.equal((DB.database.prepare("SELECT allocation_mode FROM booking_cost_lines WHERE id = ?").get(modeLine.id) as { allocation_mode: string }).allocation_mode, "custom");
+    assert.deepEqual(DB.database.prepare("SELECT member_id, amount_minor FROM booking_cost_allocations WHERE cost_line_id = ? ORDER BY member_id").all(modeLine.id).map((row) => ({ ...row })), [{ member_id: "member-nini", amount_minor: 6000 }, { member_id: "member-zhu-jingqi", amount_minor: 4000 }]);
   });
 
   await t.test("clears and rebinds one transport endpoint without changing the other Booking facts", async () => {

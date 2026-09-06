@@ -128,7 +128,7 @@ export type UpdateBookingInput = {
   /** Replace the people who use this order; this is independent of cost allocations. */
   participantMemberIds?: string[];
   /** Replace one or more cost-line splits. Equal lines accept memberIds; custom lines accept allocations. */
-  costLineAllocations?: Array<{ costLineId: string; memberIds?: string[]; allocations?: MoneyAllocation[] }>;
+  costLineAllocations?: Array<{ costLineId: string; allocationMode?: AllocationMode; memberIds?: string[]; allocations?: MoneyAllocation[] }>;
 };
 
 /**
@@ -189,6 +189,7 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
   }
   const normalizedCostUpdates = new Map<string, MoneyAllocation[]>();
   const normalizedCostLineAmounts = new Map<string, number>();
+  const normalizedCostLineModes = new Map<string, AllocationMode>();
   if (input.costLineAllocations !== undefined) {
     const seen = new Set<string>();
     for (const update of input.costLineAllocations) {
@@ -196,13 +197,19 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
       seen.add(update.costLineId);
       const storedLine = linesById.get(update.costLineId);
       if (!storedLine) throw new Error("COST_LINE_NOT_IN_BOOKING");
-      const allocations = storedLine.line.allocationMode === "equal"
-        ? stableEqualSplit(storedLine.line.amountMinor, [...new Set((update.memberIds || []).map(String))])
-        : validateCustomAllocations(storedLine.line.amountMinor, (update.allocations || []).map((allocation) => ({ memberId: String(allocation.memberId), amountMinor: allocation.amountMinor, notes: allocation.notes })));
+      const allocationMode = update.allocationMode ?? storedLine.line.allocationMode;
+      if (allocationMode !== "equal" && allocationMode !== "custom") throw new Error("INVALID_ALLOCATION_MODE");
+      const lineAmount = nextAmount !== booking.totalAmountMinor && linesById.size === 1 ? nextAmount : storedLine.line.amountMinor;
+      if (lineAmount == null) throw new Error("COST_ALLOCATION_UNBALANCED");
+      const allocations = allocationMode === "equal"
+        ? stableEqualSplit(lineAmount, [...new Set((update.memberIds || []).map(String))])
+        : validateCustomAllocations(lineAmount, (update.allocations || []).map((allocation) => ({ memberId: String(allocation.memberId), amountMinor: allocation.amountMinor, notes: allocation.notes })));
       const memberIds = allocations.map((allocation) => allocation.memberId);
       const valid = memberIds.length ? await db.select({ id: tripMemberRecords.memberId }).from(tripMemberRecords).where(and(eq(tripMemberRecords.tripId, booking.tripId), inArray(tripMemberRecords.memberId, memberIds))) : [];
       if (valid.length !== memberIds.length) throw new Error("ALLOCATION_MEMBER_NOT_IN_TRIP");
       normalizedCostUpdates.set(update.costLineId, allocations);
+      normalizedCostLineModes.set(update.costLineId, allocationMode);
+      if (lineAmount !== storedLine.line.amountMinor) normalizedCostLineAmounts.set(update.costLineId, lineAmount);
     }
   }
   if (nextAmount !== booking.totalAmountMinor && linesById.size) {
@@ -213,6 +220,9 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
     // line the user intended to change.
     if (nextAmount == null || linesById.size !== 1) throw new Error("COST_ALLOCATION_UNBALANCED");
     const [lineId, row] = [...linesById.entries()][0];
+    if (normalizedCostUpdates.has(lineId)) {
+      normalizedCostLineAmounts.set(lineId, nextAmount);
+    } else {
     const currentTotal = row.allocations.reduce((sum, allocation) => sum + allocation.amountMinor, 0);
     if (currentTotal !== row.line.amountMinor) throw new Error(`COST_ALLOCATION_UNBALANCED:${currentTotal}`);
     let updatedAllocations: MoneyAllocation[];
@@ -228,6 +238,7 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
     }
     normalizedCostUpdates.set(lineId, updatedAllocations);
     normalizedCostLineAmounts.set(lineId, nextAmount);
+    }
   }
   if (nextAmount !== booking.totalAmountMinor || normalizedCostUpdates.size) {
     const allocated = [...linesById.entries()].reduce((sum, [lineId, row]) => sum + (normalizedCostUpdates.get(lineId) || row.allocations).reduce((lineSum, allocation) => lineSum + allocation.amountMinor, 0), 0);
@@ -243,6 +254,7 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
   }
   for (const [costLineId, allocations] of normalizedCostUpdates) {
     if (normalizedCostLineAmounts.has(costLineId)) statements.push(d1.prepare("UPDATE booking_cost_lines SET amount_minor = ?, updated_at = ? WHERE id = ?").bind(normalizedCostLineAmounts.get(costLineId), now, costLineId));
+    if (normalizedCostLineModes.has(costLineId)) statements.push(d1.prepare("UPDATE booking_cost_lines SET allocation_mode = ?, updated_at = ? WHERE id = ?").bind(normalizedCostLineModes.get(costLineId), now, costLineId));
     statements.push(d1.prepare("DELETE FROM booking_cost_allocations WHERE cost_line_id = ?").bind(costLineId));
     for (const allocation of allocations) statements.push(d1.prepare("INSERT INTO booking_cost_allocations (id, cost_line_id, member_id, amount_minor, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), costLineId, allocation.memberId, allocation.amountMinor, allocation.notes ?? null, now, now));
   }

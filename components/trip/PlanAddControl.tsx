@@ -55,13 +55,13 @@ export function PlanAddControl({ slug, days, defaultDayId, currentMemberId, exis
       const response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error || "保存失败。");
-      setOpen(false); reset(); openPlanningDay(slug, dayId);
+      setSaving(false); setOpen(false); reset(); openPlanningDay(slug, dayId);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "保存失败。"); setSaving(false); }
   }
   const targetDayLabel = days.find((day) => day.id === dayId)?.label.split(/\s+/, 1)[0] || "今天";
   const quickPlaces = existingPlaces.slice(0, 8);
   return <>
-    <button type="button" className="add-itinerary-button button-primary" onClick={() => { setDayId(defaultDayId); requestTripModalOpen(modalOwner); setOpen(true); }}>＋ 添加行程</button>
+    <button type="button" className="add-itinerary-button button-primary" onClick={() => { setSaving(false); setDayId(defaultDayId); requestTripModalOpen(modalOwner); setOpen(true); }}>＋ 添加行程</button>
     {open && <WorkspaceOverlay open={open} onClose={() => setOpen(false)} ariaLabel="添加行程" className="plan-add-sheet" mode="modal">
       <header><div><span>ADD TO DAY</span><h3>添加到 {targetDayLabel}</h3><p>想把什么加入今天？</p></div><button type="button" className="workspace-close" aria-label="关闭" onClick={() => setOpen(false)}>×</button></header>
       <label className="plan-add-target-day"><span>目标日期</span><select value={dayId} onChange={(event) => setDayId(event.target.value)}>{days.map((day) => <option key={day.id} value={day.id}>{day.label}</option>)}</select></label>

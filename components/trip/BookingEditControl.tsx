@@ -51,7 +51,7 @@ export function BookingEditControl({ slug, booking: record, members, existingPla
   const startParts = zonedTimeParts(booking.startAt, timezone), endParts = zonedTimeParts(booking.endAt, timezone);
   const [open, setOpen] = useState(false), [title, setTitle] = useState(booking.title), [status, setStatus] = useState(booking.status), [place, setPlace] = useState<GenericPlaceChoice | null>(record.place ? { id: record.place.id, name: record.place.name, address: record.place.address, district: record.place.district, source: "existing" } : null), [originLabel, setOriginLabel] = useState(booking.originLabel || record.originPlace?.name || ""), [destinationLabel, setDestinationLabel] = useState(booking.destinationLabel || record.destinationPlace?.name || ""), [origin, setOrigin] = useState<GenericPlaceChoice | null>(record.originPlace ? { id: record.originPlace.id, name: record.originPlace.name, address: record.originPlace.address, district: record.originPlace.district, source: "existing" } : null), [destination, setDestination] = useState<GenericPlaceChoice | null>(record.destinationPlace ? { id: record.destinationPlace.id, name: record.destinationPlace.name, address: record.destinationPlace.address, district: record.destinationPlace.district, source: "existing" } : null), [startDate, setStartDate] = useState(booking.startDateLocal || startParts.date), [endDate, setEndDate] = useState(booking.endDateLocal || endParts.date), [startTime, setStartTime] = useState(startParts.time), [endTime, setEndTime] = useState(endParts.time), [amount, setAmount] = useState(yuan(booking.totalAmountMinor)), [reference, setReference] = useState(booking.bookingReference || ""), [participantIds, setParticipantIds] = useState(() => members.filter((member) => record.memberStates?.[member.id] === "present").map((member) => member.id)), [notes, setNotes] = useState(booking.notes || ""), [saving, setSaving] = useState(false), [error, setError] = useState("");
   useExclusiveTripModal(modalName, () => setOpen(false));
-  const openEditor = () => { setError(""); requestTripModalOpen(modalName); setOpen(true); };
+  const openEditor = () => { setSaving(false); setError(""); requestTripModalOpen(modalName); setOpen(true); };
   const closeEditor = () => { if (!saving) setOpen(false); };
   const placeBody = (value: GenericPlaceChoice | null) => value ? (value.source === "existing" ? { placeId: value.id } : { providerPlaceId: value.providerPlaceId || value.id }) : null;
   const instant = (date: string, time: string) => date && time ? localDateTimeToUtc(date, time, timezone) : null;
@@ -66,7 +66,7 @@ export function BookingEditControl({ slug, booking: record, members, existingPla
       const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/bookings/${encodeURIComponent(booking.id)}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const payload = await response.json() as { error?: string };
       if (!response.ok) throw new Error(payload.error || "保存失败。");
-      setOpen(false);
+      setSaving(false); setOpen(false);
       refreshWorkspace();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "保存失败。"); setSaving(false); }
   }
@@ -78,7 +78,7 @@ export function BookingEditControl({ slug, booking: record, members, existingPla
       const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/bookings/${encodeURIComponent(booking.id)}`, { method: "DELETE" });
       const payload = await response.json() as { error?: string };
       if (!response.ok) throw new Error(payload.error || "删除失败。");
-      setOpen(false);
+      setSaving(false); setOpen(false);
       refreshWorkspace();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "删除失败。"); setSaving(false); }
   }
