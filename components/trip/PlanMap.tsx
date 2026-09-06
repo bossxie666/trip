@@ -237,7 +237,8 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
       const bookingPayload = await bookingResponse.json() as { error?: string };
       if (!bookingResponse.ok) throw new Error(bookingPayload.error || "订单绑定失败");
       refreshWorkspace();
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "订单绑定失败"); setSearching(false); }
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "订单绑定失败"); }
+    finally { setSearching(false); }
   }
   async function saveMapEntry(action: "add" | "save" | "recommendation") {
     const entry = entries.find((candidate) => candidate.place.id === selectedMapEntryId);
@@ -251,7 +252,8 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
       const payload = await response.json() as { error?: string };
       if (!response.ok) throw new Error(payload.error || "保存失败");
       refreshWorkspace();
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "保存失败"); setSearching(false); }
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "保存失败"); }
+    finally { setSearching(false); }
   }
   async function saveSavedAsRecommendation(saved: NonNullable<Workspace["savedPlaces"]>[number]) {
     setSearching(true); setError("");
@@ -261,10 +263,11 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
       const payload = await response.json() as { error?: string };
       if (!response.ok) throw new Error(payload.error || "收藏攻略失败");
       refreshWorkspace();
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "收藏攻略失败"); setSearching(false); }
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "收藏攻略失败"); }
+    finally { setSearching(false); }
   }
   async function searchThisArea() { if (!workspace || !searchCity) return; setSearching(true); setError(""); try { const params = new URLSearchParams({ keywords: search.trim() || (area === "tonglu" ? "桐庐 景点" : "景点"), cityId: searchCity.id, tripSlug: slug }); if (searchRegion) params.set("region", searchRegion); if (viewport) params.set("rectangle", `${viewport.west},${viewport.south};${viewport.east},${viewport.north}`); const response = await fetch(`/api/amap/places/search?${params}`); const payload = await response.json() as { pois?: typeof searchResults; error?: string }; if (!response.ok) throw new Error(payload.error || "区域搜索失败"); setSearchResults(payload.pois || []); setSelectedSearch(null); } catch (caught) { setError(caught instanceof Error ? caught.message : "区域搜索失败"); } finally { setSearching(false); } }
-  async function createManualPoint() { if (!manualPoint || !manualName.trim() || !searchCity || !workspace) return; setSearching(true); setError(""); try { const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/plan/places`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: manualName.trim(), address: manualAddress.trim() || null, cityId: searchCity.id, longitude: manualPoint.longitude, latitude: manualPoint.latitude }) }); const payload = await response.json() as { place?: { id: string }; error?: string }; if (!response.ok || !payload.place) throw new Error(payload.error || "手动地点保存失败"); if (manualBookingId) { const bookingResponse = await fetch(`/api/trips/${encodeURIComponent(slug)}/budget/bookings/${encodeURIComponent(manualBookingId)}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ placeId: payload.place.id }) }); if (!bookingResponse.ok) { const bookingPayload = await bookingResponse.json() as { error?: string }; throw new Error(bookingPayload.error || "订单绑定失败"); } } setManualPoint(null); setManualName(""); setManualAddress(""); setManualBookingId(""); refreshWorkspace(); } catch (caught) { setError(caught instanceof Error ? caught.message : "手动地点保存失败"); setSearching(false); } }
+  async function createManualPoint() { if (!manualPoint || !manualName.trim() || !searchCity || !workspace) return; setSearching(true); setError(""); try { const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/plan/places`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: manualName.trim(), address: manualAddress.trim() || null, cityId: searchCity.id, longitude: manualPoint.longitude, latitude: manualPoint.latitude }) }); const payload = await response.json() as { place?: { id: string }; error?: string }; if (!response.ok || !payload.place) throw new Error(payload.error || "手动地点保存失败"); if (manualBookingId) { const bookingResponse = await fetch(`/api/trips/${encodeURIComponent(slug)}/budget/bookings/${encodeURIComponent(manualBookingId)}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ placeId: payload.place.id }) }); if (!bookingResponse.ok) { const bookingPayload = await bookingResponse.json() as { error?: string }; throw new Error(bookingPayload.error || "订单绑定失败"); } } setManualPoint(null); setManualName(""); setManualAddress(""); setManualBookingId(""); refreshWorkspace(); } catch (caught) { setError(caught instanceof Error ? caught.message : "手动地点保存失败"); } finally { setSearching(false); } }
   function renderRouteDirectory() {
     if (mapMode !== "day" || !workspace) return null;
     return (

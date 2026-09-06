@@ -12,10 +12,13 @@ export function EditTripForm({ trip, members }: { trip: Trip; members: MemberOpt
   const [error, setError] = useState(""), [saving, setSaving] = useState(false);
   async function save(event: FormEvent) {
     event.preventDefault(); setSaving(true); setError("");
-    const response = await fetch(`/api/trips/${trip.slug}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ title, status, cities: trip.cities.map((city) => city.name), undated, startDate, endDate, people: memberIds.length || 1, cover: trip.cover, memberIds }) });
-    const payload = await response.json() as { error?: string };
-    if (!response.ok) { setError(payload.error || "保存失败。"); setSaving(false); return; }
-    router.refresh(); setSaving(false);
+    try {
+      const response = await fetch(`/api/trips/${trip.slug}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ title, status, cities: trip.cities.map((city) => city.name), undated, startDate, endDate, people: memberIds.length || 1, cover: trip.cover, memberIds }) });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "保存失败。");
+      router.refresh();
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "保存失败。"); }
+    finally { setSaving(false); }
   }
   return <form className="edit-trip-form" onSubmit={save}>
     <h2>编辑基础信息</h2>

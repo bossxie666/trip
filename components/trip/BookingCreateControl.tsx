@@ -62,8 +62,7 @@ export function BookingCreateControl({ slug, members, existingPlaces = [] }: { s
       refreshWorkspace();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存失败。");
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   }
 
   return <>

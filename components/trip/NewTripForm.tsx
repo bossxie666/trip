@@ -30,8 +30,7 @@ export function NewTripForm({ members, currentMemberId }: { members: MemberOptio
       router.push(`/trips/${payload.trip.slug}/plan`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "创建失败，请重试。");
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   }
 
   return (

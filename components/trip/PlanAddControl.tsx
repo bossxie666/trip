@@ -55,8 +55,9 @@ export function PlanAddControl({ slug, days, defaultDayId, currentMemberId, exis
       const response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error || "保存失败。");
-      setSaving(false); setOpen(false); reset(); openPlanningDay(slug, dayId);
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "保存失败。"); setSaving(false); }
+      setOpen(false); reset(); openPlanningDay(slug, dayId);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "保存失败。"); }
+    finally { setSaving(false); }
   }
   const targetDayLabel = days.find((day) => day.id === dayId)?.label.split(/\s+/, 1)[0] || "今天";
   const quickPlaces = existingPlaces.slice(0, 8);

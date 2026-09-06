@@ -20,7 +20,8 @@ export function ItineraryItemControl({ slug, item, days, members = [], participa
       const payload = await response.json() as { error?: string };
       if (!response.ok) throw new Error(payload.error || "保存失败");
       if (dayId === item.dayId) refreshWorkspace(); else openPlanningDay(slug, dayId);
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "保存失败"); setSaving(false); }
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "保存失败"); }
+    finally { setSaving(false); }
   }
   async function remove() {
     if (!window.confirm("只删除这一条行程事项？")) return;
@@ -30,7 +31,8 @@ export function ItineraryItemControl({ slug, item, days, members = [], participa
       const payload = await response.json() as { error?: string };
       if (!response.ok) throw new Error(payload.error || "删除失败");
       refreshWorkspace();
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "删除失败"); setSaving(false); }
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "删除失败"); }
+    finally { setSaving(false); }
   }
   return <details className="item-control"><summary>编辑 / 参与成员 / 移动 / 删除</summary><div className="item-control-fields"><label>标题<input value={title} onChange={(event) => setTitle(event.target.value)}/></label><label>日期<select value={dayId} onChange={(event) => setDayId(event.target.value)}>{days.map((day) => <option key={day.id} value={day.id}>{day.label}</option>)}</select></label><label>时间模式<select value={timeMode} onChange={(event) => setTimeMode(event.target.value as TimeMode)}><option value="untimed">时间待定</option><option value="start_only">开始时间</option><option value="range">时间范围</option>{allowOpeningHours ? <option value="opening_hours">营业时间</option> : null}</select></label>{timeMode === "start_only" || timeMode === "range" ? <label>开始时间<input type="time" value={startTimeLocal} onChange={(event) => setStartTimeLocal(event.target.value)}/></label> : null}{timeMode === "range" ? <label>结束时间<input type="time" value={endTimeLocal} onChange={(event) => setEndTimeLocal(event.target.value)}/></label> : null}{timeMode === "opening_hours" ? <label>营业时间说明<input value={openingHoursNote} onChange={(event) => setOpeningHoursNote(event.target.value)} placeholder="例如 07:30–17:00" /></label> : null}<label>时长（分钟）<input type="number" min="0" step="1" value={duration} onChange={(event) => setDuration(event.target.value)}/></label><label className="item-note">备注<textarea value={note} onChange={(event) => setNote(event.target.value)}/></label>{members.length > 0 && <fieldset className="item-participant-control"><legend>参与成员</legend><p>{participantMode === "inherit" ? "当前继承当天已确认成员；可在这里单独覆盖。" : `已指定 ${selectedMemberIds.length} 人参加这一条事项。`}</p><div className="participant-checkboxes">{members.map((member) => <label key={member.id}><input type="checkbox" checked={selectedMemberIds.includes(member.id)} onChange={() => setExplicit(selectedMemberIds.includes(member.id) ? selectedMemberIds.filter((id) => id !== member.id) : [...selectedMemberIds, member.id])}/><span>{member.displayName}</span></label>)}</div><div className="participant-shortcuts"><button type="button" onClick={() => setExplicit(members.map((member) => member.id))}>全员参与</button><button type="button" onClick={() => setExplicit(members.filter((member) => dayPresenceState[member.id] === "present").map((member) => member.id))}>按当天成员</button><button type="button" onClick={() => { setParticipantMode("inherit"); setParticipantDirty(true); }}>清除覆盖</button></div></fieldset>}<div className="item-actions"><button type="button" onClick={save} disabled={saving}>{saving ? "处理中…" : dayId === item.dayId ? "保存当前事项" : "保存并移动"}</button><button className="danger" type="button" onClick={remove} disabled={saving}>删除这一条</button></div>{error && <small role="alert">{error}</small>}</div></details>;
 }

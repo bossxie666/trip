@@ -153,7 +153,7 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   assert.match(transport, /添加到 \{targetDayLabel\}/);
   assert.match(transport, /想把什么加入今天/);
   assert.match(transport, /交通会作为两个地点之间的路线 Edge/);
-  assert.match(transport, /setSaving\(false\); setOpen\(false\); reset\(\)/);
+  assert.match(transport, /finally \{ setSaving\(false\); \}/);
   assert.doesNotMatch(transport, /公共交通/);
   assert.match(presence, /modalOwner = `presence:\$\{slug\}:\$\{dayId\}`/);
   assert.match(placeDiscovery, /modalOwner = `place-discovery:\$\{slug\}`/);
@@ -176,6 +176,24 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   assert.match(css, /\.trip-console\{gap:10px\}/);
   assert.match(css, /\.trip-console-side\{padding-top:12px\}/);
   assert.match(css, /\.trip-plan-page,\.plan-columns,\.recommendation-panel,\.itinerary-panel\{overflow:visible\}/);
+});
+
+test("releases save state after success, API errors, refresh errors, and request failures", () => {
+  const files = [
+    "PlanAddControl.tsx", "PlaceDiscoveryControl.tsx", "RecommendationAddControl.tsx",
+    "BookingCreateControl.tsx", "BookingEditControl.tsx", "BookingPlaceControl.tsx",
+    "BudgetWorkspace.tsx", "DayPresenceControl.tsx", "EditTripForm.tsx",
+    "ItineraryItemControl.tsx", "ItineraryItemPlaceControl.tsx", "ItineraryOrderControls.tsx",
+    "NewTripForm.tsx", "PlanMap.tsx",
+  ];
+  for (const file of files) {
+    const source = readFileSync(new URL(`../components/trip/${file}`, import.meta.url), "utf8");
+    const startsPending = /set(?:Saving|Loading|Busy|Searching)\(true\)|setSavingPlan\(/.test(source);
+    assert.equal(startsPending, true, `${file} should contain a pending mutation`);
+    assert.match(source, /finally\s*\{[^}]*set(?:Saving|Loading|Busy|Searching|SavingPlan)\(/s, `${file} must release pending state in finally`);
+  }
+  const unlock = readFileSync(new URL("../components/auth/UnlockForm.tsx", import.meta.url), "utf8");
+  assert.match(unlock, /catch[\s\S]*finally \{ setLoading\(false\); \}/);
 });
 
 test("keeps the performance boundaries for metadata, workspace views, and client navigation", async () => {

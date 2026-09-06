@@ -47,7 +47,8 @@ export function BookingPlaceControl({ slug, bookingId, slot, cities, currentPlac
       const bookingPayload = await bookingResponse.json() as { error?: string };
       if (!bookingResponse.ok) throw new Error(bookingPayload.error || "订单地点绑定失败。");
       refreshWorkspace();
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "订单地点绑定失败。"); setLoading(false); }
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "订单地点绑定失败。"); }
+    finally { setLoading(false); }
   }
 
   async function clearBinding() {
@@ -58,7 +59,8 @@ export function BookingPlaceControl({ slug, bookingId, slot, cities, currentPlac
       const payload = await response.json() as { error?: string };
       if (!response.ok) throw new Error(payload.error || "清除地点失败。");
       refreshWorkspace();
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "清除地点失败。"); setLoading(false); }
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "清除地点失败。"); }
+    finally { setLoading(false); }
   }
 
   return <details className="booking-place-control" open={open} onToggle={(event) => setOpen((event.currentTarget as HTMLDetailsElement).open)}>

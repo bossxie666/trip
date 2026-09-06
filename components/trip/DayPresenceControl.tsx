@@ -70,7 +70,8 @@ export function DayPresenceControl({ slug: providedSlug, dayId: providedDayId, d
       if (!response.ok) throw new Error(payload.error || "当天成员保存失败");
       setOpen(false);
       refreshWorkspace();
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "当天成员保存失败"); setSaving(false); }
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "当天成员保存失败"); }
+    finally { setSaving(false); }
   }
 
   return <div id={`day-presence-${dayId}`} className="day-presence-control">

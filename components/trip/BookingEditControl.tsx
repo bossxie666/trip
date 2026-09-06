@@ -66,9 +66,10 @@ export function BookingEditControl({ slug, booking: record, members, existingPla
       const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/bookings/${encodeURIComponent(booking.id)}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const payload = await response.json() as { error?: string };
       if (!response.ok) throw new Error(payload.error || "保存失败。");
-      setSaving(false); setOpen(false);
+      setOpen(false);
       refreshWorkspace();
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "保存失败。"); setSaving(false); }
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "保存失败。"); }
+    finally { setSaving(false); }
   }
   async function remove() {
     const warning = placeUsageCount > 0 ? `\n行程中仍有 ${placeUsageCount} 个事项使用该地点，它们不会被删除。` : "";
@@ -78,9 +79,10 @@ export function BookingEditControl({ slug, booking: record, members, existingPla
       const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/bookings/${encodeURIComponent(booking.id)}`, { method: "DELETE" });
       const payload = await response.json() as { error?: string };
       if (!response.ok) throw new Error(payload.error || "删除失败。");
-      setSaving(false); setOpen(false);
+      setOpen(false);
       refreshWorkspace();
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "删除失败。"); setSaving(false); }
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "删除失败。"); }
+    finally { setSaving(false); }
   }
   const headingId = `booking-edit-title-${booking.id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   return <>
