@@ -125,6 +125,7 @@ export const recommendationRecords = sqliteTable("recommendations", {
   id: text("id").primaryKey(),
   tripId: text("trip_id").notNull().references(() => tripRecords.id, { onDelete: "cascade" }),
   kind: text("kind", { enum: ["place", "guide"] }).notNull(),
+  guideType: text("guide_type", { enum: ["day_trip"] }),
   category: text("category", { enum: ["attraction", "food", "cafe", "shopping", "hotel", "experience", "other"] }).notNull(),
   title: text("title").notNull(),
   summary: text("summary"),
@@ -167,6 +168,110 @@ export const recommendationPlaceOptionRecords = sqliteTable("recommendation_plac
   uniqueIndex("idx_rec_place_options_relation").on(table.recommendationId, table.placeId, table.relationType),
   index("idx_rec_place_options_order").on(table.recommendationId, table.relationType, table.optionGroupKey, table.sortOrder),
   index("idx_rec_place_options_place").on(table.placeId),
+]);
+
+export const recommendationReferenceRecords = sqliteTable("recommendation_references", {
+  id: text("id").primaryKey(),
+  recommendationId: text("recommendation_id").notNull().references(() => recommendationRecords.id, { onDelete: "cascade" }),
+  platform: text("platform", { enum: ["official", "xiaohongshu", "web", "manual"] }).notNull(),
+  authorLabel: text("author_label"),
+  title: text("title"),
+  sourceUrl: text("source_url").notNull(),
+  imageUrlsJson: text("image_urls_json"),
+  note: text("note"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdByMemberId: text("created_by_member_id").references(() => memberRecords.id, { onDelete: "set null" }),
+  updatedByMemberId: text("updated_by_member_id").references(() => memberRecords.id, { onDelete: "set null" }),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("idx_recommendation_references_order").on(table.recommendationId, table.sortOrder),
+]);
+
+/** Metadata for private binary assets. The browser uploads bytes directly to
+ * R2; application pages only persist and query these ownership records. */
+export const mediaAssetRecords = sqliteTable("media_assets", {
+  id: text("id").primaryKey(),
+  uploaderMemberId: text("uploader_member_id").notNull().references(() => memberRecords.id, { onDelete: "restrict" }),
+  purpose: text("purpose", { enum: ["home_featured", "guestbook", "recommendation_reference", "trip_cover", "album"] }).notNull(),
+  objectKey: text("object_key").notNull(),
+  originalFilename: text("original_filename").notNull(),
+  contentType: text("content_type").notNull(),
+  byteSize: integer("byte_size").notNull(),
+  width: integer("width"),
+  height: integer("height"),
+  status: text("status", { enum: ["pending", "ready", "failed"] }).notNull().default("pending"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  readyAt: text("ready_at"),
+}, (table) => [
+  uniqueIndex("idx_media_assets_object_key").on(table.objectKey),
+  index("idx_media_assets_owner_purpose").on(table.uploaderMemberId, table.purpose, table.createdAt),
+  index("idx_media_assets_status_created").on(table.status, table.createdAt),
+]);
+
+export const recommendationReferenceMediaRecords = sqliteTable("recommendation_reference_media", {
+  referenceId: text("reference_id").notNull().references(() => recommendationReferenceRecords.id, { onDelete: "cascade" }),
+  mediaAssetId: text("media_asset_id").notNull().references(() => mediaAssetRecords.id, { onDelete: "restrict" }),
+  sortOrder: integer("sort_order").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.referenceId, table.mediaAssetId] }),
+  uniqueIndex("idx_recommendation_reference_media_order").on(table.referenceId, table.sortOrder),
+]);
+
+export const homeFeaturedPhotoRecords = sqliteTable("home_featured_photos", {
+  slotKey: text("slot_key", { enum: ["map_primary", "map_secondary"] }).primaryKey(),
+  mediaAssetId: text("media_asset_id").notNull().references(() => mediaAssetRecords.id, { onDelete: "restrict" }),
+  updatedByMemberId: text("updated_by_member_id").notNull().references(() => memberRecords.id, { onDelete: "restrict" }),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [index("idx_home_featured_media").on(table.mediaAssetId)]);
+
+export const guestbookMessageRecords = sqliteTable("guestbook_messages", {
+  id: text("id").primaryKey(),
+  authorMemberId: text("author_member_id").notNull().references(() => memberRecords.id, { onDelete: "restrict" }),
+  body: text("body"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  deletedAt: text("deleted_at"),
+}, (table) => [
+  index("idx_guestbook_messages_visible").on(table.deletedAt, table.createdAt),
+  index("idx_guestbook_messages_author").on(table.authorMemberId, table.createdAt),
+]);
+
+export const guestbookMessageMediaRecords = sqliteTable("guestbook_message_media", {
+  messageId: text("message_id").notNull().references(() => guestbookMessageRecords.id, { onDelete: "cascade" }),
+  mediaAssetId: text("media_asset_id").notNull().references(() => mediaAssetRecords.id, { onDelete: "restrict" }),
+  sortOrder: integer("sort_order").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.messageId, table.mediaAssetId] }),
+  uniqueIndex("idx_guestbook_message_media_order").on(table.messageId, table.sortOrder),
+]);
+
+export const albumRecords = sqliteTable("albums", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description"),
+  tripId: text("trip_id").references(() => tripRecords.id, { onDelete: "restrict" }),
+  createdByMemberId: text("created_by_member_id").notNull().references(() => memberRecords.id, { onDelete: "restrict" }),
+  coverMediaAssetId: text("cover_media_asset_id").references(() => mediaAssetRecords.id, { onDelete: "set null" }),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  deletedAt: text("deleted_at"),
+}, (table) => [
+  index("idx_albums_visible_updated").on(table.deletedAt, table.updatedAt),
+  index("idx_albums_trip_updated").on(table.tripId, table.updatedAt),
+]);
+
+export const albumMediaRecords = sqliteTable("album_media", {
+  albumId: text("album_id").notNull().references(() => albumRecords.id, { onDelete: "cascade" }),
+  mediaAssetId: text("media_asset_id").notNull().references(() => mediaAssetRecords.id, { onDelete: "restrict" }),
+  uploadedByMemberId: text("uploaded_by_member_id").notNull().references(() => memberRecords.id, { onDelete: "restrict" }),
+  sortOrder: integer("sort_order").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.albumId, table.mediaAssetId] }),
+  uniqueIndex("idx_album_media_order").on(table.albumId, table.sortOrder),
+  index("idx_album_media_asset").on(table.mediaAssetId),
 ]);
 
 export const recommendationMemberStateRecords = sqliteTable("recommendation_member_states", {

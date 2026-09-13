@@ -1,16 +1,18 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useEffect, useRef, useState } from "react";
 import { buildIdentitySwitchReturnTo } from "@/services/identity-navigation";
 
-export type SessionMemberSummary = { id: string; displayName: string };
+export type SessionMemberSummary = { id: string; displayName: string; avatar?: string | null };
 
 function currentPath() {
   if (typeof window === "undefined") return "/";
   return `${window.location.pathname}${window.location.search}${window.location.hash}`;
 }
 
-export function MemberIdentityControl({ currentMember }: { currentMember?: SessionMemberSummary | null }) {
+export function MemberIdentityControl({ currentMember, compact = false }: { currentMember?: SessionMemberSummary | null; compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<"switch" | "logout" | null>(null);
   const [error, setError] = useState("");
@@ -48,9 +50,9 @@ export function MemberIdentityControl({ currentMember }: { currentMember?: Sessi
     }
   }
 
-  return <div className="member-identity-control" ref={rootRef}>
+  return <div className={`member-identity-control${compact ? " member-identity-compact" : ""}`} ref={rootRef}>
     <button type="button" className="member-identity-trigger" aria-haspopup="menu" aria-expanded={open} onClick={() => { setOpen((value) => !value); setError(""); }}>
-      <span>当前身份</span><strong>{currentMember.displayName}</strong><span aria-hidden="true">⌄</span>
+      {compact && (currentMember.avatar ? <img src={currentMember.avatar} alt="" width={34} height={34} /> : <i aria-hidden="true">{currentMember.displayName.slice(0, 1).toUpperCase()}</i>)}<span>{compact ? "成员" : "当前身份"}</span><strong>{currentMember.displayName}</strong><span aria-hidden="true">⌄</span>
     </button>
     {open && <div className="member-identity-menu" role="menu" aria-label="成员身份操作">
       <div className="member-identity-current"><div><span>当前身份</span><strong>{currentMember.displayName}</strong></div><button type="button" className="member-identity-close" aria-label="关闭身份菜单" onClick={() => setOpen(false)}>×</button></div>

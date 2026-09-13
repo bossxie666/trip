@@ -39,7 +39,7 @@ class TestD1Database {
 
 const DB = new TestD1Database();
 (globalThis as typeof globalThis & { __TRIP_TEST_D1__?: unknown; __TRIP_TEST_ENV__?: Record<string, string> }).__TRIP_TEST_D1__ = DB;
-for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql", "0015_v2_4_r1_booking_endpoint_labels.sql"]) {
+for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql", "0015_v2_4_r1_booking_endpoint_labels.sql", "0016_recommendation_v2.sql", "0017_home_media_guestbook.sql"]) {
   DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
 }
 
@@ -76,6 +76,7 @@ const timelinePlacementRepo = await import("../services/timeline-placement-repos
 const transitSteps = await import("../services/amap/transit-steps.ts");
 const amapWebService = await import("../services/amap/amap-web-service.server.ts");
 const transportEstimate = await import("../services/transport-estimate.ts");
+const routeQuote = await import("../services/amap/route-quote.ts");
 const subwayColors = await import("../services/amap/subway-colors.ts");
 const domain = await import("../services/planning-domain.mjs");
 
@@ -291,11 +292,31 @@ test("E0B data foundation", async (t) => {
   await t.test("keeps transport estimates participant-aware and cycling free", () => {
     const memberStates = { "member-nini": "present" as const, "member-wang-jingwen": "present" as const, "member-zhu-jingqi": "present" as const, "member-liu-xu": "present" as const };
     assert.deepEqual(transportEstimate.estimateTransportCost({ mode: "transit", transitCost: 7, memberId: "member-nini", memberStates }), { amountMinor: 700, pending: false, participantCount: 1 });
-    assert.equal(transportEstimate.estimateTransportCost({ mode: "taxi", taxiCost: 120, memberId: "member-nini", memberStates }).amountMinor, 3000);
+    assert.deepEqual(transportEstimate.estimateTransportCost({ mode: "taxi", taxiCost: 120, memberId: "member-nini", memberStates }), { amountMinor: null, pending: true, reason: "per_vehicle", participantCount: 4 });
     assert.equal(transportEstimate.estimateTransportCost({ mode: "walking", memberId: "member-nini", memberStates }).amountMinor, 0);
     assert.equal(transportEstimate.estimateTransportCost({ mode: "bicycling", memberId: "member-nini", memberStates }).amountMinor, 0);
     assert.equal(transportEstimate.estimateTransportCost({ mode: "taxi", taxiCost: 120, memberId: "member-nini", memberStates: { "member-nini": "present", "member-wang-jingwen": "unknown" } }).pending, true);
     assert.equal(transportEstimate.mergeTransportParticipantStates({ "member-nini": "present" }, { "member-nini": "unknown" })["member-nini"], "unknown");
+  });
+
+  await t.test("normalizes route prices without inventing or splitting fares", () => {
+    const transit = routeQuote.createAmapRouteQuote({ mode: "transit", transitCost: 7, taxiCost: null, durationSeconds: 3960, distanceMeters: 18400, quotedAt: now });
+    assert.deepEqual(transit, { amountMinor: 700, currency: "CNY", basis: "per_person", source: "amap", mode: "transit", durationSeconds: 3960, distanceMeters: 18400, quotedAt: now });
+    assert.equal(routeQuote.routeQuoteLabel(transit), "约 ¥7/人");
+    assert.equal(routeQuote.createAmapRouteQuote({ mode: "transit", transitCost: 0, taxiCost: null, durationSeconds: 60, distanceMeters: 100, quotedAt: now }).amountMinor, 0);
+    const missing = routeQuote.createAmapRouteQuote({ mode: "transit", transitCost: null, taxiCost: null, durationSeconds: null, distanceMeters: null, quotedAt: now });
+    assert.equal(missing.basis, "unknown");
+    assert.equal(routeQuote.routeQuoteLabel(missing), "费用暂缺");
+    const taxi = routeQuote.createAmapRouteQuote({ mode: "taxi", transitCost: null, taxiCost: 116, durationSeconds: 1680, distanceMeters: 18000, quotedAt: now });
+    assert.equal(taxi.amountMinor, 11600);
+    assert.equal(taxi.basis, "per_vehicle");
+    assert.equal(routeQuote.routeQuoteLabel(taxi), "约 ¥116/车");
+    for (const mode of ["walking", "bicycling"] as const) {
+      const free = routeQuote.createAmapRouteQuote({ mode, transitCost: null, taxiCost: null, durationSeconds: 600, distanceMeters: 1000, quotedAt: now });
+      assert.equal(free.amountMinor, 0);
+      assert.equal(free.basis, "free");
+      assert.equal(routeQuote.routeQuoteLabel(free), "¥0");
+    }
   });
 
   await t.test("uses city-scoped subway colors and a neutral fallback", () => {
@@ -303,6 +324,19 @@ test("E0B data foundation", async (t) => {
     assert.equal(subwayColors.subwayLineColor("Shanghai", "99号线"), subwayColors.SUBWAY_NEUTRAL);
     assert.equal(subwayColors.routeStrokeColor("bus", [], "Shanghai"), subwayColors.BUS_NEUTRAL);
     assert.equal(subwayColors.routeStrokeColor("transit", [{ mode: "subway", lineName: "2号线" }], "Shanghai"), subwayColors.subwayLineColor("Shanghai", "2号线"));
+  });
+
+  await t.test("shares ordered TransitLeg data between summaries and per-leg map colors", async () => {
+    const presentation = await import("../services/amap/route-presentation.ts");
+    const legs = amapWebService.normalizeTransitSteps({
+      walking: { distance: "120", duration: "90" },
+      bus: { buslines: [{ type: "地铁", name: "地铁2号线", polyline: "121,31;121.1,31.1" }, { type: "地铁", name: "地铁11号线", polyline: "121.1,31.1;121.2,31.2" }] },
+      transfers: [{ name: "换乘" }],
+    });
+    assert.deepEqual(legs.map((leg) => leg.mode), ["walking", "subway", "subway", "other"]);
+    assert.equal(presentation.transitLineSummary(legs), "地铁2号线 → 地铁11号线");
+    assert.notEqual(subwayColors.transitLegStrokeColor(legs[1], "Shanghai"), subwayColors.transitLegStrokeColor(legs[2], "Shanghai"));
+    assert.notEqual(subwayColors.transitLegStrokeColor(legs[1], "Shanghai"), subwayColors.transitLegStrokeColor(legs[1], "Hangzhou"));
   });
 
   await t.test("assembles one deterministic Node → Edge → Node timeline", () => {

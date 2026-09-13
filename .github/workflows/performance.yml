@@ -1,0 +1,31 @@
+name: Performance baseline
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Configure local-only test credentials
+        run: |
+          printf '%s\n' 'TRIP_SPACE_INVITE_CODE=test-invite' 'TRIP_SPACE_SESSION_SECRET=test-session-secret-at-least-32-characters' 'AMAP_JS_API_KEY=test-js-key' 'AMAP_JS_SECURITY_CODE=test-js-code' 'AMAP_WEB_SERVICE_KEY=test-web-key' > .dev.vars
+      - name: Prepare production-like local D1
+        run: npx wrangler d1 migrations apply trip-archive-production --local
+      - run: npm run build:self-hosted
+      - name: Lighthouse production-like routes
+        run: npm exec --yes --package=@lhci/cli@0.15.1 -- lhci autorun
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lighthouse-reports
+          path: .lighthouseci/reports
+          retention-days: 14

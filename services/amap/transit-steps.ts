@@ -1,6 +1,6 @@
 import type { AMapRouteStep } from "./amap-types";
 
-const transitModes = new Set<AMapRouteStep["mode"]>(["subway", "bus"]);
+const transitModes = new Set<AMapRouteStep["mode"]>(["subway", "bus", "rail"]);
 
 function positive(value: number | null | undefined) {
   return value != null && Number.isFinite(value) && value > 0 ? value : null;
@@ -37,10 +37,12 @@ export function aggregateTransitSteps(steps: AMapRouteStep[]): AMapRouteStep[] {
       direction: raw.direction?.trim() || null,
       fromStation: raw.fromStation?.trim() || null,
       toStation: raw.toStation?.trim() || null,
+      departureStop: raw.departureStop?.trim() || raw.fromStation?.trim() || null,
+      arrivalStop: raw.arrivalStop?.trim() || raw.toStation?.trim() || null,
       transfer: raw.transfer?.trim() || null,
     };
-    if ((step.mode === "subway" || step.mode === "bus") && (!step.lineName && !step.fromStation && !step.toStation && !step.transfer || raw.stationCount === 0)) continue;
-    if (step.mode === "subway" || step.mode === "bus") {
+    if (transitModes.has(step.mode) && (!step.lineName && !step.fromStation && !step.toStation && !step.transfer || raw.stationCount === 0)) continue;
+    if (transitModes.has(step.mode)) {
       if (step.stationCount === 0) continue;
       const previous = output.at(-1);
       if (previous && sameTransitLeg(previous, step)) {
@@ -48,6 +50,7 @@ export function aggregateTransitSteps(steps: AMapRouteStep[]): AMapRouteStep[] {
         previous.durationSeconds = addNullable(previous.durationSeconds, step.durationSeconds);
         previous.distanceMeters = addNullable(previous.distanceMeters, step.distanceMeters);
         previous.toStation = step.toStation || previous.toStation;
+        previous.arrivalStop = step.arrivalStop || previous.arrivalStop;
         previous.direction = previous.direction || step.direction;
         previous.polyline = [...(previous.polyline || []), ...(step.polyline || [])];
         continue;
@@ -59,6 +62,7 @@ export function aggregateTransitSteps(steps: AMapRouteStep[]): AMapRouteStep[] {
         previous.durationSeconds = addNullable(previous.durationSeconds, step.durationSeconds);
         previous.distanceMeters = addNullable(previous.distanceMeters, step.distanceMeters);
         previous.toStation = step.toStation || previous.toStation;
+        previous.arrivalStop = step.arrivalStop || previous.arrivalStop;
         previous.instruction = [previous.instruction, step.instruction].filter(Boolean).join("；") || null;
         previous.polyline = [...(previous.polyline || []), ...(step.polyline || [])];
         continue;

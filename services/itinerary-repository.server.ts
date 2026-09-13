@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, isNull, max } from "drizzle-orm";
 import { getDb, getRuntimeEnv } from "../db/index.ts";
-import { dayRecords, itineraryItemParticipantOverrideRecords, itineraryItemRecords, placeRecords, recommendationRecords, tripCityRecords, tripMemberRecords, tripStageRecords } from "../db/schema.ts";
+import { dayRecords, itineraryItemParticipantOverrideRecords, itineraryItemRecords, placeRecords, recommendationPlaceOptionRecords, recommendationRecords, tripCityRecords, tripMemberRecords, tripStageRecords } from "../db/schema.ts";
 import { assertLocalTime, assertUtcInstant } from "./planning-domain.mjs";
 import type { ItineraryItemType } from "../models/planning.ts";
 
@@ -73,6 +73,21 @@ export async function createItineraryItem(input: CreateItineraryItemInput, actor
 
 export async function listItineraryItems(dayId: string) {
   return getDb().select().from(itineraryItemRecords).where(eq(itineraryItemRecords.dayId, dayId)).orderBy(asc(itineraryItemRecords.sortOrder), asc(itineraryItemRecords.id));
+}
+
+export async function createGuideItineraryItems(input: { tripId: string; dayId: string; recommendationId: string; placeIds: string[] }, actorMemberId: string) {
+  const db = getDb(); await assertTripMember(input.tripId, actorMemberId);
+  if (!(await db.select({ id: dayRecords.id }).from(dayRecords).where(and(eq(dayRecords.id, input.dayId), eq(dayRecords.tripId, input.tripId))).limit(1))[0]) throw new Error("DAY_NOT_IN_TRIP");
+  const guide = (await db.select({ id: recommendationRecords.id, kind: recommendationRecords.kind }).from(recommendationRecords).where(and(eq(recommendationRecords.id, input.recommendationId), eq(recommendationRecords.tripId, input.tripId), isNull(recommendationRecords.deletedAt))).limit(1))[0];
+  if (!guide || guide.kind !== "guide") throw new Error("RECOMMENDATION_NOT_FOUND");
+  const options = await db.select({ placeId: recommendationPlaceOptionRecords.placeId, name: placeRecords.name }).from(recommendationPlaceOptionRecords).innerJoin(placeRecords, eq(placeRecords.id, recommendationPlaceOptionRecords.placeId)).where(eq(recommendationPlaceOptionRecords.recommendationId, guide.id)).orderBy(asc(recommendationPlaceOptionRecords.sortOrder));
+  const selected = new Set(input.placeIds), rows = options.filter((option) => selected.has(option.placeId));
+  if (!rows.length || selected.size !== rows.length) throw new Error("INVALID_GUIDE_COMPONENTS");
+  const highest = await db.select({ value: max(itineraryItemRecords.sortOrder) }).from(itineraryItemRecords).where(and(eq(itineraryItemRecords.tripId, input.tripId), eq(itineraryItemRecords.dayId, input.dayId)));
+  const now = new Date().toISOString(), d1 = getRuntimeEnv().DB, start = highest[0]?.value ?? 0;
+  const created = rows.map((row, index) => ({ id: crypto.randomUUID(), placeId: row.placeId, title: row.name, sortOrder: start + index + 1 }));
+  await d1.batch(created.map((row) => d1.prepare("INSERT INTO itinerary_items (id, trip_id, day_id, stage_id, recommendation_id, place_id, origin_place_id, destination_place_id, item_type, title, note, start_time_local, end_time_local, time_mode, opening_hours_note, duration_minutes, sort_order, locked_at, created_by_member_id, updated_by_member_id, created_at, updated_at) VALUES (?, ?, ?, NULL, ?, ?, NULL, NULL, 'place', ?, NULL, NULL, NULL, 'untimed', NULL, NULL, ?, NULL, ?, ?, ?, ?)").bind(row.id, input.tripId, input.dayId, input.recommendationId, row.placeId, row.title, row.sortOrder, actorMemberId, actorMemberId, now, now)));
+  return created;
 }
 
 export async function reorderItineraryItems(tripId: string, dayId: string, orderedItemIds: string[]) {

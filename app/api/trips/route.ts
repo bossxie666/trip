@@ -3,7 +3,7 @@ import type { TripStatus } from "@/models/travel";
 import { getCurrentMember } from "@/services/auth.server";
 
 const readableStatuses = new Set<TripStatus | "all">(["all", "inspiration", "planning", "completed"]);
-const creatableStatuses = new Set<CreateTripInput["status"]>(["inspiration", "planning"]);
+const creatableStatuses = new Set<CreateTripInput["status"]>(["inspiration", "planning", "completed"]);
 
 export async function GET(request: Request) {
   try {
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     const memberIds = Array.isArray(body.memberIds) ? body.memberIds.map(String) : [];
 
     if (!title) return Response.json({ error: "请填写行程名称。" }, { status: 400 });
-    if (!creatableStatuses.has(status as CreateTripInput["status"])) return Response.json({ error: "新行程只能设为灵感或待出行。" }, { status: 400 });
+    if (!creatableStatuses.has(status as CreateTripInput["status"])) return Response.json({ error: "请选择有效的行程状态。" }, { status: 400 });
     if ((startDate && !endDate) || (!startDate && endDate)) return Response.json({ error: "请同时填写开始和结束日期，或选择日期未定。" }, { status: 400 });
     if (startDate && endDate && endDate < startDate) return Response.json({ error: "结束日期不能早于开始日期。" }, { status: 400 });
 

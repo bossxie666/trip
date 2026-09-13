@@ -1,3 +1,5 @@
+import { isTransportBooking } from "./booking-semantics.ts";
+
 /**
  * The planning timeline's single read-model assembler.
  *
@@ -92,8 +94,6 @@ export function filterTimelineForMember(nodes: TimelineNode[], memberFilter: str
 export function numberTimelineNodes(nodes: TimelineNode[]) {
   return new Map(nodes.filter((node) => node.nodeKind !== "anchor").map((node, index) => [node.id, index + 1]));
 }
-
-const longDistanceTypes = new Set(["flight", "train", "other"]);
 
 function dayFromInstant(value: string | null | undefined, timezone?: string | null) {
   if (!value) return null;
@@ -202,7 +202,7 @@ export function assembleTimeline(input: {
       }));
 
     for (const booking of input.bookings) {
-      if (!longDistanceTypes.has(booking.type)) continue;
+      if (!isTransportBooking(booking)) continue;
       const dates = endpointForDay(booking, day.id, day.date || null);
       if (dates.origin) nodes.push({
         id: `${booking.id}:origin`, source: "booking", nodeKind: "endpoint", endpoint: "origin",
@@ -221,7 +221,7 @@ export function assembleTimeline(input: {
     nodes.sort(compareNodes);
     const longDistanceEdges: TimelineEdge[] = [];
     for (const booking of input.bookings) {
-      if (!longDistanceTypes.has(booking.type)) continue;
+      if (!isTransportBooking(booking)) continue;
       const from = nodes.find((node) => node.bookingId === booking.id && node.endpoint === "origin");
       const to = nodes.find((node) => node.bookingId === booking.id && node.endpoint === "destination");
       if (from && to) longDistanceEdges.push({ id: `${booking.id}:long-distance`, kind: "long-distance", dayId: day.id, from, to, bookingId: booking.id, crossCity: Boolean(from.place?.cityId && to.place?.cityId && from.place.cityId !== to.place.cityId) });

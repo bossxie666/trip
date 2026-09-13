@@ -11,6 +11,11 @@ export function getRuntimeEnv() {
     AMAP_JS_API_KEY?: string;
     AMAP_JS_SECURITY_CODE?: string;
     AMAP_WEB_SERVICE_KEY?: string;
+    MEDIA?: R2Bucket;
+    R2_ACCOUNT_ID?: string;
+    R2_ACCESS_KEY_ID?: string;
+    R2_SECRET_ACCESS_KEY?: string;
+    R2_BUCKET_NAME?: string;
   };
 }
 

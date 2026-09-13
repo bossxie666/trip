@@ -1,6 +1,7 @@
 import { getRuntimeEnv } from "../../db/index.ts";
 import type { AMapPoiCandidate, AMapRouteMode, AMapRouteResult, AMapRouteStep } from "./amap-types.ts";
 import { aggregateTransitSteps } from "./transit-steps.ts";
+import { createAmapRouteQuote } from "./route-quote.ts";
 
 const base = "https://restapi.amap.com";
 const routeCache = new Map<string, { expiresAt: number; result: AMapRouteResult }>();
@@ -167,7 +168,11 @@ function numberOrNull(value: unknown) {
 
 function normalizedStep(modeValue: unknown): AMapRouteStep["mode"] {
   const mode = scalar(modeValue).toLowerCase();
-  return mode.includes("walk") ? "walking" : mode.includes("subway") || mode.includes("metro") || mode.includes("rail") ? "subway" : mode.includes("bus") ? "bus" : mode.includes("taxi") || mode.includes("drive") ? "taxi" : "other";
+  return mode.includes("walk") || mode.includes("步行") ? "walking"
+    : mode.includes("subway") || mode.includes("metro") || mode.includes("地铁") || mode.includes("轨道") || /\d+号线/.test(mode) ? "subway"
+    : mode.includes("rail") || mode.includes("火车") || mode.includes("铁路") ? "rail"
+    : mode.includes("bus") || mode.includes("公交") || /\d+路/.test(mode) ? "bus"
+    : mode.includes("taxi") || mode.includes("drive") || mode.includes("驾车") ? "taxi" : "other";
 }
 
 function objectValue(value: unknown): Record<string, unknown> | null {
@@ -197,17 +202,21 @@ function stationCountNumber(...values: unknown[]) {
 
 function mapRouteStep(value: Record<string, unknown>, modeValue?: unknown): AMapRouteStep {
   const mode = normalizedStep(modeValue ?? value.mode ?? value.type ?? "");
+  const rawType = firstText(modeValue, value.type, value.bus_type, value.busType, value.mode);
   const departure = value.departure_stop ?? value.departureStop ?? value.from_station ?? value.fromStation ?? value.from;
   const arrival = value.arrival_stop ?? value.arrivalStop ?? value.to_station ?? value.toStation ?? value.to;
   const viaStops = Array.isArray(value.via_stops) ? value.via_stops : Array.isArray(value.viaStops) ? value.viaStops : [];
   return {
     mode,
+    rawType,
     instruction: firstText(value.instruction, value.step, value.description),
     lineName: firstText(value.route_name, value.routeName, value.line_name, value.lineName, value.name),
     direction: firstText(value.direction, value.exit, value.trip, value.destination),
     stationCount: stationCountNumber(value.station_count, value.stationCount, value.via_num, value.viaNum, viaStops.length > 0 ? viaStops.length : null),
     fromStation: stationText(departure),
     toStation: stationText(arrival),
+    departureStop: stationText(departure),
+    arrivalStop: stationText(arrival),
     transfer: firstText(value.transfer, value.transfer_info, value.transferInfo),
     durationSeconds: numberOrNull(value.duration),
     distanceMeters: numberOrNull(value.distance),
@@ -226,7 +235,11 @@ export function normalizeTransitSteps(value: Record<string, unknown>): AMapRoute
     if (Array.isArray(object.steps)) { object.steps.forEach((entry) => append(kind, entry)); return; }
     if (kind === "bus" && Array.isArray(object.buslines)) { object.buslines.forEach((entry) => append(kind, entry)); return; }
     if (kind === "railway" && (Array.isArray(object.spaces) || Array.isArray(object.lines))) { const lines = Array.isArray(object.spaces) ? object.spaces : object.lines as unknown[]; lines.forEach((entry) => append(kind, entry)); return; }
-    steps.push(mapRouteStep(object, kind === "walking" ? "walking" : kind === "bus" ? "bus" : kind === "railway" ? "subway" : kind));
+    const modeHint = kind === "walking" ? "walking"
+      : kind === "bus" ? firstText(object.type, object.bus_type, object.busType, object.name, object.route_name) || "bus"
+      : kind === "railway" ? firstText(object.type, object.name, object.route_name, object.line_name) || "rail"
+      : kind;
+    steps.push(mapRouteStep(object, modeHint));
   };
   // Object insertion order in the integrated-transit payload is the only
   // reliable ordering signal.  Do not emit all walking segments before all
@@ -236,7 +249,7 @@ export function normalizeTransitSteps(value: Record<string, unknown>): AMapRoute
     if (!segmentKeys.has(key)) continue;
     if (key === "transfer" || key === "transfers") {
       if (Array.isArray(raw)) raw.forEach((entry) => { if (entry && typeof entry === "object") steps.push({ ...mapRouteStep(entry as Record<string, unknown>, "other"), transfer: firstText((entry as Record<string, unknown>).name, (entry as Record<string, unknown>).instruction, (entry as Record<string, unknown>).description) }); });
-      else if (raw) steps.push({ mode: "other", instruction: firstText(raw), lineName: null, direction: null, stationCount: null, fromStation: null, toStation: null, transfer: firstText(raw), durationSeconds: null, distanceMeters: null, polyline: [] });
+      else if (raw) steps.push({ mode: "other", rawType: "transfer", instruction: firstText(raw), lineName: null, direction: null, stationCount: null, departureStop: null, arrivalStop: null, fromStation: null, toStation: null, transfer: firstText(raw), durationSeconds: null, distanceMeters: null, polyline: [] });
     } else append(key, raw);
   }
   if (!steps.length && (value.mode || value.type)) steps.push(mapRouteStep(value, value.mode || value.type));
@@ -265,7 +278,14 @@ export async function planAmapRoute(input: { mode: AMapRouteMode; origin: { long
     const transitInfo = value.transit && typeof value.transit === "object" ? value.transit as Record<string, unknown> : value;
     return [mapRouteStep({ ...value, route_name: transitInfo.route_name || transitInfo.line_name || transitInfo.name, direction: transitInfo.direction || transitInfo.exit, station_count: transitInfo.station_count ?? transitInfo.via_num }, value.mode || value.type)];
   }));
-  const result = { mode: input.mode, distanceMeters: numberOrNull(first.distance ?? route.distance), durationSeconds: numberOrNull(first.cost && typeof first.cost === "object" ? (first.cost as Record<string, unknown>).duration : first.duration), taxiCost: numberOrNull(route.taxi_cost), transitCost: numberOrNull(first.cost && typeof first.cost === "object" ? (first.cost as Record<string, unknown>).transit_fee : null), polylines: polylinesFrom(first), steps, summary: scalar(first.instruction || first.description) || null };
+  const distanceMeters = numberOrNull(first.distance ?? route.distance);
+  const durationSeconds = numberOrNull(first.cost && typeof first.cost === "object" ? (first.cost as Record<string, unknown>).duration : first.duration);
+  const taxiCost = numberOrNull(route.taxi_cost ?? first.taxi_cost);
+  // AMap v3 integrated transit uses a scalar `cost` in some payloads and a
+  // structured `{ transit_fee, duration }` in others. Never infer a fare.
+  const transitCost = numberOrNull(first.cost && typeof first.cost === "object" ? (first.cost as Record<string, unknown>).transit_fee : first.cost ?? first.transit_fee ?? route.transit_fee);
+  const quote = createAmapRouteQuote({ mode: input.mode, transitCost, taxiCost, durationSeconds, distanceMeters });
+  const result = { mode: input.mode, distanceMeters, durationSeconds, taxiCost, transitCost, quote, polylines: polylinesFrom(first), steps, summary: scalar(first.instruction || first.description) || null };
   routeCache.set(cacheKey, { expiresAt: Date.now() + 120_000, result });
   return result;
 }

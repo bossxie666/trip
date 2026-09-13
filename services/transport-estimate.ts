@@ -5,7 +5,7 @@ export type TransportParticipantState = "present" | "absent" | "partial" | "unkn
 export type TransportEstimate = {
   amountMinor: number | null;
   pending: boolean;
-  reason?: "route" | "fare" | "participants" | "member";
+  reason?: "route" | "fare" | "participants" | "member" | "per_vehicle";
   participantCount?: number;
 };
 
@@ -50,11 +50,9 @@ export function estimateTransportCost(input: {
   if (state !== "present") return { amountMinor: null, pending: true, reason: "participants" };
   if (input.mode === "taxi" || input.mode === "driving") {
     if (input.taxiCost == null) return { amountMinor: null, pending: true, reason: "fare" };
-    const states = Object.values(input.memberStates || {});
-    if (!states.length || states.some((value) => value === "unknown" || value === "partial")) return { amountMinor: null, pending: true, reason: "participants" };
-    const participantCount = states.filter((value) => value === "present").length;
-    if (!participantCount) return { amountMinor: 0, pending: false, participantCount: 0 };
-    return { amountMinor: Math.round((input.taxiCost * 100) / participantCount), pending: false, participantCount };
+    // AMap quotes one vehicle. Vehicle count and cost allocation are not route
+    // facts, so never divide or multiply this amount into a personal total.
+    return { amountMinor: null, pending: true, reason: "per_vehicle", participantCount: Object.values(input.memberStates || {}).filter((value) => value === "present").length };
   }
   if (input.transitCost == null) return { amountMinor: null, pending: true, reason: "fare" };
   return { amountMinor: Math.round(input.transitCost * 100), pending: false, participantCount: 1 };

@@ -3,6 +3,55 @@ import { existsSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { buildIdentitySwitchReturnTo } from "../services/identity-navigation.ts";
+import { summarizeAccommodation } from "../services/accommodation-summary.ts";
+import { isTransportBooking, railwayDisplayLabel } from "../services/booking-semantics.ts";
+import { isFerryLeg, transitLineSummary } from "../services/amap/route-presentation.ts";
+
+test("derives one accommodation summary without double-counting booking totals", () => {
+  const summary = summarizeAccommodation([
+    { id: "confirmed", status: "confirmed", totalAmountMinor: 99900, currency: "CNY" },
+    { id: "tentative", status: "tentative", totalAmountMinor: 20000, currency: "CNY" },
+    { id: "cancelled", status: "cancelled", totalAmountMinor: 50000, currency: "CNY" },
+  ], [
+    { bookingId: "confirmed", amountMinor: 60000, currency: "CNY" },
+    { bookingId: "confirmed", amountMinor: 39900, currency: "CNY" },
+  ]);
+  assert.equal(summary.count, 2);
+  assert.equal(summary.confirmedCount, 1);
+  assert.equal(summary.tentativeCount, 1);
+  assert.deepEqual(summary.amounts, [{ currency: "CNY", amountMinor: 119900 }]);
+  assert.equal(summary.incomplete, false);
+  const mixed = summarizeAccommodation([
+    { id: "cny", status: "confirmed", totalAmountMinor: 10000, currency: "CNY" },
+    { id: "usd", status: "confirmed", totalAmountMinor: 20000, currency: "USD" },
+  ], []);
+  assert.equal(mixed.amounts.length, 2);
+});
+
+test("classifies explicit service bookings without using city boundaries", () => {
+  assert.equal(isTransportBooking({ type: "train", originPlaceId: "hz-south", destinationPlaceId: "hz-east" }), true);
+  assert.equal(isTransportBooking({ type: "other", originPlaceId: "pier-a", destinationPlaceId: "pier-b" }), true);
+  assert.equal(isTransportBooking({ type: "other", originPlaceId: null, destinationPlaceId: null }), false);
+  assert.equal(railwayDisplayLabel("G7553 · 杭州南 → 杭州东"), "高铁");
+  assert.equal(railwayDisplayLabel("D2281 · 杭州东 → 上海虹桥"), "动车");
+  assert.equal(railwayDisplayLabel("C1234 · 杭州南 → 杭州东"), "城际");
+});
+
+test("keeps public ferry as a transit leg presentation", () => {
+  const ferry = { mode: "other", rawType: "ferry", lineName: null, instruction: "乘坐东金线轮渡" };
+  assert.equal(isFerryLeg(ferry), true);
+  assert.equal(transitLineSummary([ferry]), "轮渡");
+});
+
+test("keeps add-to-day models explicit and booking reference semantically separate", () => {
+  const source = readFileSync(new URL("../components/trip/PlanAddControl.tsx", import.meta.url), "utf8");
+  assert.match(source, /地点 \/ 活动/);
+  assert.match(source, /班次 \/ 票务交通/);
+  assert.doesNotMatch(source, /添加长途交通|跨城交通/);
+  assert.match(source, /bookingReference: bookingCode\.trim\(\) \|\| null/);
+  assert.match(source, /notes: \[service \? `班次：\$\{service\}`/);
+  assert.doesNotMatch(source, /kind === "note"/);
+});
 
 class TestD1Statement {
   constructor(database, sql, values = []) { this.database = database; this.sql = sql; this.values = values; }
@@ -22,7 +71,7 @@ class TestD1Database {
 const DB = new TestD1Database();
 globalThis.__TRIP_TEST_D1__ = DB;
 globalThis.__TRIP_TEST_ENV__ = { TRIP_SPACE_INVITE_CODE: "test-invite", TRIP_SPACE_SESSION_SECRET: "test-session-secret-at-least-32-characters", AMAP_JS_API_KEY: "test-js-key", AMAP_JS_SECURITY_CODE: "test-js-code", AMAP_WEB_SERVICE_KEY: "test-web-key" };
-for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql", "0014_v2_2_1_confirmed_facts.sql", "0015_v2_4_r1_booking_endpoint_labels.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
+for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql", "0014_v2_2_1_confirmed_facts.sql", "0015_v2_4_r1_booking_endpoint_labels.sql", "0016_recommendation_v2.sql", "0017_home_media_guestbook.sql", "0018_recommendation_member_authoring.sql", "0019_albums.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
 
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
@@ -31,9 +80,13 @@ globalThis.fetch = async (input, init) => {
   if (url.pathname === "/v5/place/text") return Response.json({ status: "1", infocode: "10000", pois: [{ id: "B0TESTBUND", name: "测试外滩", address: "中山东一路", location: "121.490317,31.241701", adcode: "310101", citycode: "021", adname: "黄浦区", typecode: "110202" }] });
   if (url.pathname === "/v5/place/detail") {
     const id = url.searchParams.get("id");
-    return Response.json({ status: "1", infocode: "10000", pois: [{ id, name: id === "B0TESTHANGZHOU" ? "测试杭州酒店" : "测试外滩", address: id === "B0TESTHANGZHOU" ? "杭州市上城区" : "中山东一路", location: id === "B0TESTHANGZHOU" ? "120.182860,30.243482" : "121.490317,31.241701", adcode: id === "B0TESTHANGZHOU" ? "330102" : "310101", citycode: id === "B0TESTHANGZHOU" ? "0571" : "021", adname: id === "B0TESTHANGZHOU" ? "上城区" : "黄浦区", typecode: "110202" }] });
+    const fixtures = { B0TESTHANGZHOU: ["测试杭州酒店", "杭州市上城区", "120.182860,30.243482", "330102", "0571", "上城区"], B0TESTSHENZHEN: ["深圳宝安国际机场", "宝安区机场路", "113.810664,22.639258", "440306", "0755", "宝安区"], B0TESTPUDONG: ["上海浦东国际机场", "浦东新区机场大道", "121.805199,31.143463", "310115", "021", "浦东新区"] };
+    const fixture = fixtures[id] || ["测试外滩", "中山东一路", "121.490317,31.241701", "310101", "021", "黄浦区"];
+    return Response.json({ status: "1", infocode: "10000", pois: [{ id, name: fixture[0], address: fixture[1], location: fixture[2], adcode: fixture[3], citycode: fixture[4], adname: fixture[5], typecode: "110202" }] });
   }
   if (url.pathname === "/v3/geocode/geo") return Response.json({ status: "1", infocode: "10000", geocodes: [{ formatted_address: "上海市黄浦区中山东一路", location: "121.490317,31.241701", adcode: "310101", citycode: "021", district: "黄浦区" }] });
+  if (url.pathname === "/v3/direction/transit/integrated") return Response.json({ status: "1", infocode: "10000", route: { transits: [{ distance: "18400", cost: { duration: "3960", transit_fee: "7" }, segments: [{ walking: { distance: "300", duration: "240", polyline: "121.490317,31.241701;121.492000,31.243000" } }, { bus: { buslines: [{ type: "地铁", name: "地铁2号线", departure_stop: { name: "人民广场" }, arrival_stop: { name: "江苏路" }, distance: "8000", duration: "1800", polyline: "121.492000,31.243000;121.430000,31.220000" }] } }, { bus: { buslines: [{ type: "地铁", name: "地铁11号线", departure_stop: { name: "江苏路" }, arrival_stop: { name: "迪士尼" }, distance: "9800", duration: "1680", polyline: "121.430000,31.220000;121.660000,31.140000" }] } }, { walking: { distance: "300", duration: "240", polyline: "121.660000,31.140000;121.661000,31.141000" } }] }] } });
+  if (url.pathname === "/v3/direction/driving") return Response.json({ status: "1", infocode: "10000", route: { taxi_cost: "116", paths: [{ distance: "18000", duration: "1680", steps: [{ polyline: "121.490317,31.241701;121.661000,31.141000" }] }] } });
   if (url.pathname.startsWith("/v5/direction/")) return Response.json({ status: "1", infocode: "10000", route: { paths: [{ distance: "1200", cost: { duration: "900" }, steps: [{ polyline: "121.490317,31.241701;121.500000,31.250000" }] }] } });
   return Response.json({ status: "0", infocode: "10002" });
 };
@@ -140,6 +193,13 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   const bookingEdit = readFileSync(new URL("../components/trip/BookingEditControl.tsx", import.meta.url), "utf8");
   const budget = readFileSync(new URL("../components/trip/BudgetWorkspace.tsx", import.meta.url), "utf8");
   const overlay = readFileSync(new URL("../components/trip/WorkspaceOverlay.tsx", import.meta.url), "utf8");
+  const header = readFileSync(new URL("../components/site/SiteHeader.tsx", import.meta.url), "utf8");
+  const desktopMap = readFileSync(new URL("../components/trip/PlanningDesktopMap.tsx", import.meta.url), "utf8");
+  const tripEditor = readFileSync(new URL("../components/trip/EditTripForm.tsx", import.meta.url), "utf8");
+  const mediaService = readFileSync(new URL("../services/media-service.server.ts", import.meta.url), "utf8");
+  const recommendationCreator = readFileSync(new URL("../components/trip/RecommendationCreateControl.tsx", import.meta.url), "utf8");
+  const recommendationRoute = readFileSync(new URL("../app/api/trips/[slug]/recommendations/route.ts", import.meta.url), "utf8");
+  const mobileNavigation = header.match(/<nav className="site-mobile-nav"[\s\S]*?<\/nav>/)?.[0] || "";
 
   assert.match(css, /\.plan-columns\{height:auto;min-height:0\}/);
   assert.match(css, /\.recommendation-panel,\.itinerary-panel\{overflow:visible;max-height:none\}/);
@@ -152,7 +212,7 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   assert.match(transport, /modalOwner = `plan-add:\$\{slug\}`/);
   assert.match(transport, /添加到 \{targetDayLabel\}/);
   assert.match(transport, /想把什么加入今天/);
-  assert.match(transport, /交通会作为两个地点之间的路线 Edge/);
+  assert.match(transport, /明确选择的一趟服务会保存为 Booking Edge/);
   assert.match(transport, /finally \{ setSaving\(false\); \}/);
   assert.doesNotMatch(transport, /公共交通/);
   assert.match(presence, /modalOwner = `presence:\$\{slug\}:\$\{dayId\}`/);
@@ -175,6 +235,20 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   assert.match(overlay, /document\.body\.style\.overflow = "hidden"/);
   assert.match(css, /\.trip-console\{gap:10px\}/);
   assert.match(css, /\.trip-console-side\{padding-top:12px\}/);
+  assert.match(mobileNavigation, />首页</);
+  assert.match(mobileNavigation, />我的旅行</);
+  assert.match(mobileNavigation, />相册</);
+  assert.match(mobileNavigation, />留言</);
+  assert.doesNotMatch(mobileNavigation, />地图</);
+  assert.match(desktopMap, /matchMedia\("\(min-width: 1440px\)"\)/);
+  assert.match(desktopMap, /dynamic<PlanMapProps>/);
+  assert.match(tripEditor, /uploadMediaFile\(coverFile, "trip_cover"\)/);
+  assert.match(mediaService, /"trip_cover"/);
+  assert.match(recommendationCreator, /添加地点/);
+  assert.match(recommendationCreator, /添加攻略/);
+  assert.match(recommendationCreator, /添加小红书/);
+  assert.match(recommendationCreator, /uploadMediaFile\(file, "recommendation_reference"\)/);
+  assert.match(recommendationRoute, /isCore: false/);
   assert.match(css, /\.trip-plan-page,\.plan-columns,\.recommendation-panel,\.itinerary-panel\{overflow:visible\}/);
 });
 
@@ -200,6 +274,7 @@ test("keeps the performance boundaries for metadata, workspace views, and client
   const metadataPage = readFileSync(new URL("../app/trips/[slug]/plan/page.tsx", import.meta.url), "utf8");
   const workspaceService = readFileSync(new URL("../services/plan-workspace-service.server.ts", import.meta.url), "utf8");
   const workspace = readFileSync(new URL("../components/trip/TripPlanWorkspace.tsx", import.meta.url), "utf8");
+  const dayNavigation = readFileSync(new URL("../components/trip/DayNavigation.tsx", import.meta.url), "utf8");
   assert.match(metadataPage, /findTripMetadataBySlug/);
   assert.doesNotMatch(metadataPage, /generateMetadata[\s\S]{0,300}getPlanWorkspace/);
   assert.match(workspaceService, /Promise\.all\(/);
@@ -208,7 +283,9 @@ test("keeps the performance boundaries for metadata, workspace views, and client
   assert.doesNotMatch(workspaceService, /getDayTimeline/);
   assert.match(workspace, /from "\.\/WorkspaceNavLink"/);
   assert.match(workspace, /plan-member-filter[\s\S]{0,700}<WorkspaceNavLink/);
-  assert.match(workspace, /day-navigation[\s\S]{0,300}<WorkspaceNavLink/);
+  assert.match(workspace, /<DayNavigation/);
+  assert.match(dayNavigation, /className="day-navigation"[\s\S]{0,500}<WorkspaceNavLink/);
+  assert.match(dayNavigation, /scrollIntoView\(\{ behavior: "smooth", block: "nearest", inline: "center" \}\)/);
   assert.match(workspace, /plan-view-tabs[\s\S]{0,500}<WorkspaceNavLink/);
   const workspaceNavLink = readFileSync(new URL("../components/trip/WorkspaceNavLink.tsx", import.meta.url), "utf8");
   assert.match(workspaceNavLink, /router\.push\(href\)/);
@@ -235,6 +312,36 @@ test("keeps the performance boundaries for metadata, workspace views, and client
   assert.ok(DB.prepareCount < 30, `Planning should stay below 30 D1 statements (got ${DB.prepareCount})`);
 });
 
+test("paginates and filters the full recommendation library in D1", async () => {
+  const insert = DB.database.prepare(`INSERT INTO recommendations
+    (id, trip_id, kind, category, title, area_label, area_key, is_core, created_at, updated_at)
+    VALUES (?, 'trip-shanghai-hangzhou-2026', 'place', 'cafe', ?, '桐庐', 'tonglu', 0, ?, ?)`);
+  try {
+    for (let index = 1; index <= 13; index += 1) {
+      const suffix = String(index).padStart(2, "0");
+      const timestamp = `2026-10-${suffix}T00:00:00.000Z`;
+      insert.run(`perf-page-${suffix}`, `分页素材 ${suffix}`, timestamp, timestamp);
+    }
+
+    const firstHtml = await (await render("/trips/shanghai-hangzhou-2026/plan?view=planning&library=all&area=tonglu&category=cafe&sort=recent&page=1")).text();
+    assert.match(firstHtml, /1-12 \/ 13/);
+    assert.match(firstHtml, /分页素材 13/);
+    assert.doesNotMatch(firstHtml, /分页素材 01/);
+
+    const secondHtml = await (await render("/trips/shanghai-hangzhou-2026/plan?view=planning&library=all&area=tonglu&category=cafe&sort=recent&page=2")).text();
+    assert.match(secondHtml, /13-13 \/ 13/);
+    assert.match(secondHtml, /分页素材 01/);
+    assert.doesNotMatch(secondHtml, /分页素材 13/);
+
+    const filteredHtml = await (await render("/trips/shanghai-hangzhou-2026/plan?view=planning&library=all&area=tonglu&category=cafe&q=13")).text();
+    assert.match(filteredHtml, /1-1 \/ 1/);
+    assert.match(filteredHtml, /分页素材 13/);
+    assert.doesNotMatch(filteredHtml, /分页素材 12/);
+  } finally {
+    DB.database.exec("DELETE FROM recommendations WHERE id LIKE 'perf-page-%'");
+  }
+});
+
 async function createTrip(body) {
   const response = await render("/api/trips", { method: "POST", body });
   const payload = await response.json();
@@ -251,20 +358,200 @@ test("keeps all Stage A routes available", async () => {
   assert.equal(home.status, 200);
   const homeHtml = await home.text();
   assert.match(homeHtml, /跳进地理书/);
-  assert.match(homeHtml, /<a[^>]+href="\/trips"[^>]*>进入攻略<\/a>/);
+  assert.match(homeHtml, /<a[^>]+href="\/trips"[^>]*>[\s\S]*?我的旅行[\s\S]*?<\/a>/);
+  assert.match(homeHtml, /旅行影像墙/);
+  assert.match(homeHtml, /留言板/);
   assert.equal(cities.status, 200); assert.equal(city.status, 200); assert.equal(map.status, 200);
+});
+
+test("keeps desktop home sections while hiding only those sections on mobile", async () => {
+  const html = await (await render("/")).text();
+  const css = readFileSync(new URL("../app/home-journal.css", import.meta.url), "utf8");
+  assert.match(html, /home-photo-wall mobile-home-secondary/);
+  assert.match(html, /home-lower-grid mobile-home-secondary/);
+  assert.match(html, /旅行影像墙/);
+  assert.match(html, /我的旅行/);
+  assert.match(html, /留言板/);
+  assert.match(css, /@media \(max-width: 820px\)[\s\S]*?\.mobile-home-secondary \{ display: none!important; \}/);
+  assert.match(html, /href="\/albums"[\s\S]*?>相册</);
+});
+
+test("creates and fully manages shared albums without leaking album media into other surfaces", async () => {
+  const savedSession = sessionCookie;
+  let albumId = "";
+  const assetA = "album-test-a", assetB = "album-test-b", now = new Date().toISOString();
+  try {
+    await loginAs("nini");
+    const emptyPage = await render("/albums"); assert.equal(emptyPage.status, 200); assert.match(await emptyPage.text(), /添加相册/);
+    const created = await render("/api/albums", { method: "POST", body: { title: "共同旅行相册", description: "一起整理", tripId: null } });
+    assert.equal(created.status, 201); albumId = (await created.json()).album.id;
+    DB.database.prepare("INSERT INTO media_assets (id,uploader_member_id,purpose,object_key,original_filename,content_type,byte_size,status,created_at,updated_at,ready_at) VALUES (?,?,?,?,?,'image/jpeg',100,'ready',?,?,?)").run(assetA,"member-nini","album","album/test-a.jpg","a.jpg",now,now,now);
+    DB.database.prepare("INSERT INTO media_assets (id,uploader_member_id,purpose,object_key,original_filename,content_type,byte_size,status,created_at,updated_at,ready_at) VALUES (?,?,?,?,?,'image/jpeg',100,'ready',?,?,?)").run(assetB,"member-nini","album","album/test-b.jpg","b.jpg",now,now,now);
+    const attached = await render(`/api/albums/${albumId}/media`, { method: "POST", body: { assetIds: [assetA, assetB] } });
+    assert.equal(attached.status, 200); assert.equal((await attached.json()).album.photos.length, 2);
+    assert.equal(DB.database.prepare("SELECT cover_media_asset_id cover FROM albums WHERE id=?").get(albumId).cover, assetA);
+    const reordered = await render(`/api/albums/${albumId}/media`, { method: "PATCH", body: { assetIds: [assetB, assetA] } }); assert.equal(reordered.status, 200);
+    const covered = await render(`/api/albums/${albumId}`, { method: "PATCH", body: { coverMediaAssetId: assetB } }); assert.equal(covered.status, 200);
+    await loginAs("kiki");
+    const collaborativeEdit = await render(`/api/albums/${albumId}`, { method: "PATCH", body: { title: "全员共同整理" } }); assert.equal(collaborativeEdit.status, 200);
+    await loginAs("nini");
+    const removed = await render(`/api/albums/${albumId}/media/${assetB}`, { method: "DELETE" }); assert.equal(removed.status, 200);
+    assert.equal(DB.database.prepare("SELECT count(*) count FROM media_assets WHERE id=?").get(assetB).count, 0);
+    assert.equal(DB.database.prepare("SELECT cover_media_asset_id cover FROM albums WHERE id=?").get(albumId).cover, assetA);
+    assert.equal(DB.database.prepare("SELECT count(*) count FROM guestbook_message_media WHERE media_asset_id=?").get(assetA).count, 0);
+    assert.equal(DB.database.prepare("SELECT count(*) count FROM recommendation_reference_media WHERE media_asset_id=?").get(assetA).count, 0);
+    assert.equal(DB.database.prepare("SELECT count(*) count FROM home_featured_photos WHERE media_asset_id=?").get(assetA).count, 0);
+    const deleted = await render(`/api/albums/${albumId}`, { method: "DELETE" }); assert.equal(deleted.status, 200);
+    assert.ok(DB.database.prepare("SELECT deleted_at FROM albums WHERE id=?").get(albumId).deleted_at);
+    assert.equal(DB.database.prepare("SELECT count(*) count FROM media_assets WHERE id=?").get(assetA).count, 1);
+  } finally {
+    if (albumId) { DB.database.prepare("DELETE FROM album_media WHERE album_id=?").run(albumId); DB.database.prepare("DELETE FROM albums WHERE id=?").run(albumId); }
+    DB.database.prepare("DELETE FROM media_assets WHERE id IN (?,?)").run(assetA, assetB);
+    sessionCookie = savedSession;
+  }
+});
+
+test("enforces Trip membership and album-author metadata edits", async () => {
+  const savedSession = sessionCookie;
+  let trip, albumId = "";
+  try {
+    await loginAs("nini");
+    trip = await createTrip({ title: "相册权限边界", status: "planning", startDate: "2030-01-01", endDate: "2030-01-01", memberIds: ["member-nini"] });
+    const created = await render("/api/albums", { method: "POST", body: { title: "私有 Trip 相册", tripId: trip.id } }); assert.equal(created.status, 201); albumId = (await created.json()).album.id;
+    await loginAs("kiki");
+    assert.equal((await render(`/api/albums/${albumId}`)).status, 403);
+    assert.equal((await render(`/api/albums/${albumId}`, { method: "PATCH", body: { title: "越权修改" } })).status, 403);
+    await loginAs("nini");
+    assert.equal((await render(`/api/albums/${albumId}`, { method: "PATCH", body: { title: "作者修改成功" } })).status, 200);
+  } finally {
+    await loginAs("nini");
+    if (albumId) { DB.database.prepare("DELETE FROM album_media WHERE album_id=?").run(albumId); DB.database.prepare("DELETE FROM albums WHERE id=?").run(albumId); }
+    if (trip) assert.equal((await render(`/api/trips/${trip.slug}`, { method: "DELETE" })).status, 200);
+    sessionCookie = savedSession;
+  }
+});
+
+test("creates an already completed Trip from the new Trip flow", async () => {
+  const form = await render("/trips/new");
+  const html = await form.text();
+  assert.match(html, /checked=""[^>]*\/?>待出行|待出行/);
+  assert.match(html, /已出行/);
+
+  const trip = await createTrip({
+    title: "已完成行程回归测试",
+    status: "completed",
+    cities: ["苏州"],
+    startDate: "2024-04-01",
+    endDate: "2024-04-02",
+    people: 1,
+  });
+  try {
+    assert.equal(trip.status, "completed");
+    const completed = await render("/trips?status=completed");
+    assert.match(await completed.text(), /已完成行程回归测试/);
+  } finally {
+    assert.equal((await render(`/api/trips/${trip.slug}`, { method: "DELETE" })).status, 200);
+  }
 });
 
 test("lists the Shanghai Hangzhou trip through the shared workspace", async () => {
   const [all, planning, inspiration] = await Promise.all([render("/trips"), render("/trips?status=planning"), render("/trips?status=inspiration")]);
   const allHtml = await all.text();
   assert.match(allHtml, /上海 \+ 杭州/);
-  assert.match(allHtml, /<a[^>]+href="\/"[^>]*>返回首页<\/a>/);
+  assert.match(allHtml, /aria-label="Trip Bossxie 首页"/);
+  assert.match(allHtml, /网站主导航/);
   assert.match(allHtml, /<a[^>]+href="\/trips\/new"[^>]*>＋ 新建行程<\/a>/);
   assert.match(allHtml, /<a[^>]+href="\/trips\?status=inspiration"/);
   assert.match(allHtml, /<a[^>]+href="\/trips\/shanghai-hangzhou-2026"/);
   assert.match(await planning.text(), /上海 \+ 杭州/);
   assert.doesNotMatch(await inspiration.text(), /上海 \+ 杭州/);
+});
+
+test("keeps the private homepage, global search, and media upload boundaries scoped to the signed-in member", async () => {
+  const savedSession = sessionCookie;
+  let privateTrip;
+  try {
+    await loginAs("nini");
+    privateTrip = await createTrip({ title: "nini 私有搜索边界", status: "planning", cities: ["上海"], memberIds: ["member-nini"] });
+
+    const ownSearch = await render("/search?q=nini%20%E7%A7%81%E6%9C%89");
+    assert.equal(ownSearch.status, 200);
+    assert.match(await ownSearch.text(), /nini 私有搜索边界/);
+
+    const invalidUpload = await render("/api/media/uploads", { method: "POST", body: { purpose: "guestbook", filename: "unsafe.svg", contentType: "image/svg+xml", byteSize: 1200 } });
+    assert.equal(invalidUpload.status, 400);
+    const unconfiguredUpload = await render("/api/media/uploads", { method: "POST", body: { purpose: "guestbook", filename: "photo.jpg", contentType: "image/jpeg", byteSize: 1200 } });
+    assert.equal(unconfiguredUpload.status, 503);
+    await loginAs("kiki");
+    const otherSearch = await render("/search?q=nini%20%E7%A7%81%E6%9C%89");
+    assert.equal(otherSearch.status, 200);
+    assert.doesNotMatch(await otherSearch.text(), /nini 私有搜索边界/);
+  } finally {
+    await loginAs("nini");
+    if (privateTrip) assert.equal((await render(`/api/trips/${privateTrip.slug}`, { method: "DELETE" })).status, 200);
+    sessionCookie = savedSession;
+  }
+});
+
+test("allows members to leave messages while keeping edit and delete ownership", async () => {
+  const savedSession = sessionCookie;
+  let messageId = "";
+  try {
+    await loginAs("nini");
+    const created = await render("/api/guestbook", { method: "POST", body: { body: "首页留言回归测试", mediaAssetIds: [] } });
+    assert.equal(created.status, 201);
+    messageId = (await created.json()).message.id;
+    assert.equal(DB.database.prepare("SELECT author_member_id FROM guestbook_messages WHERE id = ?").get(messageId).author_member_id, "member-nini");
+
+    await loginAs("kiki");
+    assert.equal((await render(`/api/guestbook/${messageId}`, { method: "PATCH", body: { body: "不应越权修改" } })).status, 403);
+    assert.equal((await render(`/api/guestbook/${messageId}`, { method: "DELETE" })).status, 403);
+
+    await loginAs("nini");
+    const updated = await render(`/api/guestbook/${messageId}`, { method: "PATCH", body: { body: "首页留言已更新" } });
+    assert.equal(updated.status, 200);
+    assert.equal((await updated.json()).message.body, "首页留言已更新");
+    assert.equal((await render(`/api/guestbook/${messageId}`, { method: "DELETE" })).status, 200);
+    assert.equal(DB.database.prepare("SELECT deleted_at IS NOT NULL AS deleted FROM guestbook_messages WHERE id = ?").get(messageId).deleted, 1);
+  } finally {
+    if (messageId) DB.database.prepare("DELETE FROM guestbook_messages WHERE id = ?").run(messageId);
+    sessionCookie = savedSession;
+  }
+});
+
+test("lets a Trip member create a non-core Guide with ordered real Places and an attributed reference", async () => {
+  const savedSession = sessionCookie;
+  let recommendationId = "";
+  try {
+    await loginAs("nini");
+    const itemsBefore = DB.database.prepare("SELECT count(*) count FROM itinerary_items WHERE trip_id = 'trip-shanghai-hangzhou-2026'").get().count;
+    const response = await render("/api/trips/shanghai-hangzhou-2026/recommendations", { method: "POST", body: {
+      kind: "guide",
+      guideType: "day_trip",
+      category: "attraction",
+      title: "成员添加攻略回归",
+      summary: "只进入素材库",
+      estimatedDurationMinutes: 360,
+      areaKey: "shanghai",
+      areaLabel: "上海",
+      components: [{ placeId: "place-the-bund" }, { placeId: "place-shanghai-disney" }],
+      reference: { platform: "xiaohongshu", title: "真实来源由成员确认", sourceUrl: "https://www.xiaohongshu.com/explore/test-reference", note: "测试引用" },
+    } });
+    assert.equal(response.status, 201);
+    recommendationId = (await response.json()).recommendation.id;
+    const recommendation = DB.database.prepare("SELECT kind, guide_type, category, is_core, created_by_member_id FROM recommendations WHERE id = ?").get(recommendationId);
+    assert.deepEqual({ ...recommendation }, { kind: "guide", guide_type: "day_trip", category: "attraction", is_core: 0, created_by_member_id: "member-nini" });
+    const options = DB.database.prepare("SELECT place_id, relation_type, sort_order FROM recommendation_place_options WHERE recommendation_id = ? ORDER BY sort_order").all(recommendationId);
+    assert.deepEqual(options.map((row) => ({ ...row })), [{ place_id: "place-the-bund", relation_type: "component", sort_order: 0 }, { place_id: "place-shanghai-disney", relation_type: "component", sort_order: 1 }]);
+    const reference = DB.database.prepare("SELECT platform, source_url, created_by_member_id, updated_by_member_id FROM recommendation_references WHERE recommendation_id = ?").get(recommendationId);
+    assert.deepEqual({ ...reference }, { platform: "xiaohongshu", source_url: "https://www.xiaohongshu.com/explore/test-reference", created_by_member_id: "member-nini", updated_by_member_id: "member-nini" });
+    assert.equal(DB.database.prepare("SELECT count(*) count FROM itinerary_items WHERE trip_id = 'trip-shanghai-hangzhou-2026'").get().count, itemsBefore);
+    const invalidPreview = await render("/api/trips/shanghai-hangzhou-2026/recommendations/xiaohongshu/preview", { method: "POST", body: { url: "https://example.com/not-xhs" } });
+    assert.equal(invalidPreview.status, 400);
+  } finally {
+    if (recommendationId) DB.database.prepare("DELETE FROM recommendations WHERE id = ?").run(recommendationId);
+    sessionCookie = savedSession;
+  }
 });
 
 test("hydrates Shanghai Hangzhou from D1 with stage participation after retiring legacy planning rows", async () => {
@@ -404,7 +691,7 @@ test("renders a long-distance Booking as an edge between endpoint nodes", async 
   const bookingResponse = await render(`/api/trips/${trip.slug}/bookings`, { method: "POST", body: {
     type: "flight", status: "confirmed", title: "Y87578", startDateLocal: "2028-06-01", endDateLocal: "2028-06-01",
     startAt: "2028-05-31T22:35:00.000Z", endAt: "2028-06-01T00:55:00.000Z", originLabel: "深圳宝安国际机场", destinationLabel: "上海浦东国际机场",
-    bookingReference: "Y87578", totalAmountMinor: 48000, participantMemberIds: ["member-nini"],
+    bookingReference: "Y87578", totalAmountMinor: 48000, participantMemberIds: ["member-nini"], origin: { providerPlaceId: "B0TESTSHENZHEN" }, destination: { providerPlaceId: "B0TESTPUDONG" },
   } });
   assert.equal(bookingResponse.status, 201);
   const itemResponse = await render(`/api/trips/${trip.slug}/plan/items`, { method: "POST", body: { dayId, title: "上海迪士尼", itemType: "place", providerPlaceId: "B0TESTBUND" } });
@@ -423,7 +710,7 @@ test("renders a long-distance Booking as an edge between endpoint nodes", async 
   assert.equal((html.match(/data-timeline-edge-kind="long-distance"/g) || []).length, 1);
   assert.match(html, /data-timeline-edge-kind="long-distance"[\s\S]*?飞机[\s\S]*?深圳宝安国际机场 → 上海浦东国际机场/);
   assert.equal((html.match(/data-timeline-edge-kind="local"/g) || []).length, 1);
-  assert.match(html, /data-timeline-edge-kind="local"[\s\S]*?data-timeline-edge-state="pending"[\s\S]*?＋选择交通方式/);
+  assert.match(html, /data-timeline-edge-kind="local"[\s\S]*?data-timeline-edge-state="pending"[\s\S]*?＋\s*选择交通方式/);
   assert.equal(nodes.filter((block) => block.includes("上海迪士尼") && block.includes('data-timeline-node-kind="item"')).length, 1);
   assert.ok(html.indexOf('data-timeline-node-id="') < html.indexOf('data-timeline-edge-kind="long-distance"'));
   assert.equal((await render(`/api/trips/${trip.slug}`, { method: "DELETE" })).status, 200);
@@ -471,13 +758,14 @@ test("renders accommodation editor as an independent modal without an inline det
   assert.match(css, /@media\(max-width:680px\)\{[\s\S]*\.workspace-surface\.workspace-modal,\.workspace-surface\.workspace-drawer\{width:100%;height:100dvh/);
 });
 
-test("keeps Add Itinerary types focused on place nodes, long-distance edges, and no-place notes", () => {
+test("keeps Add Itinerary types focused on place activities and ticketed transport", () => {
   const source = readFileSync(new URL("../components/trip/PlanAddControl.tsx", import.meta.url), "utf8");
   const picker = readFileSync(new URL("../components/trip/GenericPlacePicker.tsx", import.meta.url), "utf8");
   assert.match(source, /role="tablist" aria-label="添加类型"/);
-  for (const label of ["地点", "交通", "事项"]) assert.match(source, new RegExp(`>${label}<`));
-  assert.match(source, /添加长途交通/);
-  assert.match(source, /添加无地点事项/);
+  assert.match(source, /地点 \/ 活动/);
+  assert.match(source, /班次 \/ 票务交通/);
+  assert.match(source, /无地点普通活动/);
+  assert.doesNotMatch(source, /添加长途交通|跨城交通/);
   assert.match(source, /showExisting=\{false\}/);
   assert.match(picker, /showExisting = true/);
   assert.match(picker, /autoFocus = false/);
@@ -752,6 +1040,40 @@ test("searches AMap POIs, persists GCJ-02 data, and plans a Day route", async ()
   assert.equal(route.status, 200); const planned = (await route.json()).route; assert.equal(planned.distanceMeters, 1200); assert.equal(planned.durationSeconds, 900); assert.equal(planned.polylines.length, 1);
   const config = await render("/api/amap/config", { headers: { accept: "application/json" } }); assert.equal(config.status, 200); const configBody = await config.json(); assert.equal(configBody.key, "test-js-key"); assert.match(configBody.serviceHost, /\/_AMapService$/);
   const geocode = await render("/api/amap/geocode", { method: "POST", body: { address: "中山东一路", cityId } }); assert.equal(geocode.status, 200); assert.equal((await geocode.json()).result.coordinateSystem, "GCJ02");
+});
+
+test("persists every local RoutePreference mode and restores the Planning segment", async () => {
+  const trip = await createTrip({ title: "Local route preference", status: "planning", cities: ["上海"], startDate: "2028-11-01", endDate: "2028-11-01", memberIds: ["member-nini"] });
+  const dayId = DB.database.prepare("SELECT id FROM days WHERE trip_id = ?").get(trip.id).id;
+  for (const [providerPlaceId, title] of [["B0TESTBUND", "外滩"], ["B0TESTPUDONG", "浦东机场"]]) assert.equal((await render(`/api/trips/${trip.slug}/plan/items`, { method: "POST", body: { dayId, title, itemType: "place", providerPlaceId } })).status, 201);
+  const items = DB.database.prepare("SELECT id, place_id FROM itinerary_items WHERE trip_id = ? ORDER BY sort_order").all(trip.id);
+  assert.equal(items.length, 2);
+  const businessFactsBefore = {
+    expenses: DB.database.prepare("SELECT count(*) count FROM expenses WHERE trip_id = ?").get(trip.id).count,
+    bookings: DB.database.prepare("SELECT count(*) count FROM bookings WHERE trip_id = ?").get(trip.id).count,
+    bookingCostLines: DB.database.prepare("SELECT count(*) count FROM booking_cost_lines WHERE booking_id IN (SELECT id FROM bookings WHERE trip_id = ?)").get(trip.id).count,
+  };
+  for (const mode of ["transit", "taxi", "walking", "bicycling"]) {
+    const route = await render(`/api/trips/${trip.slug}/plan/routes`, { method: "POST", body: { originPlaceId: items[0].place_id, destinationPlaceId: items[1].place_id, mode } });
+    assert.equal(route.status, 200);
+    const routeBody = await route.json();
+    assert.equal(routeBody.route.quote.currency, "CNY");
+    assert.equal(routeBody.route.quote.source, "amap");
+    assert.equal(routeBody.route.quote.basis, mode === "transit" ? "per_person" : mode === "taxi" ? "per_vehicle" : "free");
+    assert.equal(routeBody.route.quote.amountMinor, mode === "transit" ? 700 : mode === "taxi" ? 11600 : 0);
+    const save = await render(`/api/trips/${trip.slug}/plan/preferences`, { method: "PUT", body: { dayId, fromSource: "itinerary", fromId: items[0].id, toSource: "itinerary", toId: items[1].id, preferredMode: mode } });
+    assert.equal(save.status, 200);
+    assert.equal(DB.database.prepare("SELECT preferred_mode FROM route_preferences WHERE trip_id = ? AND day_id = ?").get(trip.id, dayId).preferred_mode, mode);
+  }
+  assert.deepEqual({
+    expenses: DB.database.prepare("SELECT count(*) count FROM expenses WHERE trip_id = ?").get(trip.id).count,
+    bookings: DB.database.prepare("SELECT count(*) count FROM bookings WHERE trip_id = ?").get(trip.id).count,
+    bookingCostLines: DB.database.prepare("SELECT count(*) count FROM booking_cost_lines WHERE booking_id IN (SELECT id FROM bookings WHERE trip_id = ?)").get(trip.id).count,
+  }, businessFactsBefore);
+  const html = await (await render(`/trips/${trip.slug}/plan?view=planning&day=${dayId}`)).text();
+  assert.match(html, /data-timeline-edge-kind="local"/);
+  assert.match(html, /data-timeline-edge-state="selected"/);
+  assert.equal((await render(`/api/trips/${trip.slug}`, { method: "DELETE" })).status, 200);
 });
 
 test("binds a nullable hotel Place without changing booking facts", async () => {

@@ -20,6 +20,7 @@ import {
 } from "@/db/schema";
 import { assertCurrency, assertLocalDate, assertMinorAmount, assertUtcInstant, stableEqualSplit, validateCustomAllocations } from "./planning-domain.mjs";
 import type { BudgetCategory, ExpenseScope, MoneyAllocation } from "@/models/planning";
+import type { TripRequestContext } from "./request-data-context.server";
 
 export const budgetCategories: BudgetCategory[] = ["food", "local_transport", "entertainment", "shopping", "other"];
 
@@ -71,8 +72,11 @@ async function getTripAndMember(slug: string, memberId: string) {
   return trip;
 }
 
-export async function getPersonalBudgetWorkspace(slug: string, memberId: string): Promise<PersonalBudgetWorkspace> {
-  const trip = await getTripAndMember(slug, memberId);
+export async function getPersonalBudgetWorkspace(slug: string, memberId: string, requestContext?: TripRequestContext): Promise<PersonalBudgetWorkspace> {
+  const contextTrip = requestContext?.trip;
+  const trip = contextTrip?.slug === slug && requestContext?.membership?.memberId === memberId
+    ? contextTrip
+    : await getTripAndMember(slug, memberId);
   const db = getDb();
   const [plans, bookings, allocations, expenses, expenseAllocations, members, bookingParticipants, costLines, itineraryRows, itemOverrides, dayPresence] = await Promise.all([
     db.select().from(memberBudgetPlanRecords).where(and(eq(memberBudgetPlanRecords.tripId, trip.id), eq(memberBudgetPlanRecords.memberId, memberId))).orderBy(asc(memberBudgetPlanRecords.category)),
@@ -149,7 +153,9 @@ export async function getPersonalBudgetWorkspace(slug: string, memberId: string)
   let expectedUnknownCount = bookingView.filter((booking) => booking.pending).length;
   for (const row of itineraryRows) {
     const recommendation = row.recommendation;
-    if (!recommendation || recommendation.deletedAt) continue;
+    // A GUIDE may expand into many concrete Items. Its reference price must
+    // never be multiplied into Expected once per component.
+    if (!recommendation || recommendation.deletedAt || recommendation.kind === "guide") continue;
     const override = itemOverrides.find(({ itinerary_item_participant_overrides: entry }) => entry.itineraryItemId === row.item.id && entry.memberId === memberId)?.itinerary_item_participant_overrides;
     const presence = dayPresence.find((entry) => entry.dayId === row.item.dayId && entry.memberId === memberId);
     const included = override?.participation === "included" || (!override && presence?.state === "present");

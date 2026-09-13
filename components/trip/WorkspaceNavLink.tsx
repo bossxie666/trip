@@ -1,14 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import type { AnchorHTMLAttributes, MouseEvent } from "react";
+import { forwardRef, type AnchorHTMLAttributes, type MouseEvent } from "react";
 
 type WorkspaceNavLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href"> & {
   href: string;
 };
 
 /** Client-side workspace navigation that bypasses Vinext beta.2's broken Link dynamic import. */
-export function WorkspaceNavLink({ href, onClick, target, children, ...props }: WorkspaceNavLinkProps) {
+export const WorkspaceNavLink = forwardRef<HTMLAnchorElement, WorkspaceNavLinkProps>(function WorkspaceNavLink({ href, onClick, target, children, ...props }, ref) {
   const router = useRouter();
 
   function navigate(event: MouseEvent<HTMLAnchorElement>) {
@@ -28,5 +28,5 @@ export function WorkspaceNavLink({ href, onClick, target, children, ...props }: 
     router.push(href);
   }
 
-  return <a {...props} href={href} target={target} onClick={navigate}>{children}</a>;
-}
+  return <a {...props} ref={ref} href={href} target={target} onClick={navigate}>{children}</a>;
+});

@@ -6,6 +6,14 @@
   "compatibility_date": "2026-05-15",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
+  "preview_urls": true,
+  "routes": [
+    {
+      "pattern": "trip.bossxie.win",
+      "zone_name": "bossxie.win",
+      "custom_domain": true
+    }
+  ],
   "assets": {
     "directory": "./dist/client",
     "binding": "ASSETS"
@@ -13,6 +21,12 @@
   "images": {
     "binding": "IMAGES"
   },
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "trip-archive-media"
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",

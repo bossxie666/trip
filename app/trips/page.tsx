@@ -3,8 +3,8 @@ import { listTrips } from "@/services/trip-repository.server";
 import { getCurrentMember, tripDeletionMemberId } from "@/services/auth.server";
 import type { TripStatus } from "@/models/travel";
 import { TripDeleteButton } from "@/components/trip/TripDeleteButton";
-import { MemberIdentityControl } from "@/components/auth/MemberIdentityControl";
 import { WorkspaceNavLink as Link } from "@/components/trip/WorkspaceNavLink";
+import { SiteHeader } from "@/components/site/SiteHeader";
 
 const statusLabels = {
   inspiration: "灵感",
@@ -28,9 +28,9 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
   const activeStatus = filters.some((filter) => filter.value === requested) ? requested as TripStatus : "all";
   const [actor, trips] = await Promise.all([getCurrentMember(), listTrips(activeStatus)]);
 
-  return (
-    <main className="archive-index">
-      <nav className="archive-top-nav"><Link href="/">返回首页</Link><MemberIdentityControl currentMember={actor ? { id: actor.id, displayName: actor.displayName } : null} /></nav>
+  return (<>
+    {actor && <SiteHeader active="" currentMember={{ id: actor.id, displayName: actor.displayName, avatar: actor.avatar }} />}
+    <main className="archive-index archive-index-with-shell">
       <header><span>TRIPS</span><h1>攻略</h1><Link className="new-trip-link" href="/trips/new">＋ 新建行程</Link></header>
       <nav className="trip-tabs" aria-label="行程状态">{filters.map((filter) => <Link key={filter.value} className={activeStatus === filter.value ? "active" : ""} href={filter.value === "all" ? "/trips" : `/trips?status=${filter.value}`}>{filter.label}</Link>)}</nav>
       <section className="trip-list">
@@ -51,5 +51,5 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
         ))}
       </section>
     </main>
-  );
+  </>);
 }

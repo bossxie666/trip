@@ -6,7 +6,7 @@ import type { Day, Trip, TripStatus } from "@/models/travel";
 
 export type CreateTripInput = {
   title: string;
-  status: Extract<TripStatus, "inspiration" | "planning">;
+  status: TripStatus;
   cities?: string[];
   startDate: string | null;
   endDate: string | null;

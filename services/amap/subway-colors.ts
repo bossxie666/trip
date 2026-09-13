@@ -37,3 +37,9 @@ export function routeStrokeColor(mode: string, steps: Array<{ mode?: string; lin
   const subway = steps.find((step) => step.mode === "subway" && step.lineName);
   return subway ? subwayLineColor(city, subway.lineName) : BUS_NEUTRAL;
 }
+
+export function transitLegStrokeColor(leg: { mode?: string; lineName?: string | null }, city?: string | null) {
+  if (leg.mode === "subway") return subwayLineColor(city, leg.lineName);
+  if (leg.mode === "bus" || leg.mode === "rail") return BUS_NEUTRAL;
+  return ROUTE_DEFAULT;
+}

@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "./budget-overrides.css";
 import "./participant-presence.css";
+import "./travel-journal-v12.css";
+import "./home-journal.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -37,6 +39,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN">
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

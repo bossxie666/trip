@@ -1,5 +1,5 @@
 import { getCurrentMember } from "@/services/auth.server";
-import { createItineraryItem, replaceItineraryParticipantOverrides } from "@/services/itinerary-repository.server";
+import { createGuideItineraryItems, createItineraryItem, replaceItineraryParticipantOverrides } from "@/services/itinerary-repository.server";
 import { getDb } from "@/db";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { createAmapPlace } from "@/services/place-repository.server";
@@ -10,7 +10,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     const actor = await getCurrentMember();
     if (!actor) return Response.json({ error: "请先验证旅行成员身份。" }, { status: 401 });
     const { slug } = await params;
-    const body = await request.json() as { recommendationId?: string; dayId?: string; placeId?: string; providerPlaceId?: string; cityId?: string; title?: string; itemType?: "place" | "meal" | "transit" | "lodging" | "activity" | "note"; note?: string | null; startTimeLocal?: string | null; endTimeLocal?: string | null; timeMode?: "untimed" | "start_only" | "range" | "all_day" | "opening_hours"; openingHoursNote?: string | null; durationMinutes?: number | null; participantMemberIds?: string[] | null };
+    const body = await request.json() as { recommendationId?: string; componentPlaceIds?: string[]; dayId?: string; placeId?: string; providerPlaceId?: string; cityId?: string; title?: string; itemType?: "place" | "meal" | "transit" | "lodging" | "activity" | "note"; note?: string | null; startTimeLocal?: string | null; endTimeLocal?: string | null; timeMode?: "untimed" | "start_only" | "range" | "all_day" | "opening_hours"; openingHoursNote?: string | null; durationMinutes?: number | null; participantMemberIds?: string[] | null };
     const db = getDb();
     const trip = (await db.select({ id: tripRecords.id }).from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1))[0];
     if (!trip || !body.dayId) return Response.json({ error: "行程或日期不存在。" }, { status: 404 });
@@ -22,6 +22,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     if (recommendationId) {
       const recommendation = (await db.select().from(recommendationRecords).where(and(eq(recommendationRecords.id, recommendationId), isNull(recommendationRecords.deletedAt))).limit(1))[0];
       if (!recommendation) return Response.json({ error: "攻略素材不存在。" }, { status: 404 });
+      if (recommendation.kind === "guide") {
+        const items = await createGuideItineraryItems({ tripId: trip.id, dayId: body.dayId, recommendationId: recommendation.id, placeIds: [...new Set((body.componentPlaceIds || []).map(String))] }, actor.id);
+        return Response.json({ items }, { status: 201 });
+      }
       const option = (await db.select().from(recommendationPlaceOptionRecords).where(eq(recommendationPlaceOptionRecords.recommendationId, recommendation.id)).orderBy(desc(recommendationPlaceOptionRecords.isPrimary), asc(recommendationPlaceOptionRecords.sortOrder)).limit(1))[0];
       placeId = placeId || option?.placeId || null;
       title = title || recommendation.title;

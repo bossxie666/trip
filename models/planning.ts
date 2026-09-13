@@ -1,4 +1,5 @@
 export type RecommendationKind = "place" | "guide";
+export type RecommendationGuideType = "day_trip" | null;
 export type RecommendationCategory = "attraction" | "food" | "cafe" | "shopping" | "hotel" | "experience" | "other";
 export type RecommendationPlaceRelation = "alternative" | "component";
 export type BookingType = "flight" | "hotel" | "train" | "ticket" | "other";

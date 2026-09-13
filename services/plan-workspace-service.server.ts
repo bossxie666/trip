@@ -1,33 +1,77 @@
-import { and, asc, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, like, ne } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
-  bookingParticipantRecords, bookingRecords, dayPresenceRecords,
+  bookingCostLineRecords, bookingParticipantRecords, bookingRecords, dayPresenceRecords,
   itineraryItemRecords, placeRecords, recommendationPlaceOptionRecords, itineraryItemParticipantOverrideRecords, memberPresenceWindowRecords,
-  recommendationRecords, tripCityRecords, tripMemberRecords, tripRecords, tripSavedPlaceRecords, cityRecords,
+  recommendationRecords, tripMemberRecords, tripRecords, tripSavedPlaceRecords, cityRecords,
   tripPlaceRecords, routePreferenceRecords,
 } from "@/db/schema";
 import { findTripBySlug } from "@/services/trip-repository.server";
 import { getPersonalBudgetWorkspace } from "@/services/budget-service.server";
 import { assembleTimeline, type TimelineNode } from "@/services/timeline-assembler";
+import type { TripRequestContext } from "@/services/request-data-context.server";
 
 export type PlanWorkspaceView = "planning" | "map" | "budget";
+export type RecommendationQuery = {
+  area: "shanghai" | "hangzhou" | "tonglu";
+  category: "all" | "core" | "attraction" | "food" | "shopping" | "day_trip" | "other" | "cafe" | "guide";
+  query: string;
+  library: boolean;
+  page: number;
+  sort: "core" | "recent";
+};
 
-export async function getPlanWorkspace(slug: string, memberId?: string, loaderOptions: { view?: PlanWorkspaceView } = {}) {
-  const trip = await findTripBySlug(slug);
+const defaultRecommendationQuery: RecommendationQuery = { area: "shanghai", category: "all", query: "", library: false, page: 1, sort: "core" };
+const planningRecommendationLimit = 8;
+const libraryRecommendationPageSize = 12;
+
+export async function getPlanWorkspace(slug: string, memberId?: string, loaderOptions: { view?: PlanWorkspaceView; requestContext?: TripRequestContext; recommendations?: RecommendationQuery } = {}) {
+  const trip = loaderOptions.requestContext?.trip?.slug === slug ? loaderOptions.requestContext.trip : await findTripBySlug(slug);
   if (!trip) return null;
   const db = getDb();
   const stored = trip;
   const view = loaderOptions.view || "planning";
-  const needsPlanningLibrary = view !== "budget";
+  const needsRecommendations = view !== "budget";
+  const paginatesRecommendations = view === "planning";
   const needsPresence = view !== "budget";
   const needsSavedPlaces = view !== "budget";
-  const needsRoutes = view === "map" || view === "budget";
+  // Planning renders the saved decision between adjacent concrete nodes;
+  // Map and Costs consume the same row for route execution and estimates.
+  const needsRoutes = true;
+  const recommendationQuery = loaderOptions.recommendations || defaultRecommendationQuery;
+  const recommendationConditions = [
+    eq(recommendationRecords.tripId, stored.id),
+    isNull(recommendationRecords.deletedAt),
+  ];
+  if (paginatesRecommendations) {
+    recommendationConditions.push(eq(recommendationRecords.areaKey, recommendationQuery.area));
+    if (recommendationQuery.category === "core") recommendationConditions.push(eq(recommendationRecords.isCore, true));
+    else if (recommendationQuery.category === "day_trip") recommendationConditions.push(and(eq(recommendationRecords.kind, "guide"), eq(recommendationRecords.guideType, "day_trip"))!);
+    else if (recommendationQuery.category === "guide") recommendationConditions.push(eq(recommendationRecords.kind, "guide"));
+    else if (recommendationQuery.category === "other") recommendationConditions.push(inArray(recommendationRecords.category, ["other", "hotel", "experience"]));
+    else if (recommendationQuery.category !== "all") recommendationConditions.push(eq(recommendationRecords.category, recommendationQuery.category));
+    if (recommendationQuery.query) recommendationConditions.push(like(recommendationRecords.title, `%${recommendationQuery.query}%`));
+  }
+  const recommendationWhere = and(...recommendationConditions);
+  const recommendationLimit = recommendationQuery.library ? libraryRecommendationPageSize : planningRecommendationLimit;
+  const recommendationOffset = recommendationQuery.library ? (recommendationQuery.page - 1) * libraryRecommendationPageSize : 0;
+  const recommendationOrder = recommendationQuery.sort === "recent"
+    ? [desc(recommendationRecords.createdAt), desc(recommendationRecords.id)] as const
+    : [desc(recommendationRecords.isCore), asc(recommendationRecords.createdAt), asc(recommendationRecords.id)] as const;
+  const recommendationRowsPromise = needsRecommendations
+    ? paginatesRecommendations
+      ? db.select().from(recommendationRecords).where(recommendationWhere).orderBy(...recommendationOrder).limit(recommendationLimit).offset(recommendationOffset)
+      : db.select().from(recommendationRecords).where(recommendationWhere).orderBy(...recommendationOrder)
+    : Promise.resolve([]);
+  const recommendationCountPromise = paginatesRecommendations
+    ? db.select({ value: count() }).from(recommendationRecords).where(recommendationWhere)
+    : Promise.resolve([{ value: 0 }]);
   const days = stored.days.map((day, index) => ({ ...day, dayNumber: index + 1 }));
-  const budgetPromise = view === "budget" && memberId ? getPersonalBudgetWorkspace(slug, memberId).catch(() => null) : Promise.resolve(null);
+  const budgetPromise = view === "budget" && memberId ? getPersonalBudgetWorkspace(slug, memberId, loaderOptions.requestContext).catch(() => null) : Promise.resolve(null);
 
-  const [recommendations, options, items, bookings, bookingParticipants, presenceRows, presenceWindows, dayPresenceRows, participantOverrides, savedPlaceRows, routePreferences, legacyTripPlaces] = await Promise.all([
-    needsPlanningLibrary ? db.select().from(recommendationRecords).where(isNull(recommendationRecords.deletedAt)).orderBy(asc(recommendationRecords.createdAt), asc(recommendationRecords.id)) : Promise.resolve([]),
-    needsPlanningLibrary ? db.select({ option: recommendationPlaceOptionRecords, place: placeRecords, recommendation: recommendationRecords }).from(recommendationPlaceOptionRecords).innerJoin(recommendationRecords, eq(recommendationRecords.id, recommendationPlaceOptionRecords.recommendationId)).innerJoin(placeRecords, eq(placeRecords.id, recommendationPlaceOptionRecords.placeId)).where(isNull(recommendationRecords.deletedAt)).orderBy(asc(recommendationPlaceOptionRecords.sortOrder)) : Promise.resolve([]),
+  const [recommendations, recommendationCountRows, items, bookings, bookingParticipants, presenceRows, presenceWindows, dayPresenceRows, participantOverrides, savedPlaceRows, routePreferences, legacyTripPlaces] = await Promise.all([
+    recommendationRowsPromise,
+    recommendationCountPromise,
     db.select({ item: itineraryItemRecords, place: placeRecords, recommendationTitle: recommendationRecords.title }).from(itineraryItemRecords).leftJoin(placeRecords, eq(placeRecords.id, itineraryItemRecords.placeId)).leftJoin(recommendationRecords, eq(recommendationRecords.id, itineraryItemRecords.recommendationId)).where(eq(itineraryItemRecords.tripId, stored.id)).orderBy(asc(itineraryItemRecords.dayId), asc(itineraryItemRecords.sortOrder), asc(itineraryItemRecords.id)),
     db.select({ booking: bookingRecords, place: placeRecords }).from(bookingRecords).leftJoin(placeRecords, eq(placeRecords.id, bookingRecords.placeId)).where(and(eq(bookingRecords.tripId, stored.id), isNull(bookingRecords.deletedAt), ne(bookingRecords.status, "cancelled"))).orderBy(asc(bookingRecords.startAt), asc(bookingRecords.startDateLocal), asc(bookingRecords.id)),
     db.select().from(bookingParticipantRecords).innerJoin(bookingRecords, eq(bookingRecords.id, bookingParticipantRecords.bookingId)).where(and(eq(bookingRecords.tripId, stored.id), isNull(bookingRecords.deletedAt))),
@@ -39,24 +83,32 @@ export async function getPlanWorkspace(slug: string, memberId?: string, loaderOp
     needsRoutes ? db.select().from(routePreferenceRecords).where(eq(routePreferenceRecords.tripId, stored.id)).orderBy(asc(routePreferenceRecords.updatedAt), asc(routePreferenceRecords.id)) : Promise.resolve([]),
     needsSavedPlaces ? db.select({ place: placeRecords, planStatus: tripPlaceRecords.planStatus }).from(tripPlaceRecords).innerJoin(placeRecords, eq(tripPlaceRecords.placeId, placeRecords.id)).where(eq(tripPlaceRecords.tripId, stored.id)) : Promise.resolve([]),
   ]);
+  const recommendationIds = recommendations.map((recommendation) => recommendation.id);
+  const options = recommendationIds.length
+    ? await db.select({ option: recommendationPlaceOptionRecords, place: placeRecords, recommendation: recommendationRecords }).from(recommendationPlaceOptionRecords).innerJoin(recommendationRecords, eq(recommendationRecords.id, recommendationPlaceOptionRecords.recommendationId)).innerJoin(placeRecords, eq(placeRecords.id, recommendationPlaceOptionRecords.placeId)).where(inArray(recommendationPlaceOptionRecords.recommendationId, recommendationIds)).orderBy(asc(recommendationPlaceOptionRecords.sortOrder))
+    : [];
 
   const timezone = stored.timezone || "Asia/Shanghai";
 
   const bookingPlaceIds = [...new Set(bookings.flatMap(({ booking }) => [booking.placeId, booking.originPlaceId, booking.destinationPlaceId].filter((id): id is string => Boolean(id))) )];
-  const [bookingRelatedPlaces, budget] = await Promise.all([
+  const bookingIds = bookings.map(({ booking }) => booking.id);
+  const [bookingRelatedPlaces, costLines, budget] = await Promise.all([
     bookingPlaceIds.length ? db.select().from(placeRecords).where(inArray(placeRecords.id, bookingPlaceIds)) : Promise.resolve([]),
+    bookingIds.length ? db.select().from(bookingCostLineRecords).where(inArray(bookingCostLineRecords.bookingId, bookingIds)).orderBy(asc(bookingCostLineRecords.sortOrder)) : Promise.resolve([]),
     budgetPromise,
   ]);
   const savedPlaces = savedPlaceRows.map(({ saved, place, city }) => ({ ...saved, place, city }));
   const placeById = new Map<string, typeof placeRecords.$inferSelect>();
-  const recommendationMetaByPlace = new Map<string, { kind: "place" | "guide"; category: string; areaKey: string | null; title: string }>();
+  const recommendationMetaByPlace = new Map<string, { id: string; kind: "place" | "guide"; category: string; areaKey: string | null; title: string; sortOrder: number }[]>();
   for (const { place } of items) if (place) placeById.set(place.id, place);
   for (const { place } of bookings) if (place) placeById.set(place.id, place);
   for (const place of bookingRelatedPlaces) placeById.set(place.id, place);
   for (const { option, place, recommendation } of options) {
     void option;
     placeById.set(place.id, place);
-    if (!recommendationMetaByPlace.has(place.id)) recommendationMetaByPlace.set(place.id, { kind: recommendation.kind, category: recommendation.category, areaKey: recommendation.areaKey, title: recommendation.title });
+    const metadata = recommendationMetaByPlace.get(place.id) || [];
+    if (!metadata.some((entry) => entry.id === recommendation.id)) metadata.push({ id: recommendation.id, kind: recommendation.kind, category: recommendation.category, areaKey: recommendation.areaKey, title: recommendation.title, sortOrder: option.sortOrder });
+    recommendationMetaByPlace.set(place.id, metadata);
   }
   for (const { place } of savedPlaces) placeById.set(place.id, place);
   for (const { place } of legacyTripPlaces) placeById.set(place.id, place);
@@ -65,13 +117,13 @@ export async function getPlanWorkspace(slug: string, memberId?: string, loaderOp
     const formal = formalItems.length > 0;
     const booking = bookings.some(({ booking }) => booking.placeId === place.id || booking.originPlaceId === place.id || booking.destinationPlaceId === place.id);
     const recommendation = options.some(({ option }) => option.placeId === place.id);
-    const recommendationMeta = recommendationMetaByPlace.get(place.id);
+    const recommendationMeta = recommendationMetaByPlace.get(place.id) || [];
     const saved = savedPlaces.some(({ place: savedPlace }) => savedPlace.id === place.id);
     // Legacy trip_places remains available for compatibility tooling, but it
     // is deliberately not used as a planning-state source for the new map.
     // Only an ItineraryItem can make a place selected/locked here.
     const planStatus = formalItems.some(({ item }) => item.lockedAt != null) ? "locked" as const : formal ? "selected" as const : "candidate" as const;
-    return { place, kind: formal ? "itinerary" as const : booking ? "booking" as const : saved ? "saved" as const : recommendation ? "recommendation" as const : "candidate" as const, planStatus, category: recommendationMeta?.category || null, areaKey: recommendationMeta?.areaKey || null, recommendationTitle: recommendationMeta?.title || null };
+    return { place, kind: formal ? "itinerary" as const : booking ? "booking" as const : saved ? "saved" as const : recommendation ? "recommendation" as const : "candidate" as const, planStatus, category: recommendationMeta[0]?.category || null, areaKey: recommendationMeta[0]?.areaKey || null, recommendationTitle: recommendationMeta[0]?.title || null, recommendations: recommendationMeta.map(({ id, title, kind, sortOrder }) => ({ id, title, kind, sortOrder })) };
   });
   const memberIds = presenceRows.map((member) => member.memberId);
   const timezoneOffset = timezone === "Asia/Shanghai" ? "+08:00" : timezone === "Asia/Tokyo" ? "+09:00" : "+00:00";
@@ -144,8 +196,9 @@ export async function getPlanWorkspace(slug: string, memberId?: string, loaderOp
     trip,
     days: days.map((day) => ({ ...day, items: items.filter(({ item }) => item.dayId === day.id).map(({ item, place, recommendationTitle }) => ({ item, place, recommendationTitle, participantStates: itemStates(item, day.date), participantOverrides: itemOverrides(item.id) })), timeline: [] })),
     recommendations: recommendations.map((recommendation) => ({ ...recommendation, options: options.filter(({ option }) => option.recommendationId === recommendation.id), addedDays: items.filter(({ item }) => item.recommendationId === recommendation.id).map(({ item }) => item.dayId), locked: items.some(({ item }) => item.recommendationId === recommendation.id && item.lockedAt != null) })),
+    recommendationPage: { total: Number(recommendationCountRows[0]?.value || 0), page: recommendationQuery.page, pageSize: recommendationLimit, library: recommendationQuery.library },
     bookings: bookings.map(({ booking, place }) => ({ booking, place, originPlace: bookingPlace(booking.originPlaceId), destinationPlace: bookingPlace(booking.destinationPlaceId), memberStates: bookingMemberStates(booking.id) })),
-    costLines: [],
+    costLines,
     presenceUnknown: days.some((day) => memberIds.some((memberId) => dayPresenceState(day.id, day.date, memberId) === "unknown" || dayPresenceState(day.id, day.date, memberId) === "partial")),
     dayPresenceByDay: Object.fromEntries(days.map((day) => [day.id, Object.fromEntries(memberIds.map((memberId) => [memberId, dayPresenceState(day.id, day.date, memberId)]))])),
     dayPresenceDetailsByDay: Object.fromEntries(days.map((day) => [day.id, Object.fromEntries(memberIds.map((memberId) => { const value = dayPresenceDetail(day.id, memberId); return [memberId, value ? { state: value.state, startsAt: value.startsAt, endsAt: value.endsAt } : { state: dayPresenceState(day.id, day.date, memberId), startsAt: null, endsAt: null }]; }))])),
@@ -166,18 +219,16 @@ export async function getNewPlanRoutePlaces(slug: string, originPlaceId: string,
   const trip = (await db.select({ id: tripRecords.id }).from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1))[0];
   if (!trip) throw new Error("TRIP_NOT_FOUND");
   const ids = [originPlaceId, destinationPlaceId];
-  const places = await db.select({ place: placeRecords }).from(placeRecords).innerJoin(tripCityRecords, and(eq(tripCityRecords.cityId, placeRecords.cityId), eq(tripCityRecords.tripId, trip.id))).where(inArray(placeRecords.id, ids));
+  const places = await db.select({ place: placeRecords }).from(placeRecords).where(inArray(placeRecords.id, ids));
   if (places.length !== 2) throw new Error("PLACE_NOT_IN_TRIP");
-  for (const { place } of places) {
-    const [item, booking, option, saved] = await Promise.all([
-      db.select({ id: itineraryItemRecords.id }).from(itineraryItemRecords).where(and(eq(itineraryItemRecords.tripId, trip.id), eq(itineraryItemRecords.placeId, place.id))).limit(1),
-      db.select({ id: bookingRecords.id }).from(bookingRecords).where(and(eq(bookingRecords.tripId, trip.id), isNull(bookingRecords.deletedAt), eq(bookingRecords.placeId, place.id))).limit(1),
-      db.select({ id: recommendationPlaceOptionRecords.id }).from(recommendationPlaceOptionRecords).innerJoin(recommendationRecords, and(eq(recommendationRecords.id, recommendationPlaceOptionRecords.recommendationId), eq(recommendationRecords.tripId, trip.id), isNull(recommendationRecords.deletedAt))).where(eq(recommendationPlaceOptionRecords.placeId, place.id)).limit(1),
-      db.select({ id: tripSavedPlaceRecords.id }).from(tripSavedPlaceRecords).where(and(eq(tripSavedPlaceRecords.tripId, trip.id), eq(tripSavedPlaceRecords.placeId, place.id))).limit(1),
-    ]);
-    const originOrDestination = (await db.select({ id: bookingRecords.id }).from(bookingRecords).where(and(eq(bookingRecords.tripId, trip.id), isNull(bookingRecords.deletedAt), eq(bookingRecords.originPlaceId, place.id))).limit(1)).length || (await db.select({ id: bookingRecords.id }).from(bookingRecords).where(and(eq(bookingRecords.tripId, trip.id), isNull(bookingRecords.deletedAt), eq(bookingRecords.destinationPlaceId, place.id))).limit(1)).length;
-    if (!item.length && !booking.length && !option.length && !saved.length && !originOrDestination) throw new Error("PLACE_NOT_IN_TRIP");
-  }
+  const [items, bookings, options, saved] = await Promise.all([
+    db.select({ placeId: itineraryItemRecords.placeId }).from(itineraryItemRecords).where(and(eq(itineraryItemRecords.tripId, trip.id), inArray(itineraryItemRecords.placeId, ids))),
+    db.select({ placeId: bookingRecords.placeId, originPlaceId: bookingRecords.originPlaceId, destinationPlaceId: bookingRecords.destinationPlaceId }).from(bookingRecords).where(and(eq(bookingRecords.tripId, trip.id), isNull(bookingRecords.deletedAt))),
+    db.select({ placeId: recommendationPlaceOptionRecords.placeId }).from(recommendationPlaceOptionRecords).innerJoin(recommendationRecords, and(eq(recommendationRecords.id, recommendationPlaceOptionRecords.recommendationId), eq(recommendationRecords.tripId, trip.id), isNull(recommendationRecords.deletedAt))).where(inArray(recommendationPlaceOptionRecords.placeId, ids)),
+    db.select({ placeId: tripSavedPlaceRecords.placeId }).from(tripSavedPlaceRecords).where(and(eq(tripSavedPlaceRecords.tripId, trip.id), inArray(tripSavedPlaceRecords.placeId, ids))),
+  ]);
+  const referenced = new Set<string>([...items.map((row) => row.placeId), ...options.map((row) => row.placeId), ...saved.map((row) => row.placeId), ...bookings.flatMap((row) => [row.placeId, row.originPlaceId, row.destinationPlaceId])].filter((id): id is string => Boolean(id)));
+  if (ids.some((id) => !referenced.has(id))) throw new Error("PLACE_NOT_IN_TRIP");
   const origin = places.find(({ place }) => place.id === originPlaceId)?.place, destination = places.find(({ place }) => place.id === destinationPlaceId)?.place;
   if (!origin || !destination) throw new Error("PLACE_NOT_IN_TRIP");
   if (origin.latitude == null || origin.longitude == null || destination.latitude == null || destination.longitude == null) throw new Error("PLACE_MISSING_COORDINATES");

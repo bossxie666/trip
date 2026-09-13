@@ -12,6 +12,7 @@
 
 # testing
 /coverage
+/.lighthouseci/
 
 # next.js
 /.next/
@@ -37,5 +38,6 @@ yarn-error.log*
 
 /dist/
 /.wrangler/
+*.tsbuildinfo
 /outputs/
 /work/

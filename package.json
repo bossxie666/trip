@@ -16,7 +16,9 @@
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
+    "aws4fetch": "^1.0.20",
     "drizzle-orm": "0.45.2",
+    "lucide-react": "^1.45.0",
     "react": "19.2.6",
     "react-dom": "19.2.6"
   },
