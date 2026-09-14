@@ -30,7 +30,9 @@ export default async function TravelArchiveHome() {
       <section className="home-hero">
         <article className="home-manifesto">
           <div className="home-eyebrow">TRAVEL · COLLECT · EXPLORE</div>
-          <h1>跳进<br />地理书的旅行</h1>
+          <h1 className="home-title-heading">
+            <img className="home-title-asset" src="/assets/travel-title.png" alt="跳进地理书的旅行" width={2172} height={724} />
+          </h1>
           <p className="home-manifesto-line"><span>已点亮城市 <b>{dashboard.stats.cityCount}</b></span><span>已完成旅行 <b>{dashboard.stats.completed}</b></span><span>下一站 <b>{next?.cities.map((city) => city.name).join("·") || "等待决定"}</b></span></p>
           <div className="home-actions"><Link className="home-primary-action" href={next ? `/trips/${next.slug}/plan` : "/trips/new"}><Plane size={18} />规划下一段旅程<ArrowRight size={17} /></Link><Link className="home-secondary-action" href="/trips"><BookOpen size={18} />浏览旅行灵感</Link></div>
           <small>Same places, different stories.</small>
