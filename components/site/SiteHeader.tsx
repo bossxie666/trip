@@ -10,7 +10,25 @@ const links = [
   { href: "/messages", label: "留言", icon: MessageSquareText },
 ];
 
-export function SiteHeader({ currentMember, active = "" }: { currentMember: SessionMemberSummary; active?: "home" | "trips" | "map" | "albums" | "messages" | "" }) {
+type SiteNavProps = { active?: "home" | "trips" | "map" | "albums" | "messages" | ""; home?: boolean };
+
+export function SiteMobileNav({ active = "", home = false }: SiteNavProps) {
+  return home
+    ? <nav className="site-mobile-nav" data-home-nav="true" aria-label="移动端主导航">
+      <WorkspaceNavLink href="/" className={active === "home" ? "active" : ""}><Home size={21} /><span>首页</span></WorkspaceNavLink>
+      <WorkspaceNavLink href="/trips" className={active === "trips" ? "active" : ""}><BriefcaseBusiness size={21} /><span>我的旅行</span></WorkspaceNavLink>
+      <WorkspaceNavLink href="/albums" className={active === "albums" ? "active" : ""}><Images size={21} /><span>相册</span></WorkspaceNavLink>
+      <WorkspaceNavLink href="/messages" className={active === "messages" ? "active" : ""}><MessageSquareText size={21} /><span>留言</span></WorkspaceNavLink>
+    </nav>
+    : <nav className="site-mobile-nav" aria-label="移动端主导航">
+      <WorkspaceNavLink href="/" className={active === "home" ? "active" : ""}><Home size={21} /><span>首页</span></WorkspaceNavLink>
+      <WorkspaceNavLink href="/trips" className={active === "trips" ? "active" : ""}><BriefcaseBusiness size={21} /><span>我的旅行</span></WorkspaceNavLink>
+      <WorkspaceNavLink href="/albums" className={active === "albums" ? "active" : ""}><Images size={21} /><span>相册</span></WorkspaceNavLink>
+      <WorkspaceNavLink href="/messages" className={active === "messages" ? "active" : ""}><MessageSquareText size={21} /><span>留言</span></WorkspaceNavLink>
+    </nav>;
+}
+
+export function SiteHeader({ currentMember, active = "", renderMobileNav = true }: { currentMember: SessionMemberSummary; active?: SiteNavProps["active"]; renderMobileNav?: boolean }) {
   return <>
     <header className="site-header">
       <div className="site-mobile-tools" aria-hidden="true">
@@ -25,11 +43,6 @@ export function SiteHeader({ currentMember, active = "" }: { currentMember: Sess
       <form className="site-search" action="/search"><Search size={16} aria-hidden="true" /><input name="q" aria-label="搜索旅行内容" placeholder="搜索目的地、国家或旅行笔记…" /></form>
       <MemberIdentityControl compact currentMember={currentMember} />
     </header>
-    <nav className="site-mobile-nav" aria-label="移动端主导航">
-      <WorkspaceNavLink href="/" className={active === "home" ? "active" : ""}><Home size={21} /><span>首页</span></WorkspaceNavLink>
-      <WorkspaceNavLink href="/trips" className={active === "trips" ? "active" : ""}><BriefcaseBusiness size={21} /><span>我的旅行</span></WorkspaceNavLink>
-      <WorkspaceNavLink href="/albums" className={active === "albums" ? "active" : ""}><Images size={21} /><span>相册</span></WorkspaceNavLink>
-      <WorkspaceNavLink href="/messages" className={active === "messages" ? "active" : ""}><MessageSquareText size={21} /><span>留言</span></WorkspaceNavLink>
-    </nav>
+    {renderMobileNav ? <SiteMobileNav active={active} /> : null}
   </>;
 }

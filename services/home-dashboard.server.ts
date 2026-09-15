@@ -1,9 +1,9 @@
-import { and, asc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
-import { bookingRecords, cityRecords, itineraryItemRecords, placeRecords, tripMemberRecords } from "@/db/schema";
+import { cityRecords, tripCityRecords, tripRecords } from "@/db/schema";
 import { listGuestbookMessages } from "@/services/guestbook-service.server";
 import { listHomeFeaturedPhotos } from "@/services/media-service.server";
-import { listTrips } from "@/services/trip-repository.server";
+import { ensureCityCenter, listTrips } from "@/services/trip-repository.server";
 
 function todayInShanghai() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -14,36 +14,24 @@ export async function getHomeDashboard(memberId: string) {
   const trips = allTrips.filter((trip) => trip.members?.some((member) => member.id === memberId));
   const tripIds = trips.map((trip) => trip.id);
   const db = getDb();
-  const [rawPoints, bookingEndpoints] = tripIds.length ? await Promise.all([db.select({
-    tripId: itineraryItemRecords.tripId,
-    placeId: placeRecords.id,
-    name: placeRecords.name,
-    cityName: cityRecords.name,
-    latitude: placeRecords.latitude,
-    longitude: placeRecords.longitude,
-    sortOrder: itineraryItemRecords.sortOrder,
-  }).from(itineraryItemRecords)
-    .innerJoin(placeRecords, eq(itineraryItemRecords.placeId, placeRecords.id))
-    .innerJoin(cityRecords, eq(placeRecords.cityId, cityRecords.id))
-    .innerJoin(tripMemberRecords, and(eq(itineraryItemRecords.tripId, tripMemberRecords.tripId), eq(tripMemberRecords.memberId, memberId)))
-    .where(and(inArray(itineraryItemRecords.tripId, tripIds), isNotNull(placeRecords.latitude), isNotNull(placeRecords.longitude)))
-    .orderBy(asc(itineraryItemRecords.tripId), asc(itineraryItemRecords.dayId), asc(itineraryItemRecords.sortOrder)),
-  db.select({ tripId: bookingRecords.tripId, originPlaceId: bookingRecords.originPlaceId, destinationPlaceId: bookingRecords.destinationPlaceId })
-    .from(bookingRecords)
-    .innerJoin(tripMemberRecords, and(eq(bookingRecords.tripId, tripMemberRecords.tripId), eq(tripMemberRecords.memberId, memberId)))
-    .where(and(inArray(bookingRecords.tripId, tripIds), isNull(bookingRecords.deletedAt)))]) : [[], []];
-  const endpointIds = bookingEndpoints.flatMap((booking) => [booking.originPlaceId, booking.destinationPlaceId]).filter((id): id is string => Boolean(id));
-  const endpointRows = endpointIds.length ? await db.select({
-    placeId: placeRecords.id,
-    name: placeRecords.name,
-    cityName: cityRecords.name,
-    latitude: placeRecords.latitude,
-    longitude: placeRecords.longitude,
-  }).from(placeRecords).innerJoin(cityRecords, eq(placeRecords.cityId, cityRecords.id))
-    .where(and(inArray(placeRecords.id, endpointIds), isNotNull(placeRecords.latitude), isNotNull(placeRecords.longitude))) : [];
-  const endpointById = new Map(endpointRows.map((point) => [point.placeId, point]));
-  const orderedEndpoints = endpointIds.flatMap((id) => endpointById.get(id) ? [endpointById.get(id)!] : []);
-  const points = [...new Map([...orderedEndpoints, ...rawPoints].map((point) => [point.placeId, point])).values()].slice(0, 10);
+  const cityRows = tripIds.length ? await db.select({
+    cityId: cityRecords.id,
+    name: cityRecords.name,
+    slug: cityRecords.slug,
+    centerLat: cityRecords.centerLat,
+    centerLng: cityRecords.centerLng,
+    tripStatus: tripRecords.status,
+    position: tripCityRecords.position,
+  }).from(tripCityRecords)
+    .innerJoin(cityRecords, eq(tripCityRecords.cityId, cityRecords.id))
+    .innerJoin(tripRecords, eq(tripCityRecords.tripId, tripRecords.id))
+    .where(inArray(tripCityRecords.tripId, tripIds))
+    .orderBy(asc(tripCityRecords.position)) : [];
+  const resolvedCities = await Promise.all(cityRows.map(async (city) => {
+    const resolved = await ensureCityCenter({ id: city.cityId, name: city.name, centerLat: city.centerLat, centerLng: city.centerLng });
+    return { cityId: city.cityId, name: city.name, slug: city.slug, centerLat: resolved.centerLat, centerLng: resolved.centerLng, tripStatus: city.tripStatus };
+  }));
+  const cities = [...new Map(resolvedCities.map((city) => [city.cityId, city])).values()];
   const today = todayInShanghai();
   const upcoming = trips.filter((trip) => trip.status === "planning" && (!trip.endDate || trip.endDate >= today)).sort((left, right) => (left.startDate || "9999").localeCompare(right.startDate || "9999"))[0]
     || trips.find((trip) => trip.status === "planning") || null;
@@ -54,7 +42,7 @@ export async function getHomeDashboard(memberId: string) {
     stats: { tripCount: trips.length, completed, cityCount },
     trips: trips.slice(0, 4),
     upcoming,
-    points,
+    cities,
     featuredPhotos,
     messages,
   };

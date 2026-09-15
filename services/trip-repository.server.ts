@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { getDb, getRuntimeEnv } from "@/db";
 import { cityRecords, dayPlaceRecords, dayRecords, memberRecords, tripCityRecords, tripMemberRecords, tripRecords, tripStageMemberRecords, tripStageRecords } from "@/db/schema";
+import { geocodeAmapAddress } from "@/services/amap/amap-web-service.server";
 import { getTripBySlug as getSeedTripBySlug, trips as seedTrips } from "@/data/trips";
 import type { Day, Trip, TripStatus } from "@/models/travel";
 
@@ -19,6 +20,31 @@ export type UpdateTripInput = Omit<CreateTripInput, "status"> & { status: TripSt
 
 function normalizeCityNames(names: string[]) {
   return [...new Set(names.map((name) => name.trim()).filter(Boolean))];
+}
+
+type CityCenterRecord = Pick<typeof cityRecords.$inferSelect, "id" | "name" | "centerLat" | "centerLng">;
+
+/**
+ * Resolve a city's map center from the existing server-side AMap geocoder.
+ * A failed lookup is deliberately non-fatal: the city remains a valid
+ * TripCity, but the Homepage Atlas will omit its marker until a later lookup
+ * succeeds.  Coordinates are only persisted after AMap returns a location.
+ */
+export async function ensureCityCenter(city: CityCenterRecord) {
+  if (city.centerLat != null && city.centerLng != null) return city;
+  try {
+    const result = await geocodeAmapAddress(city.name, city.name);
+    const center = { centerLat: result.latitude, centerLng: result.longitude };
+    await getDb().update(cityRecords).set(center).where(eq(cityRecords.id, city.id));
+    return { ...city, ...center };
+  } catch (error) {
+    console.warn("city center coordinate missing", {
+      cityId: city.id,
+      cityName: city.name,
+      reason: error instanceof Error ? error.message : "AMAP_GEOCODE_FAILED",
+    });
+    return city;
+  }
 }
 
 /**
@@ -215,9 +241,10 @@ export async function createTrip(input: CreateTripInput, actorMemberId: string) 
     let city = (await db.select().from(cityRecords).where(eq(cityRecords.name, name)).limit(1))[0];
     if (!city) {
       const cityId = crypto.randomUUID();
-      city = { id: cityId, slug: `city-${cityId.slice(0, 8)}`, name, createdAt: now };
+      city = { id: cityId, slug: `city-${cityId.slice(0, 8)}`, name, centerLat: null, centerLng: null, createdAt: now };
       await db.insert(cityRecords).values(city);
     }
+    await ensureCityCenter(city);
     await db.insert(tripCityRecords).values({ tripId: id, cityId: city.id, position });
   }
 
@@ -266,7 +293,8 @@ async function replaceCitiesAndDays(tripId: string, input: UpdateTripInput) {
   }
   for (const [position, name] of requestedCities.entries()) {
     let city = (await db.select().from(cityRecords).where(eq(cityRecords.name, name)).limit(1))[0];
-    if (!city) { const id = crypto.randomUUID(); city = { id, slug: `city-${id.slice(0, 8)}`, name, createdAt: now }; await db.insert(cityRecords).values(city); }
+    if (!city) { const id = crypto.randomUUID(); city = { id, slug: `city-${id.slice(0, 8)}`, name, centerLat: null, centerLng: null, createdAt: now }; await db.insert(cityRecords).values(city); }
+    await ensureCityCenter(city);
     await db.insert(tripCityRecords).values({ tripId, cityId: city.id, position });
   }
   // Match by calendar date so inserting an earlier date never shifts existing

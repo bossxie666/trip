@@ -1,51 +1,47 @@
 /* eslint-disable @next/next/no-img-element */
 import { HomeFeaturedPhotoEditor } from "./HomeFeaturedPhotoEditor";
 
-type Point = { placeId: string; name: string; cityName: string; latitude: number | null; longitude: number | null };
+type City = { cityId: string; name: string; slug: string; centerLat: number | null; centerLng: number | null; tripStatus?: string };
 type Photo = { slotKey: "map_primary" | "map_secondary"; assetId: string };
 
-function plotted(points: Point[]) {
-  const usable = points.filter((point): point is Point & { latitude: number; longitude: number } => point.latitude != null && point.longitude != null);
-  const cities = [...usable.reduce((groups, point) => {
-    const key = point.cityName || point.name;
-    const current = groups.get(key) || { key, cityName: key, latitude: 0, longitude: 0, count: 0, placeNames: [] as string[] };
-    current.latitude += point.latitude;
-    current.longitude += point.longitude;
-    current.count += 1;
-    current.placeNames.push(point.name);
-    groups.set(key, current);
-    return groups;
-  }, new Map<string, { key: string; cityName: string; latitude: number; longitude: number; count: number; placeNames: string[] }>()).values()]
-    .map((city) => ({ ...city, latitude: city.latitude / city.count, longitude: city.longitude / city.count }));
-  if (!cities.length) return [];
-  const minX = Math.min(...cities.map((point) => point.longitude));
-  const maxX = Math.max(...cities.map((point) => point.longitude));
-  const minY = Math.min(...cities.map((point) => point.latitude));
-  const maxY = Math.max(...cities.map((point) => point.latitude));
+function plotted(cities: City[]) {
+  const usable = cities.filter((city): city is City & { centerLat: number; centerLng: number } => city.centerLat != null && city.centerLng != null);
+  if (!usable.length) return [];
+  const minX = Math.min(...usable.map((city) => city.centerLng));
+  const maxX = Math.max(...usable.map((city) => city.centerLng));
+  const minY = Math.min(...usable.map((city) => city.centerLat));
+  const maxY = Math.max(...usable.map((city) => city.centerLat));
   const xSpan = Math.max(maxX - minX, .01);
   const ySpan = Math.max(maxY - minY, .01);
-  return cities.map((point, index) => ({ ...point, x: 13 + ((point.longitude - minX) / xSpan) * 74, y: 82 - ((point.latitude - minY) / ySpan) * 66, index }));
+  return usable.map((city, index) => ({ ...city, x: 13 + ((city.centerLng - minX) / xSpan) * 74, y: 82 - ((city.centerLat - minY) / ySpan) * 66, index }));
 }
 
-export function HomeAtlas({ points, photos, fallbackPrimary, fallbackSecondary }: { points: Point[]; photos: Photo[]; fallbackPrimary?: string | null; fallbackSecondary?: string | null }) {
-  const plot = plotted(points);
+export function HomeAtlas({ cities, photos, fallbackPrimary, fallbackSecondary }: { cities: City[]; photos: Photo[]; fallbackPrimary?: string | null; fallbackSecondary?: string | null }) {
+  const plot = plotted(cities);
   const primary = photos.find((photo) => photo.slotKey === "map_primary");
   const secondary = photos.find((photo) => photo.slotKey === "map_secondary");
-  const path = plot.map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`).join(" ");
-  return <div className="home-atlas" aria-label="按真实行程地点生成的旅行路线示意图">
-    <div className="atlas-caption">TRAVEL ROUTE SKETCH · 非比例地图</div>
-    {plot.length ? <svg viewBox="0 0 100 100" role="img" aria-label={`旅行地点：${plot.flatMap((point) => point.placeNames).join("、")}`}>
-      <path className="atlas-route" d={path} />
-      {plot.map((point) => <g key={point.key} transform={`translate(${point.x} ${point.y})`}><circle r="2.4" /><text x="3.6" y="1.5">{point.cityName}</text></g>)}
-    </svg> : <div className="atlas-empty"><b>路线等待落笔</b><span>把真实地点加入行程后，它们会出现在这里。</span></div>}
-    <div className="atlas-polaroid atlas-polaroid-primary">
-      {(primary || fallbackPrimary) ? <img src={primary ? `/api/media/${primary.assetId}?variant=card` : fallbackPrimary!} alt="旅行地图照片一" width={360} height={260} /> : <div className="atlas-photo-empty">YOUR PHOTO</div>}
-      <span>Same places, different stories.</span><HomeFeaturedPhotoEditor slotKey="map_primary" />
+  return <div className="home-atlas" aria-label="按真实行程城市生成的旅行地图">
+    <div className="atlas-paper-map" aria-hidden="true">
+      <picture>
+        <source media="(max-width: 767px)" srcSet="/assets/homepage-v3/atlas-mobile.webp" />
+        <img src="/assets/homepage-v3/atlas-desktop.webp" alt="" />
+      </picture>
     </div>
-    <div className="atlas-polaroid atlas-polaroid-secondary">
-      {(secondary || fallbackSecondary) ? <img src={secondary ? `/api/media/${secondary.assetId}?variant=card` : fallbackSecondary!} alt="旅行地图照片二" width={300} height={220} /> : <div className="atlas-photo-empty">YOUR PHOTO</div>}
-      <span>Collect moments.</span><HomeFeaturedPhotoEditor slotKey="map_secondary" />
-    </div>
-    <div className="atlas-stamp" aria-hidden="true">GOOD<br />JOURNEY</div>
+    <div className="atlas-caption">我的旅行地图</div>
+    {plot.length ? <svg viewBox="0 0 100 100" role="img" aria-label={`旅行城市：${plot.map((city) => city.name).join("、")}`}>
+      {plot.map((city) => <g key={city.cityId} className={`atlas-city-marker atlas-city-marker-${city.tripStatus || "planning"}`} transform={`translate(${city.x} ${city.y})`}><circle r="2.4" /><text x="3.6" y="1.5">{city.name}</text></g>)}
+    </svg> : <div className="atlas-empty"><b>地图等待点亮</b><span>把城市加入一条真实行程后，它会出现在这里。</span></div>}
+    <figure className="atlas-polaroid atlas-polaroid-primary">
+      {(primary || fallbackPrimary) ? <div className="atlas-polaroid-window"><img className={`atlas-polaroid-photo${primary ? "" : " atlas-polaroid-photo-fallback"}`} src={primary ? `/api/media/${primary.assetId}?variant=card` : fallbackPrimary!} alt="旅行地图照片一" width={360} height={260} /></div> : <div className="atlas-photo-empty">暂无照片</div>}
+      <img className="atlas-polaroid-frame" src="/assets/homepage-v3/polaroid-frame-01.webp" alt="" aria-hidden="true" />
+      <figcaption>旅行照片</figcaption><HomeFeaturedPhotoEditor slotKey="map_primary" />
+    </figure>
+    <figure className="atlas-polaroid atlas-polaroid-secondary">
+      {(secondary || fallbackSecondary) ? <div className="atlas-polaroid-window"><img className={`atlas-polaroid-photo${secondary ? "" : " atlas-polaroid-photo-fallback"}`} src={secondary ? `/api/media/${secondary.assetId}?variant=card` : fallbackSecondary!} alt="旅行地图照片二" width={300} height={220} /></div> : <div className="atlas-photo-empty">暂无照片</div>}
+      <img className="atlas-polaroid-frame" src="/assets/homepage-v3/polaroid-frame-02.webp" alt="" aria-hidden="true" />
+      <figcaption>地图照片</figcaption><HomeFeaturedPhotoEditor slotKey="map_secondary" />
+    </figure>
+    <div className="atlas-stamp" aria-hidden="true">旅<br />途</div>
+    <div className="atlas-compass" aria-hidden="true"><i>北</i><b>✦</b><span>南</span></div>
   </div>;
 }

@@ -42,6 +42,8 @@ export const cityRecords = sqliteTable("cities", {
   id: text("id").primaryKey(),
   slug: text("slug").notNull(),
   name: text("name").notNull(),
+  centerLat: real("center_lat"),
+  centerLng: real("center_lng"),
   createdAt: text("created_at").notNull(),
 }, (table) => [
   uniqueIndex("idx_cities_name").on(table.name),
