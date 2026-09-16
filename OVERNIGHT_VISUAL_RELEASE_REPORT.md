@@ -2,7 +2,7 @@
 
 ## Current decision
 
-The GitHub → Cloudflare Workers Builds `homepage-v3` Preview is serving the validated Homepage V3 source. The authenticated AMap and responsive runtime gates pass. A focused Trip-cover authorization fix is now locally validated and must produce a fresh Preview before the final release push. Production traffic remains unchanged until that release push is intentionally performed through the same GitHub → Workers Builds chain. No migration, resource identity, route, or secret value was changed.
+The GitHub → Cloudflare Workers Builds `homepage-v3` Preview served the validated Homepage V3 source, including the focused Trip-cover authorization fix. Authenticated AMap, responsive, Preview, and Production runtime gates pass. Production traffic was intentionally released through the same GitHub → Workers Builds chain. No migration, resource identity, route, or secret value was changed.
 
 ## Preview and CI
 
@@ -11,7 +11,8 @@ The GitHub → Cloudflare Workers Builds `homepage-v3` Preview is serving the va
 - Preview Version URL: https://4ac3a341-trip-archive.bossxie666.workers.dev
 - Preview URL: https://homepage-v3-trip-archive.bossxie666.workers.dev/
 - Source branch: `homepage-v3`
-- Source commit: `4e39bc61dbca4cc48199a42c516f3f5994d2d7b9`
+- Source commit: `4e39bc61dbca4cc48199a42c516f3f5994d2d7b9` (runtime fix); state-only follow-up commit `299dac2a1179624ccd71b3f370aabe4af818e679` produced the same runtime successfully.
+- State-only Preview Build: `dcd8e9a5-fc96-4b4b-b9d3-f61a8db15989` / Version `16fd0a01-5a88-4307-899d-af0d78525f04` (no runtime source changes)
 - Cloudflare Build: `7699cf68-8608-4efc-9ea6-4c0ce863c618` (GitHub Workers Builds check: success)
 - Prior successful CI Build evidence: `1b566670-2776-455e-b8d9-2259345963b4` produced Version `fcc711d2-96fa-4f94-b3f9-4459af2277b4`.
 - Production traffic: intentionally released through the authorized `v2.4-r1` mirror fast-forward; no local Wrangler upload/deploy, `versions deploy`, or trigger deployment was run.

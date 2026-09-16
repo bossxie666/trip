@@ -8,7 +8,7 @@ Phase A/B/C complete: Preview and Production release regression. The cross-membe
 
 ## Completed
 
-- Homepage V3 source baseline preserved; the latest pending source change is the focused Trip-cover authorization fix in `services/media-service.server.ts` with a matching rendered-route regression test.
+- Homepage V3 source baseline preserved; the focused Trip-cover authorization fix in `services/media-service.server.ts` and its matching rendered-route regression test are validated and released.
 - `npm test` passed (80/80), `npm run lint` passed, `npm run build:self-hosted` passed, `git diff --check` passed, and `npm audit --omit=dev` reported no production vulnerabilities.
 - Generated Worker configuration was verified: one `DB` binding to `trip-archive-production`, one `MEDIA` binding to `trip-archive-media`, `IMAGES` and `ASSETS` present, expected route/custom domain retained, and legacy `site-creator-d1`/`site-creator-r2` absent.
 - GitHub mirror and Cloudflare Workers Builds chain produced a non-production `homepage-v3` Preview version after AMap runtime variables were restored. The latest source commit `4e39bc61dbca4cc48199a42c516f3f5994d2d7b9` completed Build `7699cf68-8608-4efc-9ea6-4c0ce863c618` and Version `4ac3a341-6535-48d0-9ba8-3c3bd803d8ae` successfully.
