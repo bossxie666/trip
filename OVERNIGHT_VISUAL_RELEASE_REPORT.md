@@ -2,16 +2,16 @@
 
 ## Current decision
 
-**Production release is paused.** The GitHub → Cloudflare Workers Builds Preview was created successfully, but the authenticated AMap runtime gate is not passing. No Production traffic, route, resource identity, migration, or secret value was changed.
+The GitHub → Cloudflare Workers Builds `homepage-v3` Preview is serving the validated Homepage V3 source. The authenticated AMap and responsive runtime gates now pass. Production traffic remains unchanged until the final release push is intentionally performed through the same GitHub → Workers Builds chain. No migration, resource identity, route, or secret value was changed.
 
 ## Preview and CI
 
-- Preview Version: `5c85ef26-e0f5-4265-ad38-bae8614e6796`
 - Preview alias: `homepage-v3`
+- Preview Version: current alias build for commit `d6996ee9b608c48e3dd9d8b47a349eccff327fe4` (exact UUID is not exposed while the Cloudflare dashboard is behind Turnstile)
 - Preview URL: https://homepage-v3-trip-archive.bossxie666.workers.dev/
 - Source branch: `homepage-v3`
-- Source commit: `9e9a98d` (docs-only checkpoint after the validated source commit)
-- Cloudflare Build for the validated source commit: succeeded (`8359633d-61bb-4b57-a26b-5a2aa8e3331c`); the later docs-only checkpoint generated the Preview Version above.
+- Source commit: `d6996ee9b608c48e3dd9d8b47a349eccff327fe4`
+- Prior successful CI Build evidence: `1b566670-2776-455e-b8d9-2259345963b4` produced Version `fcc711d2-96fa-4f94-b3f9-4459af2277b4`; the current alias was subsequently refreshed by the pushed CSS correction.
 - Production traffic: unchanged; no local Wrangler upload/deploy, `versions deploy`, `wrangler deploy`, or trigger deployment was run.
 
 ## Engineering gates
@@ -34,18 +34,19 @@ Generated config: `dist/server/wrangler.json`
 
 ## Runtime visual QA
 
-- Authenticated Preview homepage: loaded successfully; current desktop screenshot was captured from the real Preview window.
+- Authenticated Preview homepage: loaded successfully; real Desktop 1440×810 and Mobile 375×667 screenshots were captured from the Preview runtime.
 - Homepage structure: Header, artistic title asset, Atlas, Next Trip, Featured wall, and Guestbook rendered; no Homepage My Trips module.
 - Live data is intentionally sparser than the supplied artwork (one real featured image and one real guestbook note); no fake records were added.
-- Mobile screenshot and width matrix are **not claimed complete** in this run because the Mac became locked during the remaining browser checks.
+- Mobile Homepage contains only the Top Bar, artistic title, stats, Atlas, primary Atlas photo, and four-item bottom navigation. Next Trip, Gallery, My Trips, Guestbook, Trip.Bossxie copy, and decorative English copy are hidden at mobile widths.
+- Responsive matrix at 320/375/390/430px: `document.documentElement.scrollWidth === document.documentElement.clientWidth` for each width.
 
 ## AMap hard-gate status
 
-- The previous authenticated `GET /api/amap/config` on the Preview returned HTTP 503 with `{"error":"地图服务尚未配置。"}`. Cloudflare Settings now shows the ordinary runtime variable `AMAP_JS_API_KEY` restored, but Preview Version `5c85ef26-e0f5-4265-ad38-bae8614e6796` predates that restoration and still has no such binding in read-only metadata.
-- The map page consequently rendered the fallback “地图服务尚未配置。” instead of initializing AMap.
-- Code reads the ordinary runtime variable `AMAP_JS_API_KEY`; the existing Preview must be regenerated through the GitHub → Workers Builds path before this gate can be rechecked. Existing AMap service secret names remain present, and no secret value was printed or changed.
-- `AMAP_JS_SECURITY_CODE` remains a separate secret binding and is not a substitute for the browser-map key.
+- Authenticated Preview `GET /api/amap/config` returned HTTP 200 with the expected `key`, `version`, and `serviceHost` fields (key material was not logged).
+- The planning Map view initialized AMap, rendered a canvas with real itinerary markers and AutoNavi attribution, and showed no visible key/security-code failure.
+- Existing AMap variable/secret binding names remain in place; no secret value was printed or changed.
+- Console telemetry still contains non-fatal CSP/eval, JSONP MIME, WebGL constructor, and canvas-readback warnings from the AMap SDK; the visible map and API gate are healthy, so Production configuration was not changed.
 
 ## Release gate
 
-**Not released.** A new Preview must be built through the existing Cloudflare configuration/CI path and rechecked now that `AMAP_JS_API_KEY` is restored. Until the AMap endpoint returns configuration and the responsive screenshot matrix is completed, do not sync `homepage-v3` to `v2.4-r1` or change Production traffic.
+Preview hard gates are passed. The next release action is a fast-forward push of the validated `homepage-v3` commit to `github-mirror/v2.4-r1`, allowing the existing Cloudflare Production Build to run. No local Wrangler command or migration is permitted.

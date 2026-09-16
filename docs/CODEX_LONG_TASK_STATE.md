@@ -6,7 +6,7 @@
 
 ## Current stage
 
-CI Preview build succeeded after fixing the Cloudflare Version command; authenticated homepage visual QA passed on the current Preview, but the AMap runtime gate is still failing.
+Preview hard gates passed on the authenticated `homepage-v3` alias. Desktop/Mobile visual QA, AMap runtime, route smoke checks, responsive widths, and engineering gates are complete. The next stage is the authorized fast-forward Production mirror push through GitHub → Cloudflare Workers Builds.
 
 ## Completed
 
@@ -21,23 +21,23 @@ CI Preview build succeeded after fixing the Cloudflare Version command; authenti
 - Cloudflare CI Version command updated to use Wrangler 4.131.1 with `--keep-vars --strict`
 - Checkpoint `e477c8c` pushed to GitHub `homepage-v3`; Workers Build `8359633d-61bb-4b57-a26b-5a2aa8e3331c` succeeded.
 - Preview Version `45b51538-97c5-40c6-921d-ffc1dd6dcbc4` created with correct DB/R2/Images/Assets bindings.
-- Docs-only checkpoint `9e9a98d` pushed to GitHub; Preview Version `5c85ef26-e0f5-4265-ad38-bae8614e6796` predates the later restoration of the ordinary `AMAP_JS_API_KEY` runtime variable and still lacks that binding.
+- CSS correction commit `d6996ee9b608c48e3dd9d8b47a349eccff327fe4` pushed to `github-mirror/homepage-v3`; the live `homepage-v3` alias serves the corrected mobile atlas crop.
+- Prior successful Build/Version evidence: `1b566670-2776-455e-b8d9-2259345963b4` / `fcc711d2-96fa-4f94-b3f9-4459af2277b4`. The Cloudflare dashboard is currently behind Turnstile, so the current alias refresh UUID is not exposed to read-only tooling.
 
 ## Known issues
 
-- The first CI Preview omitted `AMAP_JS_API_KEY`; the Preview map page returned HTTP 503 configuration status.
-- CI Preview Version `45b51538-97c5-40c6-921d-ffc1dd6dcbc4` still lacks the ordinary `AMAP_JS_API_KEY` binding; read-only version metadata confirms the other AMap service binding names.
-- The authenticated Preview homepage loaded, but `GET /api/amap/config` returned HTTP 503 because the current Preview Version has no ordinary `AMAP_JS_API_KEY` binding. Cloudflare Settings now shows the ordinary variable restored; a new CI Preview is required.
+- AMap SDK console telemetry emits non-fatal CSP/eval, JSONP MIME, WebGL constructor, and canvas-readback warnings while the visible map renders correctly.
+- Cloudflare dashboard read-only inspection is currently gated by Turnstile; this hides the current CI Build/Version UUID but does not block the live alias runtime checks.
 
 ## Current blocker
 
-The current Preview is missing AMap runtime configuration; Production release is paused. Cloudflare Settings now shows the ordinary key restored, but the Preview must be regenerated. The mobile screenshot/width checks remain pending.
+No hard blocker. Exact current Cloudflare Build/Version UUID is an ordinary dashboard-observability limitation only; the alias, commit, API, map, and screenshots have been verified. Production remains unchanged until the fast-forward mirror push.
 
 ## Next actions
 
-1. Push a docs-only checkpoint to `homepage-v3` to trigger CI again now that the existing ordinary `AMAP_JS_API_KEY` runtime variable is restored.
-2. After the new CI Preview is built, re-test the map/AMap runtime, responsive widths, and screenshots.
-3. Do not touch `v2.4-r1` until Preview hard gates pass.
+1. Run final engineering gates after this state/report update.
+2. Fast-forward push validated `homepage-v3` to `github-mirror/v2.4-r1`; do not push `origin`.
+3. Read-only smoke-test Production after the Cloudflare Build completes; do not run migration or local Wrangler.
 
 ## Safety boundary
 
@@ -46,4 +46,4 @@ The current Preview is missing AMap runtime configuration; Production release is
 - No DB/R2 identity change.
 - No migration or business-data write during Preview QA.
 
-_Last updated: 2026-09-16 (homepage QA observed; AMap runtime gate and mobile matrix pending)_
+_Last updated: 2026-09-17 (Preview hard gates passed; Production mirror push pending)_
