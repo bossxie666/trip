@@ -6,12 +6,12 @@
 
 ## Preview and CI
 
-- Preview Version: `45b51538-97c5-40c6-921d-ffc1dd6dcbc4`
+- Preview Version: `5c85ef26-e0f5-4265-ad38-bae8614e6796`
 - Preview alias: `homepage-v3`
 - Preview URL: https://homepage-v3-trip-archive.bossxie666.workers.dev/
 - Source branch: `homepage-v3`
-- Source commit: `e477c8c30a7aeb3bdcbee1417a79039f33f8d4ea`
-- Cloudflare Build: succeeded (`8359633d-61bb-4b57-a26b-5a2aa8e3331c`)
+- Source commit: `9e9a98d` (docs-only checkpoint after the validated source commit)
+- Cloudflare Build for the validated source commit: succeeded (`8359633d-61bb-4b57-a26b-5a2aa8e3331c`); the later docs-only checkpoint generated the Preview Version above.
 - Production traffic: unchanged; no local Wrangler upload/deploy, `versions deploy`, `wrangler deploy`, or trigger deployment was run.
 
 ## Engineering gates
@@ -39,13 +39,13 @@ Generated config: `dist/server/wrangler.json`
 - Live data is intentionally sparser than the supplied artwork (one real featured image and one real guestbook note); no fake records were added.
 - Mobile screenshot and width matrix are **not claimed complete** in this run because the Mac became locked during the remaining browser checks.
 
-## AMap hard-gate failure
+## AMap hard-gate status
 
-- Authenticated `GET /api/amap/config` on the Preview returned HTTP 503 with `{"error":"地图服务尚未配置。"}`.
+- The previous authenticated `GET /api/amap/config` on the Preview returned HTTP 503 with `{"error":"地图服务尚未配置。"}`. Cloudflare Settings now shows the ordinary runtime variable `AMAP_JS_API_KEY` restored, but Preview Version `5c85ef26-e0f5-4265-ad38-bae8614e6796` predates that restoration and still has no such binding in read-only metadata.
 - The map page consequently rendered the fallback “地图服务尚未配置。” instead of initializing AMap.
-- Code reads the ordinary runtime variable `AMAP_JS_API_KEY`; the current Preview Version metadata does not contain that variable. Existing AMap service secret names remain present, and no secret value was printed or changed.
-- The Dashboard variable visible during recovery was `AMAP_JS_SECURITY_CODE`; that is a different binding and does not satisfy the browser-map key check.
+- Code reads the ordinary runtime variable `AMAP_JS_API_KEY`; the existing Preview must be regenerated through the GitHub → Workers Builds path before this gate can be rechecked. Existing AMap service secret names remain present, and no secret value was printed or changed.
+- `AMAP_JS_SECURITY_CODE` remains a separate secret binding and is not a substitute for the browser-map key.
 
 ## Release gate
 
-**Not released.** The missing `AMAP_JS_API_KEY` binding must be restored through the existing Cloudflare configuration/CI path, then a new Preview must be built and rechecked. Until the AMap endpoint returns configuration and the responsive screenshot matrix is completed, do not sync `homepage-v3` to `v2.4-r1` or change Production traffic.
+**Not released.** A new Preview must be built through the existing Cloudflare configuration/CI path and rechecked now that `AMAP_JS_API_KEY` is restored. Until the AMap endpoint returns configuration and the responsive screenshot matrix is completed, do not sync `homepage-v3` to `v2.4-r1` or change Production traffic.
