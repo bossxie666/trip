@@ -7,12 +7,14 @@ The GitHub → Cloudflare Workers Builds `homepage-v3` Preview is serving the va
 ## Preview and CI
 
 - Preview alias: `homepage-v3`
-- Preview Version: current alias build for commit `d6996ee9b608c48e3dd9d8b47a349eccff327fe4` (exact UUID is not exposed while the Cloudflare dashboard is behind Turnstile)
+- Preview Version: `4ac3a341-6535-48d0-9ba8-3c3bd803d8ae`
+- Preview Version URL: https://4ac3a341-trip-archive.bossxie666.workers.dev
 - Preview URL: https://homepage-v3-trip-archive.bossxie666.workers.dev/
 - Source branch: `homepage-v3`
-- Source commit: `d6996ee9b608c48e3dd9d8b47a349eccff327fe4` (latest Preview baseline; Trip-cover fix pending)
-- Prior successful CI Build evidence: `1b566670-2776-455e-b8d9-2259345963b4` produced Version `fcc711d2-96fa-4f94-b3f9-4459af2277b4`; the current alias was subsequently refreshed by the pushed CSS correction.
-- Production traffic: unchanged; no local Wrangler upload/deploy, `versions deploy`, `wrangler deploy`, or trigger deployment was run.
+- Source commit: `4e39bc61dbca4cc48199a42c516f3f5994d2d7b9`
+- Cloudflare Build: `7699cf68-8608-4efc-9ea6-4c0ce863c618` (GitHub Workers Builds check: success)
+- Prior successful CI Build evidence: `1b566670-2776-455e-b8d9-2259345963b4` produced Version `fcc711d2-96fa-4f94-b3f9-4459af2277b4`.
+- Production traffic: intentionally released through the authorized `v2.4-r1` mirror fast-forward; no local Wrangler upload/deploy, `versions deploy`, or trigger deployment was run.
 
 ## Engineering gates
 
@@ -54,4 +56,8 @@ Generated config: `dist/server/wrangler.json`
 
 ## Release gate
 
-Preview hard gates passed on the previous baseline. The next release action is to push the validated Trip-cover fix to `github-mirror/homepage-v3`, wait for a fresh non-production Build, re-run the Preview hard gates, then fast-forward the validated commit to `github-mirror/v2.4-r1`. No local Wrangler command or migration is permitted.
+Preview hard gates passed on Version `4ac3a341-6535-48d0-9ba8-3c3bd803d8ae`. The validated commit `4e39bc61dbca4cc48199a42c516f3f5994d2d7b9` was fast-forwarded to `github-mirror/v2.4-r1`; Production Build `52567dad-3d6a-4fd0-bf27-b0ca022ef007` and Version `397c0a57-0218-4bd1-a496-b44cadae1be2` succeeded. Read-only Production route, AMap, responsive, and unauthenticated API-protection smoke checks pass. No migration or local Wrangler command was used.
+
+## Final status
+
+**COMPLETED** — Homepage/Trip/Map/Album/Guestbook route smoke, AMap 200/map render, Desktop 1440×810, Mobile 375×667, responsive 320/375/390/430, local engineering gates, Preview, and Production release all passed. No Production data write or migration was performed.
