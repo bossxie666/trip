@@ -1,7 +1,7 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, like } from "drizzle-orm";
 import { AwsClient } from "aws4fetch";
 import { getDb, getRuntimeEnv } from "@/db";
-import { albumMediaRecords, albumRecords, homeFeaturedPhotoRecords, mediaAssetRecords, recommendationRecords, recommendationReferenceMediaRecords, recommendationReferenceRecords, tripMemberRecords } from "@/db/schema";
+import { albumMediaRecords, albumRecords, homeFeaturedPhotoRecords, mediaAssetRecords, recommendationRecords, recommendationReferenceMediaRecords, recommendationReferenceRecords, tripMemberRecords, tripRecords } from "@/db/schema";
 
 export const mediaPurposes = ["home_featured", "guestbook", "recommendation_reference", "trip_cover", "album"] as const;
 export type MediaPurpose = (typeof mediaPurposes)[number];
@@ -99,6 +99,17 @@ export async function getAuthorizedReadyMediaAsset(assetId: string, memberId: st
       .innerJoin(tripMemberRecords, eq(tripMemberRecords.tripId, recommendationRecords.tripId))
       .where(and(eq(recommendationReferenceMediaRecords.mediaAssetId, assetId), eq(tripMemberRecords.memberId, memberId), isNull(recommendationRecords.deletedAt))).limit(1))[0];
     return member ? asset : null;
+  }
+  if (asset.purpose === "trip_cover") {
+    // Trip covers are private to members of the Trip that references them.
+    // The uploader-only fallback keeps an orphaned/pending cover visible to
+    // its owner without making an unreferenced asset public to other members.
+    const coverMarker = `/api/media/${assetId}`;
+    const memberTrip = (await db.select({ tripId: tripRecords.id })
+      .from(tripRecords)
+      .innerJoin(tripMemberRecords, eq(tripMemberRecords.tripId, tripRecords.id))
+      .where(and(like(tripRecords.cover, `${coverMarker}%`), eq(tripMemberRecords.memberId, memberId))).limit(1))[0];
+    return memberTrip || asset.uploaderMemberId === memberId ? asset : null;
   }
   return asset.uploaderMemberId === memberId ? asset : null;
 }

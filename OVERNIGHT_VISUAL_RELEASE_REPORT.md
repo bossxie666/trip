@@ -2,7 +2,7 @@
 
 ## Current decision
 
-The GitHub → Cloudflare Workers Builds `homepage-v3` Preview is serving the validated Homepage V3 source. The authenticated AMap and responsive runtime gates now pass. Production traffic remains unchanged until the final release push is intentionally performed through the same GitHub → Workers Builds chain. No migration, resource identity, route, or secret value was changed.
+The GitHub → Cloudflare Workers Builds `homepage-v3` Preview is serving the validated Homepage V3 source. The authenticated AMap and responsive runtime gates pass. A focused Trip-cover authorization fix is now locally validated and must produce a fresh Preview before the final release push. Production traffic remains unchanged until that release push is intentionally performed through the same GitHub → Workers Builds chain. No migration, resource identity, route, or secret value was changed.
 
 ## Preview and CI
 
@@ -10,13 +10,13 @@ The GitHub → Cloudflare Workers Builds `homepage-v3` Preview is serving the va
 - Preview Version: current alias build for commit `d6996ee9b608c48e3dd9d8b47a349eccff327fe4` (exact UUID is not exposed while the Cloudflare dashboard is behind Turnstile)
 - Preview URL: https://homepage-v3-trip-archive.bossxie666.workers.dev/
 - Source branch: `homepage-v3`
-- Source commit: `d6996ee9b608c48e3dd9d8b47a349eccff327fe4`
+- Source commit: `d6996ee9b608c48e3dd9d8b47a349eccff327fe4` (latest Preview baseline; Trip-cover fix pending)
 - Prior successful CI Build evidence: `1b566670-2776-455e-b8d9-2259345963b4` produced Version `fcc711d2-96fa-4f94-b3f9-4459af2277b4`; the current alias was subsequently refreshed by the pushed CSS correction.
 - Production traffic: unchanged; no local Wrangler upload/deploy, `versions deploy`, `wrangler deploy`, or trigger deployment was run.
 
 ## Engineering gates
 
-- `npm test`: **79/79 passed**
+- `npm test`: **80/80 passed** (includes Trip-cover member authorization regression)
 - `npm run lint`: **passed**
 - `npm run build:self-hosted`: **passed**
 - `git diff --check`: **passed**
@@ -47,6 +47,11 @@ Generated config: `dist/server/wrangler.json`
 - Existing AMap variable/secret binding names remain in place; no secret value was printed or changed.
 - Console telemetry still contains non-fatal CSP/eval, JSONP MIME, WebGL constructor, and canvas-readback warnings from the AMap SDK; the visible map and API gate are healthy, so Production configuration was not changed.
 
+## Functional bug fix
+
+- Fixed ready `trip_cover` media authorization so every member of the referencing Trip can read the cover while unrelated members cannot; orphaned covers remain uploader-scoped.
+- The fix is source-only and has no schema, migration, R2 object, or Production data impact.
+
 ## Release gate
 
-Preview hard gates are passed. The next release action is a fast-forward push of the validated `homepage-v3` commit to `github-mirror/v2.4-r1`, allowing the existing Cloudflare Production Build to run. No local Wrangler command or migration is permitted.
+Preview hard gates passed on the previous baseline. The next release action is to push the validated Trip-cover fix to `github-mirror/homepage-v3`, wait for a fresh non-production Build, re-run the Preview hard gates, then fast-forward the validated commit to `github-mirror/v2.4-r1`. No local Wrangler command or migration is permitted.

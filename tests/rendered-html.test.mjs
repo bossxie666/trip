@@ -493,6 +493,33 @@ test("keeps the private homepage, global search, and media upload boundaries sco
   }
 });
 
+test("shares a Trip cover with its members without exposing orphaned cover media", async () => {
+  const savedSession = sessionCookie;
+  const assetId = "trip-cover-auth-test";
+  let trip;
+  const now = new Date().toISOString();
+  try {
+    await loginAs("nini");
+    trip = await createTrip({ title: "Trip 封面授权边界", status: "planning", cities: ["上海"], memberIds: ["member-nini", "member-zhu-jingqi"] });
+    DB.database.prepare("INSERT INTO media_assets (id,uploader_member_id,purpose,object_key,original_filename,content_type,byte_size,status,created_at,updated_at,ready_at) VALUES (?,?,?,?,?,'image/jpeg',100,'ready',?,?,?)").run(assetId, "member-nini", "trip_cover", "trip-cover/test.jpg", "cover.jpg", now, now, now);
+    DB.database.prepare("UPDATE trips SET cover=? WHERE id=?").run(`/api/media/${assetId}?variant=display`, trip.id);
+    const owner = await render(`/api/media/${assetId}`);
+    assert.notEqual(owner.status, 401);
+    await loginAs("kiki");
+    const member = await render(`/api/media/${assetId}`);
+    assert.notEqual(member.status, 404);
+    await loginAs("刘徐");
+    const outsider = await render(`/api/media/${assetId}`);
+    assert.equal(outsider.status, 404);
+    DB.database.prepare("UPDATE trips SET cover=NULL WHERE id=?").run(trip.id);
+  } finally {
+    await loginAs("nini");
+    if (trip) assert.equal((await render(`/api/trips/${trip.slug}`, { method: "DELETE" })).status, 200);
+    DB.database.prepare("DELETE FROM media_assets WHERE id=?").run(assetId);
+    sessionCookie = savedSession;
+  }
+});
+
 test("allows members to leave messages while keeping edit and delete ownership", async () => {
   const savedSession = sessionCookie;
   let messageId = "";

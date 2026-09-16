@@ -6,12 +6,12 @@
 
 ## Current stage
 
-Preview hard gates passed on the authenticated `homepage-v3` alias. Desktop/Mobile visual QA, AMap runtime, route smoke checks, responsive widths, and engineering gates are complete. The next stage is the authorized fast-forward Production mirror push through GitHub → Cloudflare Workers Builds.
+Preview hard gates passed on the authenticated `homepage-v3` alias. Desktop/Mobile visual QA, AMap runtime, route smoke checks, responsive widths, and engineering gates are complete. Production smoke testing found and the local test suite now covers a Trip-cover cross-member authorization bug; the next stage is a fresh Preview build for that fix, followed by the authorized fast-forward Production mirror push through GitHub → Cloudflare Workers Builds.
 
 ## Completed
 
 - 工作树检查、secret/artifact 检查
-- `npm test`：79/79 passed
+- `npm test`：80/80 passed
 - `npm run lint`：passed
 - `npm run build:self-hosted`：passed
 - `npm audit --omit=dev`：0 vulnerabilities
@@ -22,6 +22,7 @@ Preview hard gates passed on the authenticated `homepage-v3` alias. Desktop/Mobi
 - Checkpoint `e477c8c` pushed to GitHub `homepage-v3`; Workers Build `8359633d-61bb-4b57-a26b-5a2aa8e3331c` succeeded.
 - Preview Version `45b51538-97c5-40c6-921d-ffc1dd6dcbc4` created with correct DB/R2/Images/Assets bindings.
 - CSS correction commit `d6996ee9b608c48e3dd9d8b47a349eccff327fe4` pushed to `github-mirror/homepage-v3`; the live `homepage-v3` alias serves the corrected mobile atlas crop.
+- Trip-cover authorization fix is locally validated in `services/media-service.server.ts`, with a rendered-route regression test covering owner/member/outsider access; pending the next `homepage-v3` Preview build.
 - Prior successful Build/Version evidence: `1b566670-2776-455e-b8d9-2259345963b4` / `fcc711d2-96fa-4f94-b3f9-4459af2277b4`. The Cloudflare dashboard is currently behind Turnstile, so the current alias refresh UUID is not exposed to read-only tooling.
 
 ## Known issues
@@ -31,13 +32,13 @@ Preview hard gates passed on the authenticated `homepage-v3` alias. Desktop/Mobi
 
 ## Current blocker
 
-No hard blocker. Exact current Cloudflare Build/Version UUID is an ordinary dashboard-observability limitation only; the alias, commit, API, map, and screenshots have been verified. Production remains unchanged until the fast-forward mirror push.
+No hard blocker. Exact current Cloudflare Build/Version UUID is an ordinary dashboard-observability limitation only; the alias, commit, API, map, and screenshots have been verified. Production remains unchanged until the Trip-cover fix is Preview-verified and then fast-forwarded through the mirror push.
 
 ## Next actions
 
-1. Run final engineering gates after this state/report update.
-2. Fast-forward push validated `homepage-v3` to `github-mirror/v2.4-r1`; do not push `origin`.
-3. Read-only smoke-test Production after the Cloudflare Build completes; do not run migration or local Wrangler.
+1. Commit and push the Trip-cover fix to `github-mirror/homepage-v3`; do not push `origin`.
+2. Wait for the Cloudflare non-production Build and re-run Preview API/AMap/visual/responsive gates.
+3. Fast-forward the validated `homepage-v3` commit to `github-mirror/v2.4-r1`, then read-only smoke-test Production; do not run migration or local Wrangler.
 
 ## Safety boundary
 
@@ -46,4 +47,4 @@ No hard blocker. Exact current Cloudflare Build/Version UUID is an ordinary dash
 - No DB/R2 identity change.
 - No migration or business-data write during Preview QA.
 
-_Last updated: 2026-09-17 (Preview hard gates passed; Production mirror push pending)_
+_Last updated: 2026-09-17 (Trip-cover authorization fix pending fresh Preview build; Production mirror push gated)_
