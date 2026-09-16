@@ -6,7 +6,7 @@
 
 ## Current stage
 
-CI Preview rebuild after fixing variable propagation.
+CI Preview rebuild after fixing the Cloudflare Version command; this checkpoint is being pushed to trigger the rebuild.
 
 ## Completed
 
@@ -23,7 +23,7 @@ CI Preview rebuild after fixing variable propagation.
 ## Known issues
 
 - The first CI Preview omitted `AMAP_JS_API_KEY`; the Preview map page returned HTTP 503 configuration status.
-- A new CI run is required after the Version command update.
+- The corrected Version command is saved in Cloudflare Workers Builds; the next GitHub push must produce a fresh Preview build.
 
 ## Current blocker
 
@@ -44,4 +44,4 @@ None yet; waiting for the rebuilt non-production Version and runtime checks.
 - No DB/R2 identity change.
 - No migration or business-data write during Preview QA.
 
-_Last updated: 2026-09-16_
+_Last updated: 2026-09-16 (Version command corrected; rebuild pending)_
