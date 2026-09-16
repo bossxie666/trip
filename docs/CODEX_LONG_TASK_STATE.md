@@ -6,7 +6,7 @@
 
 ## Current stage
 
-CI Preview rebuild after fixing the Cloudflare Version command; this checkpoint is being pushed to trigger the rebuild.
+CI Preview build succeeded after fixing the Cloudflare Version command; authenticated homepage visual QA passed on the current Preview, but the AMap runtime gate is still failing.
 
 ## Completed
 
@@ -19,23 +19,24 @@ CI Preview rebuild after fixing the Cloudflare Version command; this checkpoint 
 - Commit `38f5e1a` pushed to GitHub `homepage-v3`
 - Cloudflare Build created Version `fcd6cad6-0fbe-4413-befb-c4afdfe1bfa8`
 - Cloudflare CI Version command updated to use Wrangler 4.131.1 with `--keep-vars --strict`
+- Checkpoint `e477c8c` pushed to GitHub `homepage-v3`; Workers Build `8359633d-61bb-4b57-a26b-5a2aa8e3331c` succeeded.
+- Preview Version `45b51538-97c5-40c6-921d-ffc1dd6dcbc4` created with correct DB/R2/Images/Assets bindings.
 
 ## Known issues
 
 - The first CI Preview omitted `AMAP_JS_API_KEY`; the Preview map page returned HTTP 503 configuration status.
-- The corrected Version command is saved in Cloudflare Workers Builds; the next GitHub push must produce a fresh Preview build.
+- CI Preview Version `45b51538-97c5-40c6-921d-ffc1dd6dcbc4` still lacks the ordinary `AMAP_JS_API_KEY` binding; read-only version metadata confirms the other AMap service binding names.
+- The authenticated Preview homepage loaded, but `GET /api/amap/config` returned HTTP 503 because the current Preview Version has no ordinary `AMAP_JS_API_KEY` binding.
 
 ## Current blocker
 
-None yet; waiting for the rebuilt non-production Version and runtime checks.
+AMap runtime configuration is missing in Preview; Production release is paused. The Mac became locked during the remaining mobile screenshot/width checks.
 
 ## Next actions
 
-1. Push this checkpoint to `github-mirror/homepage-v3`.
-2. Wait for the Cloudflare Workers Build check.
-3. Inspect the resulting Version bindings without exposing secret values.
-4. Re-test Preview homepage, map/AMap runtime, navigation, responsive widths, and screenshots.
-5. Do not touch `v2.4-r1` until Preview hard gates pass.
+1. Add/restore the existing ordinary `AMAP_JS_API_KEY` runtime variable in Cloudflare without changing secrets or resource identities, then push a checkpoint to trigger CI again.
+2. After the variable is restored and a new CI Preview is built, unlock the Mac and re-test the map/AMap runtime, responsive widths, and screenshots.
+3. Do not touch `v2.4-r1` until Preview hard gates pass.
 
 ## Safety boundary
 
@@ -44,4 +45,4 @@ None yet; waiting for the rebuilt non-production Version and runtime checks.
 - No DB/R2 identity change.
 - No migration or business-data write during Preview QA.
 
-_Last updated: 2026-09-16 (Version command corrected; rebuild pending)_
+_Last updated: 2026-09-16 (homepage QA observed; AMap runtime gate and mobile matrix pending)_
