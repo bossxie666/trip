@@ -26,13 +26,13 @@ function participantSummary(trip: Awaited<ReturnType<typeof listTrips>>[number])
 export default async function TripsPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   const requested = (await searchParams).status;
   const activeStatus = filters.some((filter) => filter.value === requested) ? requested as TripStatus : "all";
-  const [actor, trips] = await Promise.all([getCurrentMember(), listTrips(activeStatus)]);
+  const actor = await getCurrentMember();
+  const trips = actor ? await listTrips(activeStatus, actor.id) : [];
 
   return (<>
-    {actor && <SiteHeader active="" currentMember={{ id: actor.id, displayName: actor.displayName, avatar: actor.avatar }} />}
+    {actor && <SiteHeader active="trips" currentMember={{ id: actor.id, displayName: actor.displayName, avatar: actor.avatar }} />}
     <main className="archive-index archive-index-with-shell">
-      <header><span>TRIPS</span><h1>攻略</h1><Link className="new-trip-link" href="/trips/new">＋ 新建行程</Link></header>
-      <nav className="trip-tabs" aria-label="行程状态">{filters.map((filter) => <Link key={filter.value} className={activeStatus === filter.value ? "active" : ""} href={filter.value === "all" ? "/trips" : `/trips?status=${filter.value}`}>{filter.label}</Link>)}</nav>
+      <div className="archive-index-toolbar"><nav className="trip-tabs" aria-label="行程状态">{filters.map((filter) => <Link key={filter.value} className={activeStatus === filter.value ? "active" : ""} href={filter.value === "all" ? "/trips" : `/trips?status=${filter.value}`}>{filter.label}</Link>)}</nav><Link className="new-trip-link" href="/trips/new">＋ 新建行程</Link></div>
       <section className="trip-list">
         {!trips.length && <div className="trip-empty"><h2>这里还没有行程</h2><p>{activeStatus === "completed" ? "完成一次旅行后，它会出现在这里。" : "可以新建一条行程开始记录。"}</p></div>}
         {trips.map((trip, index) => (

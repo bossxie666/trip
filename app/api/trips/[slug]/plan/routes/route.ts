@@ -5,12 +5,19 @@ import type { AMapRouteMode } from "@/services/amap/amap-types";
 import { getDb } from "@/db";
 import { and, eq } from "drizzle-orm";
 import { tripMemberRecords, tripRecords } from "@/db/schema";
+import { consumeRateLimit, rateLimitResponse } from "@/services/rate-limit.server";
 
 const modes = new Set<AMapRouteMode>(["walking", "subway", "bus", "mixed_transit", "taxi", "driving", "bicycling", "transit"]);
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   try {
     const actor = await getCurrentMember();
     if (!actor) return Response.json({ error: "请先验证旅行成员身份。" }, { status: 401 });
+    try {
+      const limit = await consumeRateLimit("amap-route", actor.id, 120, 60 * 60 * 1000);
+      if (!limit.allowed) return rateLimitResponse(limit, "路线查询过于频繁，请稍后再试。");
+    } catch {
+      return Response.json({ error: "地图安全服务暂时不可用，请稍后再试。" }, { status: 503 });
+    }
     const { slug } = await params;
     const trip = (await getDb().select({ id: tripRecords.id }).from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1))[0];
     if (!trip) return Response.json({ error: "行程或地点不存在。" }, { status: 404 });

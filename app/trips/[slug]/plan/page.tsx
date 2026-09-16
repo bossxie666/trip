@@ -5,10 +5,11 @@ import { findTripMetadataBySlug } from "@/services/trip-repository.server";
 import { TripPlanWorkspace } from "@/components/trip/TripPlanWorkspace";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { createTripRequestContext } from "@/services/request-data-context.server";
+import { getCurrentMember } from "@/services/auth.server";
 
 export const dynamic = "force-dynamic";
 const views = new Set(["planning", "map", "budget"]), modes = new Set(["day", "library"]), areas = new Set(["shanghai", "hangzhou", "tonglu"]), categories = new Set(["all", "core", "attraction", "food", "shopping", "day_trip", "other", "cafe", "guide"]), librarySorts = new Set(["core", "recent"]);
-export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> { const trip = await findTripMetadataBySlug((await params).slug); return trip ? { title: `${trip.title} · 规划工作台`, description: "旅行攻略、正式行程、地图和预算工作台。", openGraph: { images: [] }, twitter: { images: [] } } : {}; }
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> { const slug = (await params).slug; const actor = await getCurrentMember(); const trip = actor ? await findTripMetadataBySlug(slug, actor.id) : null; return trip ? { title: `${trip.title} · 规划工作台`, description: "旅行攻略、正式行程、地图和预算工作台。", openGraph: { images: [] }, twitter: { images: [] } } : {}; }
 export default async function TripPlanPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ view?: string; day?: string; mode?: string; q?: string; area?: string; category?: string; library?: string; sort?: string; page?: string; member?: string; cost?: string }> }) {
   const { slug } = await params, query = await searchParams;
   const view = views.has(query.view || "") ? query.view as "planning" | "map" | "budget" : "planning";
@@ -17,6 +18,7 @@ export default async function TripPlanPage({ params, searchParams }: { params: P
   const librarySort = librarySorts.has(query.sort || "") ? query.sort as "core" | "recent" : "core";
   const parsedPage = Number.parseInt(query.page || "1", 10), libraryPage = Number.isSafeInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
   const requestContext = await createTripRequestContext(slug);
+  if (!requestContext.permissions.canRead || !requestContext.actor) notFound();
   const actor = requestContext.actor;
   const workspace = await getPlanWorkspace(slug, actor?.id, { view, requestContext, recommendations: { area: areaFilter, category: categoryFilter, query: (query.q || "").trim(), library: query.library === "all", page: libraryPage, sort: librarySort } });
   if (!workspace) notFound();

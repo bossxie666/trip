@@ -112,7 +112,7 @@ export async function attachAlbumMedia(id: string, memberId: string, assetIds: s
 }
 
 export async function reorderAlbumMedia(id: string, memberId: string, assetIds: string[]) {
-  await requireAlbumAccess(id, memberId);
+  await requireAlbumEditor(id, memberId);
   const current = await getDb().select().from(albumMediaRecords).where(eq(albumMediaRecords.albumId, id));
   if (assetIds.length !== current.length || new Set(assetIds).size !== current.length || current.some((row) => !assetIds.includes(row.mediaAssetId))) throw new Error("INVALID_ALBUM_ORDER");
   for (let index = 0; index < assetIds.length; index += 1) await getDb().update(albumMediaRecords).set({ sortOrder: -index - 1 }).where(and(eq(albumMediaRecords.albumId, id), eq(albumMediaRecords.mediaAssetId, assetIds[index])));
@@ -122,7 +122,7 @@ export async function reorderAlbumMedia(id: string, memberId: string, assetIds: 
 }
 
 export async function deleteAlbumMedia(id: string, memberId: string, assetId: string) {
-  const album = await requireAlbumAccess(id, memberId);
+  const album = await requireAlbumEditor(id, memberId);
   const asset = (await getDb().select().from(mediaAssetRecords).innerJoin(albumMediaRecords, eq(albumMediaRecords.mediaAssetId, mediaAssetRecords.id)).where(and(eq(albumMediaRecords.albumId, id), eq(mediaAssetRecords.id, assetId))).limit(1))[0];
   if (!asset || asset.media_assets.purpose !== "album") throw new Error("ALBUM_MEDIA_NOT_FOUND");
   const db = getDb();

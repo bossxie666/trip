@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { tripMemberRecords, tripRecords } from "@/db/schema";
 import { getCurrentMember } from "@/services/auth.server";
+import { consumeRateLimit, rateLimitResponse } from "@/services/rate-limit.server";
 
 const allowedHosts = ["xiaohongshu.com", "xhslink.com"];
 const maximumBytes = 1_000_000;
@@ -47,6 +48,8 @@ function meta(html: string, key: string) {
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const actor = await getCurrentMember();
   if (!actor) return Response.json({ error: "请先验证旅行成员身份。" }, { status: 401 });
+  const limit = await consumeRateLimit("xhs-preview", actor.id, 30, 60 * 60 * 1000);
+  if (!limit.allowed) return rateLimitResponse(limit, "链接预览过于频繁，请稍后再试。");
   const { slug } = await params;
   const trip = (await getDb().select({ id: tripRecords.id }).from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1))[0];
   if (!trip) return Response.json({ error: "行程不存在。" }, { status: 404 });

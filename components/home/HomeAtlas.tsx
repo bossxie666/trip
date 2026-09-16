@@ -7,13 +7,19 @@ type Photo = { slotKey: "map_primary" | "map_secondary"; assetId: string };
 function plotted(cities: City[]) {
   const usable = cities.filter((city): city is City & { centerLat: number; centerLng: number } => city.centerLat != null && city.centerLng != null);
   if (!usable.length) return [];
-  const minX = Math.min(...usable.map((city) => city.centerLng));
-  const maxX = Math.max(...usable.map((city) => city.centerLng));
-  const minY = Math.min(...usable.map((city) => city.centerLat));
-  const maxY = Math.max(...usable.map((city) => city.centerLat));
-  const xSpan = Math.max(maxX - minX, .01);
-  const ySpan = Math.max(maxY - minY, .01);
-  return usable.map((city, index) => ({ ...city, x: 13 + ((city.centerLng - minX) / xSpan) * 74, y: 82 - ((city.centerLat - minY) / ySpan) * 66, index }));
+  // Keep markers geographically stable when a member has one city or many:
+  // the atlas artwork is a China-focused map, so its overlay uses fixed
+  // longitude/latitude bounds instead of stretching the current selection.
+  const minLng = 73;
+  const maxLng = 135;
+  const minLat = 18;
+  const maxLat = 54;
+  return usable.map((city, index) => ({
+    ...city,
+    x: 9 + Math.min(1, Math.max(0, (city.centerLng - minLng) / (maxLng - minLng))) * 82,
+    y: 86 - Math.min(1, Math.max(0, (city.centerLat - minLat) / (maxLat - minLat))) * 72,
+    index,
+  }));
 }
 
 export function HomeAtlas({ cities, photos, fallbackPrimary, fallbackSecondary }: { cities: City[]; photos: Photo[]; fallbackPrimary?: string | null; fallbackSecondary?: string | null }) {

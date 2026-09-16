@@ -20,7 +20,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     let title = body.title?.trim() || "";
     let itemType = body.itemType || "activity";
     if (recommendationId) {
-      const recommendation = (await db.select().from(recommendationRecords).where(and(eq(recommendationRecords.id, recommendationId), isNull(recommendationRecords.deletedAt))).limit(1))[0];
+      const recommendation = (await db.select().from(recommendationRecords).where(and(eq(recommendationRecords.id, recommendationId), eq(recommendationRecords.tripId, trip.id), isNull(recommendationRecords.deletedAt))).limit(1))[0];
       if (!recommendation) return Response.json({ error: "攻略素材不存在。" }, { status: 404 });
       if (recommendation.kind === "guide") {
         const items = await createGuideItineraryItems({ tripId: trip.id, dayId: body.dayId, recommendationId: recommendation.id, placeIds: [...new Set((body.componentPlaceIds || []).map(String))] }, actor.id);

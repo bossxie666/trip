@@ -51,7 +51,7 @@ export async function createItineraryItem(input: CreateItineraryItemInput, actor
   const day = (await db.select().from(dayRecords).where(and(eq(dayRecords.id, input.dayId), eq(dayRecords.tripId, input.tripId))).limit(1))[0];
   if (!day) throw new Error("DAY_NOT_IN_TRIP");
   if (input.stageId && !(await db.select({ id: tripStageRecords.id }).from(tripStageRecords).where(and(eq(tripStageRecords.id, input.stageId), eq(tripStageRecords.tripId, input.tripId))).limit(1))[0]) throw new Error("STAGE_NOT_IN_TRIP");
-  if (input.recommendationId && !(await db.select({ id: recommendationRecords.id }).from(recommendationRecords).where(and(eq(recommendationRecords.id, input.recommendationId), isNull(recommendationRecords.deletedAt))).limit(1))[0]) throw new Error("RECOMMENDATION_NOT_FOUND");
+  if (input.recommendationId && !(await db.select({ id: recommendationRecords.id }).from(recommendationRecords).where(and(eq(recommendationRecords.id, input.recommendationId), eq(recommendationRecords.tripId, input.tripId), isNull(recommendationRecords.deletedAt))).limit(1))[0]) throw new Error("RECOMMENDATION_NOT_FOUND");
   const placeIds = [...new Set([input.placeId, input.originPlaceId, input.destinationPlaceId].filter((id): id is string => Boolean(id)))];
   if (placeIds.length) {
     const valid = await db.select({ id: placeRecords.id }).from(placeRecords).where(inArray(placeRecords.id, placeIds));

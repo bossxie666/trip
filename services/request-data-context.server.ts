@@ -14,5 +14,5 @@ export async function createTripRequestContext(slug: string): Promise<TripReques
   const membership = actor && trip?.members?.some((member) => member.id === actor.id)
     ? { memberId: actor.id }
     : null;
-  return { actor, trip, membership, permissions: { canRead: Boolean(actor && trip) } };
+  return { actor, trip, membership, permissions: { canRead: Boolean(actor && trip && membership) } };
 }

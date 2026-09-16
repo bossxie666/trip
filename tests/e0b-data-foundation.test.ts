@@ -106,13 +106,12 @@ test("E0B data foundation", async (t) => {
     assert.equal((await recommendationRepo.listRecommendations("trip-e0b-a")).length, 0);
   });
 
-  await t.test("rejects cross-Trip Day and Stage while allowing shared source material and reusable Places", async () => {
+  await t.test("rejects cross-Trip Day, Stage and Recommendation while allowing reusable Places", async () => {
     const otherRecommendation = await recommendationRepo.createRecommendation({ tripId: "trip-e0b-b", kind: "place", category: "attraction", title: "另一 Trip 素材" }, "member-nini");
     await assert.rejects(() => itineraryRepo.createItineraryItem({ tripId: "trip-e0b-a", dayId: "e0b-b-day-1", itemType: "note", title: "错 Day" }, "member-nini"), /DAY_NOT_IN_TRIP/);
     await assert.rejects(() => itineraryRepo.createItineraryItem({ tripId: "trip-e0b-a", dayId: "e0b-a-day-1", stageId: "e0b-stage-b", itemType: "note", title: "错 Stage" }, "member-nini"), /STAGE_NOT_IN_TRIP/);
-    const shared = await itineraryRepo.createItineraryItem({ tripId: "trip-e0b-a", dayId: "e0b-a-day-2", recommendationId: otherRecommendation.id, itemType: "activity", title: "共享素材" }, "member-nini");
+    await assert.rejects(() => itineraryRepo.createItineraryItem({ tripId: "trip-e0b-a", dayId: "e0b-a-day-2", recommendationId: otherRecommendation.id, itemType: "activity", title: "跨行程素材" }, "member-nini"), /RECOMMENDATION_NOT_FOUND/);
     const reusedPlace = await itineraryRepo.createItineraryItem({ tripId: "trip-e0b-a", dayId: "e0b-a-day-2", placeId: "e0b-place-other", itemType: "place", title: "复用 Place" }, "member-nini");
-    assert.equal(shared.recommendationId, otherRecommendation.id);
     assert.equal(reusedPlace.placeId, "e0b-place-other");
     assert.equal((DB.database.prepare("SELECT count(*) count FROM trip_cities WHERE trip_id = 'trip-e0b-a' AND city_id = 'city-shadow-hangzhou'").get() as { count: number }).count, 1);
   });

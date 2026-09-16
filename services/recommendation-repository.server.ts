@@ -45,13 +45,32 @@ function validateRecommendationInput(input: CreateRecommendationInput) {
   if (input.priceBasis != null && !["per_person", "per_group", "per_item", "free", "unknown"].includes(input.priceBasis)) throw new Error("INVALID_PRICE_BASIS");
 }
 
+function normalizeExternalUrl(value: string | null | undefined, errorCode = "INVALID_EXTERNAL_URL") {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (trimmed.length > 2048) throw new Error(errorCode);
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error(errorCode);
+    return url.href;
+  } catch {
+    throw new Error(errorCode);
+  }
+}
+
+function normalizeImageUrls(values: string[] | undefined) {
+  return (values || []).slice(0, 5).map((value) => normalizeExternalUrl(value, "INVALID_REFERENCE_MEDIA_URL")).filter((value): value is string => Boolean(value));
+}
+
 export async function createRecommendation(input: CreateRecommendationInput, actorMemberId: string) {
   validateRecommendationInput(input);
+  const sourceUrl = normalizeExternalUrl(input.sourceUrl);
+  const coverImageUrl = normalizeExternalUrl(input.coverImageUrl, "INVALID_COVER_IMAGE_URL");
   const db = getDb();
   const trip = (await db.select({ id: tripRecords.id }).from(tripRecords).where(eq(tripRecords.id, input.tripId)).limit(1))[0];
   if (!trip) throw new Error("TRIP_NOT_FOUND");
   const now = new Date().toISOString();
-  const record = { id: crypto.randomUUID(), ...input, title: input.title.trim(), isCore: input.isCore ?? false, createdByMemberId: actorMemberId, updatedByMemberId: actorMemberId, createdAt: now, updatedAt: now, deletedAt: null };
+  const record = { id: crypto.randomUUID(), ...input, sourceUrl, coverImageUrl, title: input.title.trim(), isCore: input.isCore ?? false, createdByMemberId: actorMemberId, updatedByMemberId: actorMemberId, createdAt: now, updatedAt: now, deletedAt: null };
   await db.insert(recommendationRecords).values(record);
   return record;
 }
@@ -80,13 +99,15 @@ export async function getRecommendationDetail(tripId: string, id: string) {
 
 function parseImageUrls(value: string | null) {
   if (!value) return [];
-  try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : []; } catch { return []; }
+  try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string").filter((item) => { try { return Boolean(normalizeExternalUrl(item, "INVALID_REFERENCE_MEDIA_URL")); } catch { return false; } }) : []; } catch { return []; }
 }
 
 export async function addRecommendationReference(input: { recommendationId: string; platform: "official" | "xiaohongshu" | "web" | "manual"; authorLabel?: string | null; title?: string | null; sourceUrl: string; imageUrls?: string[]; note?: string | null; sortOrder?: number; actorMemberId?: string | null }) {
-  if (!input.sourceUrl.trim()) throw new Error("REFERENCE_URL_REQUIRED");
+  const sourceUrl = normalizeExternalUrl(input.sourceUrl, "REFERENCE_URL_INVALID");
+  if (!sourceUrl) throw new Error("REFERENCE_URL_REQUIRED");
+  const imageUrls = normalizeImageUrls(input.imageUrls);
   const now = new Date().toISOString();
-  const record = { id: crypto.randomUUID(), recommendationId: input.recommendationId, platform: input.platform, authorLabel: input.authorLabel ?? null, title: input.title ?? null, sourceUrl: input.sourceUrl.trim(), imageUrlsJson: input.imageUrls?.length ? JSON.stringify(input.imageUrls) : null, note: input.note ?? null, sortOrder: input.sortOrder ?? 0, createdByMemberId: input.actorMemberId ?? null, updatedByMemberId: input.actorMemberId ?? null, createdAt: now, updatedAt: now };
+  const record = { id: crypto.randomUUID(), recommendationId: input.recommendationId, platform: input.platform, authorLabel: input.authorLabel ?? null, title: input.title ?? null, sourceUrl, imageUrlsJson: imageUrls.length ? JSON.stringify(imageUrls) : null, note: input.note ?? null, sortOrder: input.sortOrder ?? 0, createdByMemberId: input.actorMemberId ?? null, updatedByMemberId: input.actorMemberId ?? null, createdAt: now, updatedAt: now };
   await getDb().insert(recommendationReferenceRecords).values(record);
   return record;
 }
@@ -96,6 +117,8 @@ export async function createMemberRecommendation(input: CreateRecommendationInpu
   reference?: { platform: "official" | "xiaohongshu" | "web" | "manual"; authorLabel?: string | null; title?: string | null; sourceUrl: string; imageUrls?: string[]; note?: string | null; mediaAssetIds?: string[] } | null;
 }, actorMemberId: string) {
   validateRecommendationInput({ ...input, isCore: false });
+  const sourceUrl = normalizeExternalUrl(input.sourceUrl);
+  const coverImageUrl = normalizeExternalUrl(input.coverImageUrl, "INVALID_COVER_IMAGE_URL");
   const placeIds = [...new Set(input.placeIds.map(String).filter(Boolean))];
   if (input.kind === "place" && placeIds.length !== 1) throw new Error("PLACE_REQUIRED");
   if (input.kind === "guide" && !placeIds.length) throw new Error("GUIDE_COMPONENT_REQUIRED");
@@ -108,15 +131,17 @@ export async function createMemberRecommendation(input: CreateRecommendationInpu
     const media = await db.select({ id: mediaAssetRecords.id }).from(mediaAssetRecords).where(and(inArray(mediaAssetRecords.id, mediaAssetIds), eq(mediaAssetRecords.uploaderMemberId, actorMemberId), eq(mediaAssetRecords.purpose, "recommendation_reference"), eq(mediaAssetRecords.status, "ready")));
     if (media.length !== mediaAssetIds.length) throw new Error("INVALID_REFERENCE_MEDIA");
   }
-  if (input.reference && !input.reference.sourceUrl.trim()) throw new Error("REFERENCE_URL_REQUIRED");
+  const referenceSourceUrl = input.reference ? normalizeExternalUrl(input.reference.sourceUrl, "REFERENCE_URL_INVALID") : null;
+  if (input.reference && !referenceSourceUrl) throw new Error("REFERENCE_URL_REQUIRED");
+  const referenceImageUrls = normalizeImageUrls(input.reference?.imageUrls);
   const recommendationId = crypto.randomUUID(), referenceId = input.reference ? crypto.randomUUID() : null, now = new Date().toISOString();
   const env = getRuntimeEnv();
   const statements = [
-    env.DB.prepare("INSERT INTO recommendations (id, trip_id, kind, guide_type, category, title, summary, area_label, area_key, is_core, estimated_duration_minutes, estimated_cost_minor, cost_basis, price_min_minor, price_max_minor, price_currency, price_basis, source_label, source_url, cover_image_url, created_by_member_id, updated_by_member_id, created_at, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)").bind(recommendationId, input.tripId, input.kind, input.guideType ?? null, input.category, input.title.trim(), input.summary ?? null, input.areaLabel ?? null, input.areaKey ?? null, input.estimatedDurationMinutes ?? null, input.kind === "place" ? input.priceMinMinor ?? null : null, input.kind === "place" ? input.priceMaxMinor ?? null : null, input.kind === "place" ? input.priceCurrency ?? null : null, input.kind === "place" ? input.priceBasis ?? null : null, input.sourceLabel ?? null, input.sourceUrl ?? null, input.coverImageUrl ?? null, actorMemberId, actorMemberId, now, now),
+    env.DB.prepare("INSERT INTO recommendations (id, trip_id, kind, guide_type, category, title, summary, area_label, area_key, is_core, estimated_duration_minutes, estimated_cost_minor, cost_basis, price_min_minor, price_max_minor, price_currency, price_basis, source_label, source_url, cover_image_url, created_by_member_id, updated_by_member_id, created_at, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)").bind(recommendationId, input.tripId, input.kind, input.guideType ?? null, input.category, input.title.trim(), input.summary ?? null, input.areaLabel ?? null, input.areaKey ?? null, input.estimatedDurationMinutes ?? null, input.kind === "place" ? input.priceMinMinor ?? null : null, input.kind === "place" ? input.priceMaxMinor ?? null : null, input.kind === "place" ? input.priceCurrency ?? null : null, input.kind === "place" ? input.priceBasis ?? null : null, input.sourceLabel ?? null, sourceUrl, coverImageUrl, actorMemberId, actorMemberId, now, now),
     ...placeIds.map((placeId, sortOrder) => env.DB.prepare("INSERT INTO recommendation_place_options (id, recommendation_id, place_id, relation_type, option_group_key, is_primary, sort_order, note, created_at, updated_at) VALUES (?, ?, ?, ?, NULL, ?, ?, NULL, ?, ?)").bind(crypto.randomUUID(), recommendationId, placeId, input.kind === "guide" ? "component" : "alternative", input.kind === "place" && sortOrder === 0 ? 1 : 0, sortOrder, now, now)),
   ];
   if (input.reference && referenceId) {
-    statements.push(env.DB.prepare("INSERT INTO recommendation_references (id, recommendation_id, platform, author_label, title, source_url, image_urls_json, note, sort_order, created_by_member_id, updated_by_member_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)").bind(referenceId, recommendationId, input.reference.platform, input.reference.authorLabel?.trim() || null, input.reference.title?.trim() || null, input.reference.sourceUrl.trim(), input.reference.imageUrls?.length ? JSON.stringify(input.reference.imageUrls.slice(0, 5)) : null, input.reference.note?.trim() || null, actorMemberId, actorMemberId, now, now));
+    statements.push(env.DB.prepare("INSERT INTO recommendation_references (id, recommendation_id, platform, author_label, title, source_url, image_urls_json, note, sort_order, created_by_member_id, updated_by_member_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)").bind(referenceId, recommendationId, input.reference.platform, input.reference.authorLabel?.trim() || null, input.reference.title?.trim() || null, referenceSourceUrl, referenceImageUrls.length ? JSON.stringify(referenceImageUrls) : null, input.reference.note?.trim() || null, actorMemberId, actorMemberId, now, now));
     statements.push(...mediaAssetIds.map((mediaAssetId, sortOrder) => env.DB.prepare("INSERT INTO recommendation_reference_media (reference_id, media_asset_id, sort_order) VALUES (?, ?, ?)").bind(referenceId, mediaAssetId, sortOrder)));
   }
   await env.DB.batch(statements);

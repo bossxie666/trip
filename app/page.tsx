@@ -44,7 +44,6 @@ export default async function TravelArchiveHome() {
           </h1>
           <p className="home-manifesto-line"><span>已点亮城市 <b>{dashboard.stats.cityCount}</b></span><span>已完成旅行 <b>{dashboard.stats.completed}</b></span><span>下一站 <b>{nextCityNames.join("·") || "等待决定"}</b></span></p>
           <div className="home-actions"><Link className="home-primary-action" href={next ? `/trips/${next.slug}/plan` : "/trips/new"}><Plane size={18} />规划下一段旅程<ArrowRight size={17} /></Link><Link className="home-secondary-action" href="/trips"><BookOpen size={18} />浏览旅行灵感</Link></div>
-          <small>把每一段路，收进自己的地图。</small>
         </article>
         <HomeAtlas cities={dashboard.cities} photos={dashboard.featuredPhotos as { slotKey: "map_primary" | "map_secondary"; assetId: string }[]} fallbackPrimary={fallbackPhotos[0]} fallbackSecondary={fallbackPhotos[1]} />
         <article className="home-next-trip">
@@ -55,7 +54,7 @@ export default async function TravelArchiveHome() {
 
       <div className="home-lower-band mobile-home-secondary">
         <section className="home-section home-photo-wall mobile-home-secondary" id="travel-wall">
-          <header><div><Camera size={25} /><h2>旅行影像墙</h2><p>那些走过的地方，都变成了特别的回忆。</p></div><span>来自真实行程照片</span></header>
+          <header><div><Camera size={25} /><h2>旅行影像墙</h2></div><span>来自真实行程照片</span></header>
           <div className={`home-photo-strip${wallTrips.length <= 2 ? " home-photo-strip-sparse" : ""}`}>
             {wallTrips.map((trip, index) => <figure key={trip.id} className={`home-photo-card home-photo-card-${index % 4}`}><div className="home-photo-polaroid"><img className="home-photo-image" src={cover(trip.cover)!} alt={trip.title} width={520} height={380} loading={index < 3 ? "eager" : "lazy"} /><img className="home-photo-frame" src={`/assets/homepage-v3/polaroid-frame-${index % 2 ? "02" : "01"}.webp`} alt="" aria-hidden="true" /></div><figcaption><b>{trip.cities[0]?.name || trip.title}</b><span>{trip.startDate?.slice(0, 7).replace("-", ".") || "日期未定"}</span></figcaption></figure>)}
             {wallTrips.length <= 2 && <Link className="home-photo-manage-card" href="/albums" aria-label="打开相册添加精选照片"><span className="home-photo-manage-icon" aria-hidden="true"><Plus size={25} /></span></Link>}
@@ -64,12 +63,8 @@ export default async function TravelArchiveHome() {
         </section>
 
         <div className="home-lower-grid mobile-home-secondary">
-          <section className="home-section home-trips" id="profile">
-            <header><div><BookOpen size={24} /><h2>我的旅行</h2><p>记录走过的路，也记录当时的自己。</p></div><Link href="/trips">查看全部 →</Link></header>
-            <div>{dashboard.trips.map((trip) => <Link className="home-trip-card" href={`/trips/${trip.slug}/plan`} key={trip.id}>{cover(trip.cover) ? <img src={cover(trip.cover)!} alt="" width={440} height={250} loading="lazy" /> : <div className="home-trip-cover-empty">暂无封面</div>}<span>{trip.status === "completed" ? "已完成" : trip.status === "planning" ? "待出发" : "灵感"}</span><h3>{trip.title}</h3><small>{range(trip.startDate, trip.endDate)} · {trip.members?.length || trip.people} 人</small></Link>)}</div>
-          </section>
           <section className="home-section home-guestbook">
-            <header><div><MessageSquareText size={24} /><h2>留言板</h2><p>在这里，留下你来过的痕迹。</p></div><Link href="/messages">查看全部 →</Link></header>
+            <header><div><MessageSquareText size={24} /><h2>留言板</h2></div><Link href="/messages">查看全部 →</Link></header>
             <GuestbookBoard compact initialMessages={dashboard.messages} currentMemberId={current.id} />
           </section>
         </div>

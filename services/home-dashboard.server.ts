@@ -10,8 +10,7 @@ function todayInShanghai() {
 }
 
 export async function getHomeDashboard(memberId: string) {
-  const allTrips = await listTrips("all");
-  const trips = allTrips.filter((trip) => trip.members?.some((member) => member.id === memberId));
+  const trips = await listTrips("all", memberId);
   const tripIds = trips.map((trip) => trip.id);
   const db = getDb();
   const cityRows = tripIds.length ? await db.select({

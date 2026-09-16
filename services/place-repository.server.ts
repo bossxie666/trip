@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, max, or } from "drizzle-orm";
 import { getDb } from "@/db";
-import { bookingRecords, cityRecords, dayPlaceRecords, dayRecords, itineraryItemRecords, placeRecords, recommendationPlaceOptionRecords, tripCityRecords, tripPlaceRecords, tripRecords, tripStageRecords } from "@/db/schema";
+import { bookingRecords, cityRecords, dayPlaceRecords, dayRecords, itineraryItemRecords, placeRecords, recommendationPlaceOptionRecords, tripCityRecords, tripMemberRecords, tripPlaceRecords, tripRecords, tripStageRecords } from "@/db/schema";
 import { getAmapPoi } from "@/services/amap/amap-web-service.server";
 import type { TripPlaceStatus } from "@/models/travel";
 
@@ -10,10 +10,23 @@ async function getStoredTrip(slug: string) {
   return (await getDb().select().from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1))[0] || null;
 }
 
-export async function getPlaceWorkspace(slug: string) {
+async function assertTripMember(tripId: string, memberId: string) {
+  const membership = (await getDb().select({ memberId: tripMemberRecords.memberId }).from(tripMemberRecords).where(and(eq(tripMemberRecords.tripId, tripId), eq(tripMemberRecords.memberId, memberId))).limit(1))[0];
+  if (!membership) throw new Error("MEMBER_NOT_IN_TRIP");
+}
+
+async function getStoredTripForMember(slug: string, memberId: string) {
+  const trip = await getStoredTrip(slug);
+  if (!trip) throw new Error("TRIP_NOT_FOUND");
+  await assertTripMember(trip.id, memberId);
+  return trip;
+}
+
+export async function getPlaceWorkspace(slug: string, memberId: string) {
   const db = getDb();
   const trip = await getStoredTrip(slug);
   if (!trip) return null;
+  await assertTripMember(trip.id, memberId);
   const tripCities = await db.select({ id: cityRecords.id, name: cityRecords.name }).from(tripCityRecords).innerJoin(cityRecords, eq(tripCityRecords.cityId, cityRecords.id)).where(eq(tripCityRecords.tripId, trip.id)).orderBy(asc(tripCityRecords.position));
   const cityIds = tripCities.map((city) => city.id);
   const stages = await db.select({ id: tripStageRecords.id, cityId: tripStageRecords.cityId, citySlug: cityRecords.slug, cityName: cityRecords.name, title: tripStageRecords.title, sortOrder: tripStageRecords.sortOrder, createdAt: tripStageRecords.createdAt, updatedAt: tripStageRecords.updatedAt }).from(tripStageRecords).innerJoin(cityRecords, eq(tripStageRecords.cityId, cityRecords.id)).where(eq(tripStageRecords.tripId, trip.id)).orderBy(asc(tripStageRecords.sortOrder));
@@ -40,7 +53,7 @@ async function ensureTripPlace(tripId: string, placeId: string, planStatus: Trip
 
 export async function createManualPlace(slug: string, input: { name: string; cityId: string; address: string | null; longitude?: number | null; latitude?: number | null }, actorMemberId: string) {
   const db = getDb();
-  const trip = await getStoredTrip(slug); if (!trip) throw new Error("TRIP_NOT_FOUND");
+  const trip = await getStoredTripForMember(slug, actorMemberId);
   const cityLink = await db.select().from(tripCityRecords).where(and(eq(tripCityRecords.tripId, trip.id), eq(tripCityRecords.cityId, input.cityId))).limit(1);
   if (!cityLink.length) throw new Error("CITY_NOT_IN_TRIP");
   const existing = (await db.select().from(placeRecords).where(and(eq(placeRecords.cityId, input.cityId), eq(placeRecords.name, input.name))).limit(1))[0];
@@ -53,7 +66,7 @@ export async function createManualPlace(slug: string, input: { name: string; cit
 }
 
 export async function createAmapPlace(slug: string, input: { providerPlaceId: string; cityId?: string | null }, actorMemberId: string) {
-  const db = getDb(), trip = await getStoredTrip(slug); if (!trip) throw new Error("TRIP_NOT_FOUND");
+  const db = getDb(), trip = await getStoredTripForMember(slug, actorMemberId);
   const existing = (await db.select().from(placeRecords).where(and(eq(placeRecords.provider, "amap"), eq(placeRecords.providerPlaceId, input.providerPlaceId))).limit(1))[0];
   if (existing) {
     const link = await db.select().from(tripCityRecords).where(and(eq(tripCityRecords.tripId, trip.id), eq(tripCityRecords.cityId, existing.cityId))).limit(1);
@@ -84,8 +97,8 @@ export async function createAmapPlace(slug: string, input: { providerPlaceId: st
   await db.insert(placeRecords).values(place); return place;
 }
 
-export async function getRoutePlaces(slug: string, originPlaceId: string, destinationPlaceId: string) {
-  const db = getDb(), trip = await getStoredTrip(slug); if (!trip) throw new Error("TRIP_NOT_FOUND");
+export async function getRoutePlaces(slug: string, originPlaceId: string, destinationPlaceId: string, actorMemberId: string) {
+  const db = getDb(), trip = await getStoredTripForMember(slug, actorMemberId);
   const linked = await db.select({ place: placeRecords, planStatus: tripPlaceRecords.planStatus }).from(tripPlaceRecords).innerJoin(placeRecords, eq(tripPlaceRecords.placeId, placeRecords.id)).where(and(eq(tripPlaceRecords.tripId, trip.id), inArray(tripPlaceRecords.placeId, [originPlaceId, destinationPlaceId])));
   const origin = linked.find((item) => item.place.id === originPlaceId && (item.planStatus === "selected" || item.planStatus === "locked"))?.place, destination = linked.find((item) => item.place.id === destinationPlaceId && (item.planStatus === "selected" || item.planStatus === "locked"))?.place;
   if (!origin || !destination) throw new Error("PLACE_NOT_IN_TRIP");
@@ -93,8 +106,8 @@ export async function getRoutePlaces(slug: string, originPlaceId: string, destin
   return { origin, destination };
 }
 
-export async function addPlaceToDay(slug: string, dayId: string, placeId: string) {
-  const db = getDb(); const trip = await getStoredTrip(slug); if (!trip) throw new Error("TRIP_NOT_FOUND");
+export async function addPlaceToDay(slug: string, dayId: string, placeId: string, actorMemberId: string) {
+  const db = getDb(); const trip = await getStoredTripForMember(slug, actorMemberId);
   await assertDayInTrip(trip.id, dayId);
   const place = (await db.select().from(placeRecords).where(eq(placeRecords.id, placeId)).limit(1))[0]; if (!place) throw new Error("PLACE_NOT_FOUND");
   const tripCity = await db.select().from(tripCityRecords).where(and(eq(tripCityRecords.tripId, trip.id), eq(tripCityRecords.cityId, place.cityId))).limit(1); if (!tripCity.length) throw new Error("PLACE_CITY_NOT_IN_TRIP");
@@ -104,15 +117,15 @@ export async function addPlaceToDay(slug: string, dayId: string, placeId: string
   await db.insert(dayPlaceRecords).values({ dayId, placeId, sortOrder: highest + 1 }); return true;
 }
 
-export async function setTripPlaceStatus(slug: string, placeId: string, planStatus: TripPlaceStatus) {
-  const db = getDb(); const trip = await getStoredTrip(slug); if (!trip) throw new Error("TRIP_NOT_FOUND");
+export async function setTripPlaceStatus(slug: string, placeId: string, planStatus: TripPlaceStatus, actorMemberId: string) {
+  const db = getDb(); const trip = await getStoredTripForMember(slug, actorMemberId);
   const existing = await db.select({ placeId: tripPlaceRecords.placeId }).from(tripPlaceRecords).where(and(eq(tripPlaceRecords.tripId, trip.id), eq(tripPlaceRecords.placeId, placeId))).limit(1);
   if (!existing.length) throw new Error("PLACE_NOT_IN_TRIP");
   await db.update(tripPlaceRecords).set({ planStatus }).where(and(eq(tripPlaceRecords.tripId, trip.id), eq(tripPlaceRecords.placeId, placeId)));
 }
 
-export async function reorderDayPlaces(slug: string, dayId: string, orderedPlaceIds: string[]) {
-  const db = getDb(); const trip = await getStoredTrip(slug); if (!trip) throw new Error("TRIP_NOT_FOUND"); await assertDayInTrip(trip.id, dayId);
+export async function reorderDayPlaces(slug: string, dayId: string, orderedPlaceIds: string[], actorMemberId: string) {
+  const db = getDb(); const trip = await getStoredTripForMember(slug, actorMemberId); await assertDayInTrip(trip.id, dayId);
   const current = await db.select({ placeId: dayPlaceRecords.placeId }).from(dayPlaceRecords).where(eq(dayPlaceRecords.dayId, dayId));
   const currentIds = current.map((item) => item.placeId).sort(), requested = [...new Set(orderedPlaceIds)].sort();
   if (currentIds.length !== requested.length || currentIds.some((id, index) => id !== requested[index])) throw new Error("INVALID_ORDER");
@@ -120,15 +133,15 @@ export async function reorderDayPlaces(slug: string, dayId: string, orderedPlace
   for (const [index, placeId] of orderedPlaceIds.entries()) await db.update(dayPlaceRecords).set({ sortOrder: index + 1 }).where(and(eq(dayPlaceRecords.dayId, dayId), eq(dayPlaceRecords.placeId, placeId)));
 }
 
-export async function removePlaceFromDay(slug: string, dayId: string, placeId: string) {
-  const db = getDb(); const trip = await getStoredTrip(slug); if (!trip) throw new Error("TRIP_NOT_FOUND"); await assertDayInTrip(trip.id, dayId);
+export async function removePlaceFromDay(slug: string, dayId: string, placeId: string, actorMemberId: string) {
+  const db = getDb(); const trip = await getStoredTripForMember(slug, actorMemberId); await assertDayInTrip(trip.id, dayId);
   await db.delete(dayPlaceRecords).where(and(eq(dayPlaceRecords.dayId, dayId), eq(dayPlaceRecords.placeId, placeId)));
   const remaining = await db.select({ placeId: dayPlaceRecords.placeId }).from(dayPlaceRecords).where(eq(dayPlaceRecords.dayId, dayId)).orderBy(asc(dayPlaceRecords.sortOrder));
   for (const [index, item] of remaining.entries()) await db.update(dayPlaceRecords).set({ sortOrder: index + 1 }).where(and(eq(dayPlaceRecords.dayId, dayId), eq(dayPlaceRecords.placeId, item.placeId)));
 }
 
-export async function removePlaceFromTrip(slug: string, placeId: string) {
-  const db = getDb(); const trip = await getStoredTrip(slug); if (!trip) throw new Error("TRIP_NOT_FOUND");
+export async function removePlaceFromTrip(slug: string, placeId: string, actorMemberId: string) {
+  const db = getDb(); const trip = await getStoredTripForMember(slug, actorMemberId);
   const used = await db.select({ dayId: dayPlaceRecords.dayId }).from(dayPlaceRecords).innerJoin(dayRecords, eq(dayPlaceRecords.dayId, dayRecords.id)).where(and(eq(dayRecords.tripId, trip.id), eq(dayPlaceRecords.placeId, placeId))).limit(1);
   if (used.length) throw new Error("PLACE_STILL_IN_DAY");
   await db.delete(tripPlaceRecords).where(and(eq(tripPlaceRecords.tripId, trip.id), eq(tripPlaceRecords.placeId, placeId)));
@@ -137,6 +150,11 @@ export async function removePlaceFromTrip(slug: string, placeId: string) {
 export async function updateManualPlace(placeId: string, input: { name: string; cityId: string; address: string | null }, actorMemberId: string) {
   const db = getDb(); const place = (await db.select().from(placeRecords).where(eq(placeRecords.id, placeId)).limit(1))[0];
   if (!place) throw new Error("PLACE_NOT_FOUND"); if (place.provider !== "manual") throw new Error("PLACE_NOT_MANUAL");
+  const ownsPlace = place.createdByMemberId === actorMemberId;
+  const sharedMembership = (await db.select({ tripId: tripMemberRecords.tripId }).from(tripPlaceRecords)
+    .innerJoin(tripMemberRecords, eq(tripMemberRecords.tripId, tripPlaceRecords.tripId))
+    .where(and(eq(tripPlaceRecords.placeId, placeId), eq(tripMemberRecords.memberId, actorMemberId))).limit(1))[0];
+  if (!ownsPlace && !sharedMembership) throw new Error("PLACE_MEMBER_REQUIRED");
   const duplicate = await db.select().from(placeRecords).where(and(eq(placeRecords.cityId, input.cityId), eq(placeRecords.name, input.name))).limit(1);
   if (duplicate.some((item) => item.id !== placeId)) throw new Error("PLACE_DUPLICATE");
   await db.update(placeRecords).set({ name: input.name, cityId: input.cityId, address: input.address, updatedByMemberId: actorMemberId, updatedAt: new Date().toISOString() }).where(eq(placeRecords.id, placeId));

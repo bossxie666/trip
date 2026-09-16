@@ -39,7 +39,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     return Response.json({ recommendation }, { status: 201 });
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
-    const status = code === "TRIP_NOT_FOUND" || code === "RECOMMENDATION_NOT_FOUND" ? 404 : code === "PLACE_NOT_IN_TRIP_CITY" || code.startsWith("INVALID_") || code.endsWith("_REQUIRED") ? 400 : 500;
+    const status = code === "TRIP_NOT_FOUND" || code === "RECOMMENDATION_NOT_FOUND" ? 404 : code === "PLACE_NOT_IN_TRIP_CITY" || code === "REFERENCE_URL_INVALID" || code.startsWith("INVALID_") || code.endsWith("_REQUIRED") ? 400 : 500;
     const messages: Record<string, string> = { PLACE_REQUIRED: "请先选择一个真实地点。", GUIDE_COMPONENT_REQUIRED: "请至少选择一个攻略地点。", INVALID_REFERENCE_MEDIA: "参考截图无效，请重新上传。", PLACE_NOT_IN_TRIP_CITY: "地点不属于当前行程城市。" };
     return Response.json({ error: messages[code] || (status === 400 ? "素材信息不完整，请检查后重试。" : "攻略素材保存失败，请重试。") }, { status });
   }

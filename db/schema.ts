@@ -9,6 +9,17 @@ export const memberRecords = sqliteTable("members", {
   createdAt: text("created_at").notNull(),
 }, (table) => [uniqueIndex("idx_members_name").on(table.name)]);
 
+/**
+ * Small, application-level sliding-window counters used for endpoints that
+ * can be brute-forced or spend an external API quota.  The key is a one-way
+ * digest (never a raw IP or member name), and rows are safe to prune by age.
+ */
+export const rateLimitRecords = sqliteTable("rate_limits", {
+  key: text("key").primaryKey(),
+  windowStartedAt: integer("window_started_at").notNull(),
+  count: integer("count").notNull(),
+}, (table) => [index("idx_rate_limits_window").on(table.windowStartedAt)]);
+
 export const tripRecords = sqliteTable("trips", {
   id: text("id").primaryKey(),
   slug: text("slug").notNull(),

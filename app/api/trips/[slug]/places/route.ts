@@ -5,13 +5,18 @@ import type { TripPlaceStatus } from "@/models/travel";
 function errorResponse(error: unknown) {
   const code = error instanceof Error ? error.message : "UNKNOWN";
   const messages: Record<string, [string, number]> = {
-    TRIP_NOT_FOUND: ["没有找到这条行程。", 404], DAY_NOT_IN_TRIP: ["这个 Day 不属于当前行程。", 400], PLACE_NOT_FOUND: ["地点不存在。", 404], PLACE_NOT_IN_TRIP: ["地点不属于当前行程。", 404], CITY_NOT_IN_TRIP: ["城市不属于当前行程。", 400], PLACE_CITY_NOT_IN_TRIP: ["该地点不属于当前行程的城市。", 400], INVALID_ORDER: ["地点顺序与当前 Day 不一致。", 409], PLACE_STILL_IN_DAY: ["地点仍在日程中，请先从 Day 移除。", 409], AMAP_NOT_CONFIGURED: ["地图服务尚未配置。", 503], AMAP_POI_NOT_FOUND: ["没有找到这个高德地点。", 404],
+    TRIP_NOT_FOUND: ["没有找到这条行程。", 404], MEMBER_NOT_IN_TRIP: ["你不是这条行程的成员。", 403], DAY_NOT_IN_TRIP: ["这个 Day 不属于当前行程。", 400], PLACE_NOT_FOUND: ["地点不存在。", 404], PLACE_NOT_IN_TRIP: ["地点不属于当前行程。", 404], CITY_NOT_IN_TRIP: ["城市不属于当前行程。", 400], PLACE_CITY_NOT_IN_TRIP: ["该地点不属于当前行程的城市。", 400], INVALID_ORDER: ["地点顺序与当前 Day 不一致。", 409], PLACE_STILL_IN_DAY: ["地点仍在日程中，请先从 Day 移除。", 409], AMAP_NOT_CONFIGURED: ["地图服务尚未配置。", 503], AMAP_POI_NOT_FOUND: ["没有找到这个高德地点。", 404],
   };
   const [message, status] = messages[code] || (code.startsWith("AMAP_") ? ["高德地点暂时无法保存，请稍后重试。", 502] : ["地点操作失败，请重试。", 500]); return Response.json({ error: message }, { status });
 }
 
 export async function GET(_request: Request, { params }: { params: Promise<{ slug: string }> }) {
-  try { const workspace = await getPlaceWorkspace((await params).slug); return workspace ? Response.json({ workspace }) : Response.json({ error: "没有找到这条行程。" }, { status: 404 }); } catch { return Response.json({ error: "地点数据暂时无法读取。" }, { status: 500 }); }
+  try {
+    const actor = await getCurrentMember();
+    if (!actor) return Response.json({ error: "请先验证旅行成员身份。" }, { status: 401 });
+    const workspace = await getPlaceWorkspace((await params).slug, actor.id);
+    return workspace ? Response.json({ workspace }) : Response.json({ error: "没有找到这条行程。" }, { status: 404 });
+  } catch (error) { return errorResponse(error); }
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
@@ -28,7 +33,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       placeId = (await createAmapPlace(slug, { providerPlaceId, cityId }, actor.id)).id;
     }
     if (!body.dayId || !placeId) return Response.json({ error: "请选择 Day 和地点。" }, { status: 400 });
-    const added = await addPlaceToDay(slug, body.dayId, placeId); return Response.json({ added, workspace: await getPlaceWorkspace(slug) }, { status: added ? 201 : 200 });
+    const added = await addPlaceToDay(slug, body.dayId, placeId, actor.id); return Response.json({ added, workspace: await getPlaceWorkspace(slug, actor.id) }, { status: added ? 201 : 200 });
   } catch (error) { return errorResponse(error); }
 }
 
@@ -38,11 +43,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ sl
     const body = await request.json() as { dayId?: string; orderedPlaceIds?: string[]; placeId?: string; planStatus?: TripPlaceStatus };
     const slug = (await params).slug;
     if (body.placeId && body.planStatus && ["candidate", "selected", "locked"].includes(body.planStatus)) {
-      await setTripPlaceStatus(slug, body.placeId, body.planStatus);
-      return Response.json({ workspace: await getPlaceWorkspace(slug) });
+      await setTripPlaceStatus(slug, body.placeId, body.planStatus, actor.id);
+      return Response.json({ workspace: await getPlaceWorkspace(slug, actor.id) });
     }
     if (!body.dayId || !Array.isArray(body.orderedPlaceIds)) return Response.json({ error: "缺少排序数据。" }, { status: 400 });
-    await reorderDayPlaces(slug, body.dayId, body.orderedPlaceIds.map(String)); return Response.json({ workspace: await getPlaceWorkspace(slug) });
+    await reorderDayPlaces(slug, body.dayId, body.orderedPlaceIds.map(String), actor.id); return Response.json({ workspace: await getPlaceWorkspace(slug, actor.id) });
   } catch (error) { return errorResponse(error); }
 }
 
@@ -50,7 +55,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ s
   try {
     const actor = await getCurrentMember(); if (!actor) return Response.json({ error: "请先验证旅行成员身份。" }, { status: 401 });
     const url = new URL(request.url), dayId = url.searchParams.get("dayId"), placeId = url.searchParams.get("placeId"), scope = url.searchParams.get("scope"); if (!placeId) return Response.json({ error: "缺少地点。" }, { status: 400 });
-    const slug = (await params).slug; if (scope === "trip") await removePlaceFromTrip(slug, placeId); else if (dayId) await removePlaceFromDay(slug, dayId, placeId); else return Response.json({ error: "缺少 Day。" }, { status: 400 });
-    return Response.json({ workspace: await getPlaceWorkspace(slug) });
+    const slug = (await params).slug; if (scope === "trip") await removePlaceFromTrip(slug, placeId, actor.id); else if (dayId) await removePlaceFromDay(slug, dayId, placeId, actor.id); else return Response.json({ error: "缺少 Day。" }, { status: 400 });
+    return Response.json({ workspace: await getPlaceWorkspace(slug, actor.id) });
   } catch (error) { return errorResponse(error); }
 }

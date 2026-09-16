@@ -7,9 +7,11 @@ const creatableStatuses = new Set<CreateTripInput["status"]>(["inspiration", "pl
 
 export async function GET(request: Request) {
   try {
+    const actor = await getCurrentMember();
+    if (!actor) return Response.json({ error: "请先验证旅行成员身份。" }, { status: 401 });
     const requested = new URL(request.url).searchParams.get("status") || "all";
     const status = readableStatuses.has(requested as TripStatus | "all") ? requested as TripStatus | "all" : "all";
-    return Response.json({ trips: await listTrips(status) });
+    return Response.json({ trips: await listTrips(status, actor.id) });
   } catch {
     return Response.json({ error: "行程数据暂时无法读取，请稍后重试。" }, { status: 500 });
   }

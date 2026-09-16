@@ -167,13 +167,21 @@ async function hydrateTrips(rows: (typeof tripRecords.$inferSelect)[]): Promise<
   }));
 }
 
-export async function listTrips(status: TripStatus | "all" = "all") {
+export async function listTrips(status: TripStatus | "all" = "all", memberId?: string) {
   const db = getDb();
-  const rows = status === "all"
-    ? await db.select().from(tripRecords).orderBy(desc(tripRecords.createdAt))
-    : await db.select().from(tripRecords).where(eq(tripRecords.status, status)).orderBy(desc(tripRecords.createdAt));
+  if (!memberId) return [];
+  const memberTripRows = await db.select({ tripId: tripMemberRecords.tripId })
+    .from(tripMemberRecords)
+    .where(eq(tripMemberRecords.memberId, memberId));
+  const tripIds = [...new Set(memberTripRows.map((row) => row.tripId))];
+  if (!tripIds.length) return [];
+  const conditions = [inArray(tripRecords.id, tripIds)];
+  if (status !== "all") conditions.push(eq(tripRecords.status, status));
+  const rows = await db.select().from(tripRecords).where(and(...conditions)).orderBy(desc(tripRecords.createdAt));
   const storedTrips = await hydrateTrips(rows);
-  const seeds = seedFallbackAllowed() ? (status === "all" ? seedTrips : seedTrips.filter((trip) => trip.status === status)) : [];
+  const seeds = seedFallbackAllowed()
+    ? seedTrips.filter((trip) => trip.members?.some((member) => member.id === memberId) && (status === "all" || trip.status === status))
+    : [];
   const storedSlugs = new Set(storedTrips.map((trip) => trip.slug));
   return [...storedTrips, ...seeds.filter((trip) => !storedSlugs.has(trip.slug))];
 }
@@ -187,14 +195,17 @@ export async function findTripBySlug(slug: string) {
 }
 
 /** Minimal read used by route metadata; deliberately avoids hydrating Trip relations. */
-export async function findTripMetadataBySlug(slug: string) {
+export async function findTripMetadataBySlug(slug: string, memberId?: string) {
+  if (!memberId) return undefined;
   const row = (await getDb()
     .select({ title: tripRecords.title, slug: tripRecords.slug, status: tripRecords.status })
     .from(tripRecords)
-    .where(eq(tripRecords.slug, slug))
+    .innerJoin(tripMemberRecords, eq(tripMemberRecords.tripId, tripRecords.id))
+    .where(and(eq(tripRecords.slug, slug), eq(tripMemberRecords.memberId, memberId)))
     .limit(1))[0];
   if (row) return row;
   const seed = seedFallbackAllowed() ? getSeedTripBySlug(slug) : undefined;
+  if (seed && !seed.members?.some((member) => member.id === memberId)) return undefined;
   return seed ? { title: seed.title, slug: seed.slug, status: seed.status } : undefined;
 }
 
@@ -315,6 +326,11 @@ export async function updateTrip(slug: string, input: UpdateTripInput, actorMemb
   const db = getDb();
   const row = (await db.select().from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1))[0];
   if (!row) return null;
+  const actorMembership = await db.select({ memberId: tripMemberRecords.memberId })
+    .from(tripMemberRecords)
+    .where(and(eq(tripMemberRecords.tripId, row.id), eq(tripMemberRecords.memberId, actorMemberId)))
+    .limit(1);
+  if (!actorMembership[0]) throw new Error("TRIP_MEMBER_FORBIDDEN");
   const memberIds = [...new Set([...input.memberIds, actorMemberId])];
   const currentMembers = await db.select().from(tripMemberRecords).where(eq(tripMemberRecords.tripId, row.id));
   const currentIds = new Set(currentMembers.map((member) => member.memberId)), requestedIds = new Set(memberIds);
@@ -343,10 +359,17 @@ export async function updateTrip(slug: string, input: UpdateTripInput, actorMemb
   return findTripBySlug(slug);
 }
 
-export async function deleteTrip(slug: string) {
+export async function deleteTrip(slug: string, actorMemberId?: string) {
   const db = getDb();
   const row = (await db.select().from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1))[0];
   if (!row) return false;
+  if (actorMemberId) {
+    const actorMembership = await db.select({ memberId: tripMemberRecords.memberId })
+      .from(tripMemberRecords)
+      .where(and(eq(tripMemberRecords.tripId, row.id), eq(tripMemberRecords.memberId, actorMemberId)))
+      .limit(1);
+    if (!actorMembership[0]) throw new Error("TRIP_MEMBER_FORBIDDEN");
+  }
   // D1/SQLite evaluates RESTRICT foreign keys while cascading a parent
   // delete.  A legacy Trip can have itinerary items that still reference a
   // Trip stage, so deleting `trips` directly may try to remove the stage

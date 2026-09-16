@@ -26,6 +26,7 @@ const planningRecommendationLimit = 8;
 const libraryRecommendationPageSize = 12;
 
 export async function getPlanWorkspace(slug: string, memberId?: string, loaderOptions: { view?: PlanWorkspaceView; requestContext?: TripRequestContext; recommendations?: RecommendationQuery } = {}) {
+  if (loaderOptions.requestContext && !loaderOptions.requestContext.permissions.canRead) return null;
   const trip = loaderOptions.requestContext?.trip?.slug === slug ? loaderOptions.requestContext.trip : await findTripBySlug(slug);
   if (!trip) return null;
   const db = getDb();

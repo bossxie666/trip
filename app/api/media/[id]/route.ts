@@ -1,12 +1,13 @@
 import { getRuntimeEnv } from "@/db";
 import { getCurrentMember } from "@/services/auth.server";
-import { getReadyMediaAsset } from "@/services/media-service.server";
+import { getAuthorizedReadyMediaAsset } from "@/services/media-service.server";
 
 const variants = { thumb: { width: 480, quality: 76 }, card: { width: 960, quality: 82 }, display: { width: 1600, quality: 84 } } as const;
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  if (!await getCurrentMember()) return Response.json({ error: "请先验证旅行成员身份。" }, { status: 401 });
-  const asset = await getReadyMediaAsset((await params).id);
+  const actor = await getCurrentMember();
+  if (!actor) return Response.json({ error: "请先验证旅行成员身份。" }, { status: 401 });
+  const asset = await getAuthorizedReadyMediaAsset((await params).id, actor.id);
   if (!asset) return Response.json({ error: "图片不存在。" }, { status: 404 });
   const env = getRuntimeEnv();
   if (!env.MEDIA) return Response.json({ error: "图片存储暂时不可用。" }, { status: 503 });
