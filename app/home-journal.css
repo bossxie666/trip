@@ -1028,7 +1028,9 @@
     background: transparent;
   }
   .atlas-paper-map { inset: 0; z-index: 0; width: 100%; height: 100%; opacity: 1; }
-  .atlas-paper-map img { object-fit: cover; object-position: center 53%; }
+  /* Keep the supplied atlas artwork anchored at its top edge.  This preserves
+   * the reference's wood desk and blank paper above the watercolor map. */
+  .atlas-paper-map img { object-fit: cover; object-position: center top; }
   .home-atlas > svg { inset: 7% 9% 8%; z-index: 3; width: 82%; height: 85%; }
   .atlas-caption { top: 14px; left: 19px; z-index: 5; }
   .atlas-polaroid { width: 46%; max-width: 175px; }
