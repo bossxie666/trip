@@ -1112,13 +1112,13 @@
   }
 
   .home-title-picture,
-  .home-title-asset { width: 90%; }
+  .home-title-asset { width: min(84%, 300px); }
 
   .home-manifesto-line { margin-top: -24px; }
 
   .atlas-paper-map {
-    inset: 40% 0 0;
-    height: 60%;
+    inset: 45% 0 0;
+    height: 55%;
   }
 
   .atlas-paper-map img {
@@ -1127,13 +1127,13 @@
   }
 
   .home-atlas > svg {
-    inset: 43% 9% 5%;
-    height: 52%;
+    inset: 47% 9% 5%;
+    height: 48%;
   }
 
   .atlas-polaroid { width: 41%; max-width: 160px; }
   .atlas-polaroid-primary { left: 8%; bottom: 24%; }
-  .atlas-stamp-asset { top: 41%; right: 4%; width: 64px; opacity: .38; }
+  .atlas-stamp-asset { top: 46%; right: 4%; width: 64px; opacity: .38; }
   .atlas-compass-asset { right: 6%; bottom: 13%; width: 56px; opacity: .62; }
 }
 

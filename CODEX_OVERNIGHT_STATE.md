@@ -43,6 +43,7 @@ Phase B visual consistency pass: Homepage V3 is locked to the supplied reference
 - Re-layered the mobile Atlas so its watercolor map begins below the title/stats paper area, reduced the mobile chrome scale, and added the supplied stamp/compass assets as non-interactive decoration.
 - Kept Homepage Atlas city-only and removed a tempting cross-Trip route overlay rather than implying a route that is not present in the data model.
 - Added a CSS-only whole-site reference lock using the existing assets in `public/assets/homepage-v3`: Trips now use two-column paper-note cards with polaroid covers, Albums use paper-note cards and polaroid photo frames, Guestbook composer uses a paper note, and Map keeps its paper-note trip entries. Mobile subpages collapse to one column without changing data or controls.
+- Real Preview screenshots exposed a mobile first-paint/layout issue: the title asset could paint one frame late and the old 375px title size pushed stats into the Atlas edge. The final mobile override now caps the title artwork, moves the Atlas start line down, and keeps the stats on the blank paper area; the override remains overflow-free in the simulated 375px check.
 
 ## Blockers
 
