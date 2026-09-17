@@ -4,7 +4,7 @@ Last updated: 2026-09-17 (Asia/Shanghai)
 
 ## Current phase
 
-Phase A/B/C complete: Preview and Production release regression. The cross-member Trip-cover authorization fix passed local gates, Cloudflare Preview Build/Version gates, and read-only Production smoke checks. Production is now running the validated commit through the GitHub → Cloudflare Workers Builds chain; no local Wrangler deployment was used.
+Phase B visual consistency pass: Homepage V3 is locked to the supplied reference assets; the same paper / polaroid / botanical language is being applied to Trips, Map, Albums, and Guestbook on the non-production `homepage-v3` branch. Production remains untouched.
 
 ## Completed
 
@@ -42,6 +42,7 @@ Phase A/B/C complete: Preview and Production release regression. The cross-membe
 - Started a new reference-locked visual pass using the user-provided assets in `/Users/bossxie/Desktop/网站资产`; no replacement business imagery was generated.
 - Re-layered the mobile Atlas so its watercolor map begins below the title/stats paper area, reduced the mobile chrome scale, and added the supplied stamp/compass assets as non-interactive decoration.
 - Kept Homepage Atlas city-only and removed a tempting cross-Trip route overlay rather than implying a route that is not present in the data model.
+- Added a CSS-only whole-site reference lock using the existing assets in `public/assets/homepage-v3`: Trips now use two-column paper-note cards with polaroid covers, Albums use paper-note cards and polaroid photo frames, Guestbook composer uses a paper note, and Map keeps its paper-note trip entries. Mobile subpages collapse to one column without changing data or controls.
 
 ## Blockers
 
@@ -49,4 +50,4 @@ Phase A/B/C complete: Preview and Production release regression. The cross-membe
 
 ## Next step
 
-Visual pass complete for this scope. Keep `homepage-v3` as the non-production review branch, keep `origin` untouched, and do not promote to `v2.4-r1` until the user explicitly accepts the screenshots. No migration, local Wrangler, or Production data/config changes.
+Run the full gates after the whole-site CSS pass, push only `homepage-v3` through GitHub → Cloudflare Workers Builds, then capture/read-only Preview screenshots for Homepage, Trips, Map, Albums, and Guestbook at desktop and mobile widths. Keep `origin` untouched and do not promote to `v2.4-r1` until the user accepts the visual result. No migration, local Wrangler, or Production data/config changes.

@@ -1236,3 +1236,226 @@
   .map-index-entry b { grid-column: 3; grid-row: 1 / span 2; }
   .journal-subpage.compact-page { padding-top: 18px; }
 }
+
+/* Whole-site reference lock.  Subpages keep their real data and controls, but
+ * use the same supplied paper shell and tactile card language as the homepage. */
+body:has(.archive-index-with-shell),
+body:has(.map-index),
+body:has(.journal-subpage) {
+  background: #e8d9bf url("/assets/homepage-v3/desktop-shell.webp") center top / cover fixed no-repeat;
+}
+
+.archive-index-with-shell,
+.map-index,
+.journal-subpage {
+  position: relative;
+  isolation: isolate;
+  width: min(1320px, 100%);
+  max-width: none;
+  min-height: calc(100vh - 72px);
+  margin: 0 auto;
+  padding: 42px clamp(24px, 4vw, 58px) 100px;
+  overflow: visible;
+  background: rgba(255, 253, 248, .35);
+}
+
+.archive-index-toolbar {
+  margin-bottom: 22px;
+  padding: 0 6px 14px;
+  border-bottom: 1px solid rgba(16, 58, 99, .16);
+}
+
+.trip-tabs a {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--home-navy);
+  font-weight: 750;
+}
+
+.trip-tabs a:hover,
+.trip-tabs a.active {
+  border-bottom-color: var(--home-blue);
+  background: transparent;
+  color: var(--home-blue);
+}
+
+.archive-index-toolbar .new-trip-link {
+  box-shadow: 3px 4px 0 rgba(16, 58, 99, .14);
+}
+
+.trip-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.trip-list-card {
+  overflow: visible;
+  border: 0;
+  background: url("/assets/homepage-v3/paper-note-01.webp") center / 100% 100% no-repeat;
+  filter: drop-shadow(0 7px 8px rgba(71, 56, 36, .13));
+  transform: rotate(-.35deg);
+}
+
+.trip-list-card:nth-child(even) {
+  background-image: url("/assets/homepage-v3/paper-note-02.webp");
+  transform: rotate(.45deg);
+}
+
+.trip-card-main {
+  grid-template-columns: minmax(145px, 42%) minmax(0, 1fr);
+  gap: 22px;
+  min-height: 214px;
+  padding: 26px 28px 18px;
+}
+
+.trip-card-main > img,
+.trip-list-card .trip-cover-empty {
+  width: 100%;
+  height: 148px;
+  padding: 8px 8px 24px;
+  object-fit: cover;
+  background: #fffdf8;
+  box-shadow: 0 5px 10px rgba(49, 43, 34, .18);
+  transform: rotate(-2deg);
+}
+
+.trip-list-card:nth-child(even) .trip-card-main > img,
+.trip-list-card:nth-child(even) .trip-cover-empty { transform: rotate(2deg); }
+
+.trip-card-main > div { align-self: center; }
+.trip-card-main > div > span { color: var(--home-red); letter-spacing: .08em; }
+.trip-card-main h2 { margin: 8px 0 7px; color: var(--home-navy); font-family: "KaiTi", serif; font-size: clamp(24px, 2.2vw, 34px); }
+.trip-card-main p { color: #60778a; font-size: 11px; line-height: 1.55; }
+
+.trip-card-footer {
+  margin: 0 28px;
+  padding: 10px 0 24px;
+  border-top: 1px dashed rgba(16, 58, 99, .18);
+}
+
+.trip-plan-link {
+  min-height: 34px;
+  padding: 7px 11px;
+  border: 1px solid var(--home-blue);
+  border-radius: 0;
+  color: var(--home-blue);
+  font-size: 10px;
+}
+
+.trip-empty {
+  border: 0;
+  background: url("/assets/homepage-v3/paper-note-02.webp") center / 100% 100% no-repeat;
+  filter: drop-shadow(0 5px 7px rgba(71, 56, 36, .1));
+}
+
+.journal-subpage { color: var(--home-navy); }
+.journal-subpage > header { border-bottom-color: rgba(16, 58, 99, .16); }
+.journal-subpage > header h1,
+.album-page > header h1 { color: var(--home-navy); font-family: "KaiTi", serif; }
+
+.album-index-actions { margin-bottom: 22px; }
+.album-index-actions button,
+.album-empty button,
+.album-form button,
+.album-upload label {
+  box-shadow: 3px 4px 0 rgba(16, 58, 99, .14);
+}
+
+.album-form {
+  border: 0;
+  background: url("/assets/homepage-v3/paper-note-02.webp") center / 100% 100% no-repeat;
+  box-shadow: 0 6px 9px rgba(71, 56, 36, .11);
+}
+
+.album-empty {
+  border: 0;
+  background: url("/assets/homepage-v3/paper-note-01.webp") center / 100% 100% no-repeat;
+  filter: drop-shadow(0 7px 8px rgba(71, 56, 36, .12));
+}
+
+.album-card {
+  position: relative;
+  padding: 20px 20px 26px;
+  border: 0;
+  background: url("/assets/homepage-v3/paper-note-01.webp") center / 100% 100% no-repeat;
+  box-shadow: none;
+  filter: drop-shadow(0 7px 8px rgba(71, 56, 36, .13));
+  transform: rotate(-.5deg);
+}
+
+.album-card:nth-child(even) {
+  background-image: url("/assets/homepage-v3/paper-note-02.webp");
+  transform: rotate(.65deg);
+}
+
+.album-card img,
+.album-card-empty {
+  padding: 8px 8px 24px;
+  border: 0;
+  background: #fffdf8;
+  box-shadow: 0 5px 10px rgba(49, 43, 34, .16);
+}
+
+.album-card > div:last-child { padding: 15px 6px 0; }
+.album-card h2 { color: var(--home-navy); font-family: "KaiTi", serif; }
+
+.album-detail-page .album-photo-grid figure {
+  border: 0;
+  background: url("/assets/homepage-v3/polaroid-frame-01.webp") center / 100% 100% no-repeat;
+  box-shadow: none;
+  filter: drop-shadow(0 5px 7px rgba(71, 56, 36, .12));
+}
+
+.album-detail-page .album-photo-grid figure:nth-child(even) {
+  background-image: url("/assets/homepage-v3/polaroid-frame-02.webp");
+  transform: rotate(.7deg);
+}
+
+.guestbook-composer {
+  border: 0;
+  background: url("/assets/homepage-v3/paper-note-02.webp") center / 100% 100% no-repeat;
+  box-shadow: 0 6px 9px rgba(71, 56, 36, .1);
+}
+
+.guestbook-composer textarea {
+  border-color: rgba(16, 58, 99, .2);
+  background: rgba(255, 253, 248, .42);
+}
+
+.guestbook-note { filter: drop-shadow(0 5px 7px rgba(71, 56, 36, .13)); }
+.guestbook-note:nth-child(3n + 1) { transform: rotate(-.8deg); }
+.guestbook-note:nth-child(3n + 2) { transform: rotate(.5deg); }
+.guestbook-note:nth-child(3n) { transform: rotate(-.35deg); }
+
+@media (max-width: 680px) {
+  body:has(.archive-index-with-shell),
+  body:has(.map-index),
+  body:has(.journal-subpage) {
+    background-image: url("/assets/homepage-v3/mobile-shell.webp");
+  }
+
+  .archive-index-with-shell,
+  .map-index,
+  .journal-subpage {
+    min-height: calc(100svh - var(--mobile-header-height, 56px) - var(--mobile-nav-height, 76px));
+    padding: 24px 16px 96px;
+    background: rgba(255, 253, 248, .26);
+  }
+
+  .archive-index-toolbar { padding-inline: 2px; }
+  .trip-list { grid-template-columns: 1fr; gap: 20px; }
+  .trip-card-main { grid-template-columns: 40% minmax(0, 1fr); gap: 16px; min-height: 174px; padding: 22px 22px 14px; }
+  .trip-card-main > img,
+  .trip-list-card .trip-cover-empty { height: 126px; padding-bottom: 20px; }
+  .trip-card-main h2 { font-size: 23px; }
+  .trip-card-main p { font-size: 10px; }
+  .trip-card-footer { margin-inline: 22px; padding-bottom: 20px; }
+  .album-grid { grid-template-columns: 1fr; gap: 18px; }
+  .album-card { padding: 18px 18px 24px; }
+  .album-form { grid-template-columns: 1fr; padding: 20px; }
+  .album-form label:last-of-type,
+  .album-form > div { grid-column: auto; }
+  .album-detail-page .album-photo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+}
