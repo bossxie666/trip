@@ -1,8 +1,9 @@
 /* eslint-disable @next/next/no-img-element */
 import { redirect } from "next/navigation";
-import { ArrowRight, BookOpen, Camera, MapPin, MessageSquareText, Plane, Plus, Route } from "lucide-react";
+import { ArrowRight, BookOpen, Camera, MapPin, MessageSquareText, Plane, Route } from "lucide-react";
 import { SiteHeader, SiteMobileNav } from "@/components/site/SiteHeader";
 import { HomeAtlas } from "@/components/home/HomeAtlas";
+import { HomePhotoRail } from "@/components/home/HomePhotoRail";
 import { GuestbookBoard } from "@/components/home/GuestbookBoard";
 import { WorkspaceNavLink as Link } from "@/components/trip/WorkspaceNavLink";
 import { getCurrentMember } from "@/services/auth.server";
@@ -19,6 +20,13 @@ export default async function TravelArchiveHome() {
   const dashboard = await getHomeDashboard(current.id);
   const fallbackPhotos = dashboard.trips.map((trip) => cover(trip.cover)).filter((value): value is string => Boolean(value));
   const wallTrips = dashboard.trips.filter((trip) => cover(trip.cover));
+  const wallPhotos = wallTrips.map((trip, index) => ({
+    id: trip.id,
+    src: cover(trip.cover)!,
+    alt: trip.title,
+    label: trip.cities[0]?.name || trip.title,
+    frame: `/assets/homepage-v3/polaroid-frame-${index % 2 ? "02" : "01"}.webp`,
+  }));
   const next = dashboard.upcoming;
   const nextCityNames = next ? (() => {
     const names = next.cities.map((city) => city.name);
@@ -55,11 +63,7 @@ export default async function TravelArchiveHome() {
       <div className="home-lower-band mobile-home-secondary">
         <section className="home-section home-photo-wall mobile-home-secondary" id="travel-wall">
           <header><div><Camera size={25} /><h2>旅行影像墙</h2></div><span>来自真实行程照片</span></header>
-          <div className={`home-photo-strip${wallTrips.length <= 2 ? " home-photo-strip-sparse" : ""}`}>
-            {wallTrips.map((trip, index) => <figure key={trip.id} className={`home-photo-card home-photo-card-${index % 4}`}><div className="home-photo-polaroid"><img className="home-photo-image" src={cover(trip.cover)!} alt={trip.title} width={520} height={380} loading={index < 3 ? "eager" : "lazy"} /><img className="home-photo-frame" src={`/assets/homepage-v3/polaroid-frame-${index % 2 ? "02" : "01"}.webp`} alt="" aria-hidden="true" /></div><figcaption><b>{trip.cities[0]?.name || trip.title}</b><span>{trip.startDate?.slice(0, 7).replace("-", ".") || "日期未定"}</span></figcaption></figure>)}
-            {wallTrips.length <= 2 && <Link className="home-photo-manage-card" href="/albums" aria-label="打开相册添加精选照片"><span className="home-photo-manage-icon" aria-hidden="true"><Plus size={25} /></span></Link>}
-            {!wallTrips.length && <div className="home-photo-wall-empty">为行程添加照片后，影像会在这里排成一面旅行墙。</div>}
-          </div>
+          <HomePhotoRail items={wallPhotos} />
         </section>
 
         <div className="home-lower-grid mobile-home-secondary">

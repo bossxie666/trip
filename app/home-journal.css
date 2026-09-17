@@ -1166,6 +1166,43 @@
 .home-photo-manage-card strong,
 .home-photo-manage-card small { display: none; }
 
+/* Featured rail: only real Photo Library-backed cards enter this interaction.
+ * The rail is intentionally presentation-only; it never changes ordering or
+ * ownership of the underlying media records. */
+.home-photo-rail-shell { position: relative; min-width: 0; }
+.home-photo-strip.is-rail {
+  overflow-x: auto;
+  cursor: grab;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  touch-action: pan-y;
+}
+.home-photo-strip.is-rail::-webkit-scrollbar { display: none; }
+.home-photo-strip.is-rail.is-dragging { cursor: grabbing; user-select: none; }
+.home-photo-rail-control {
+  position: absolute;
+  z-index: 4;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid rgba(16, 58, 99, .24);
+  border-radius: 50%;
+  background: rgba(255, 253, 248, .88);
+  color: var(--home-navy);
+  box-shadow: 0 3px 8px rgba(71, 56, 36, .12);
+  transform: translateY(-50%);
+}
+.home-photo-rail-control:hover { background: #fffdf8; }
+.home-photo-rail-control-prev { left: 3px; }
+.home-photo-rail-control-next { right: 3px; }
+
+@media (max-width: 767px) {
+  .home-photo-rail-control { display: none; }
+}
+
 /* Overnight finalization: paper carries the copy; controls are kept as
  * light labels on the existing shell rather than opaque SaaS panels. */
 .site-header {
