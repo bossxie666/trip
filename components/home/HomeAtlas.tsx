@@ -14,12 +14,19 @@ function plotted(cities: City[]) {
   const maxLng = 135;
   const minLat = 18;
   const maxLat = 54;
-  return usable.map((city, index) => ({
+  const projected = usable.map((city, index) => ({
     ...city,
     x: 9 + Math.min(1, Math.max(0, (city.centerLng - minLng) / (maxLng - minLng))) * 82,
     y: 86 - Math.min(1, Math.max(0, (city.centerLat - minLat) / (maxLat - minLat))) * 72,
     index,
   }));
+  const clamp = (value: number) => Math.min(94, Math.max(6, value));
+  return projected.map((city, index) => {
+    const closeBefore = projected.slice(0, index).filter((other) => Math.hypot(other.x - city.x, other.y - city.y) < 5.5);
+    if (!closeBefore.length) return city;
+    const direction = closeBefore.length % 2 ? 1 : -1;
+    return { ...city, x: clamp(city.x + direction * 2.8), y: clamp(city.y + direction * 4) };
+  });
 }
 
 export function HomeAtlas({ cities, photos, fallbackPrimary, fallbackSecondary }: { cities: City[]; photos: Photo[]; fallbackPrimary?: string | null; fallbackSecondary?: string | null }) {
