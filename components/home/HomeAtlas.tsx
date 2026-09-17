@@ -47,7 +47,7 @@ export function HomeAtlas({ cities, photos, fallbackPrimary, fallbackSecondary }
       <img className="atlas-polaroid-frame" src="/assets/homepage-v3/polaroid-frame-02.webp" alt="" aria-hidden="true" />
       <figcaption>地图照片</figcaption><HomeFeaturedPhotoEditor slotKey="map_secondary" />
     </figure>
-    <div className="atlas-stamp" aria-hidden="true">旅<br />途</div>
-    <div className="atlas-compass" aria-hidden="true"><i>北</i><b>✦</b><span>南</span></div>
+    <img className="atlas-stamp-asset" src="/assets/homepage-v3/sticker-airmail.webp" alt="" aria-hidden="true" />
+    <img className="atlas-compass-asset" src="/assets/homepage-v3/sticker-compass.webp" alt="" aria-hidden="true" />
   </div>;
 }

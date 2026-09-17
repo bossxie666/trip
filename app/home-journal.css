@@ -773,6 +773,29 @@
 .atlas-polaroid:focus-within .home-photo-editor { opacity: 1; }
 .atlas-stamp,
 .atlas-compass { display: none; }
+.atlas-stamp-asset,
+.atlas-compass-asset {
+  position: absolute;
+  z-index: 4;
+  display: block;
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+}
+.atlas-stamp-asset {
+  top: 11%;
+  right: 6%;
+  width: clamp(56px, 10%, 88px);
+  opacity: .34;
+  transform: rotate(8deg);
+}
+.atlas-compass-asset {
+  right: 8%;
+  bottom: 5%;
+  width: clamp(50px, 10%, 78px);
+  opacity: .58;
+  transform: rotate(-5deg);
+}
 
 .home-next-trip {
   padding: 31px 25px 23px;
@@ -1027,15 +1050,17 @@
     border: 0;
     background: transparent;
   }
-  .atlas-paper-map { inset: 0; z-index: 0; width: 100%; height: 100%; opacity: 1; }
-  /* Keep the supplied atlas artwork anchored at its top edge.  This preserves
-   * the reference's wood desk and blank paper above the watercolor map. */
+  .atlas-paper-map { inset: 28% 0 0; z-index: 0; width: 100%; height: 72%; opacity: 1; }
+  /* Keep the title and stats on the blank paper area, then bring the supplied
+   * watercolor atlas into the lower page like the mobile reference. */
   .atlas-paper-map img { object-fit: cover; object-position: center top; }
-  .home-atlas > svg { inset: 7% 9% 8%; z-index: 3; width: 82%; height: 85%; }
+  .home-atlas > svg { inset: 35% 9% 5%; z-index: 3; width: 82%; height: 60%; }
   .atlas-caption { top: 14px; left: 19px; z-index: 5; }
   .atlas-polaroid { width: 46%; max-width: 175px; }
-  .atlas-polaroid-primary { left: 4%; bottom: 16%; }
+  .atlas-polaroid-primary { left: 4%; bottom: 12%; }
   .atlas-polaroid-secondary { display: none; }
+  .atlas-stamp-asset { top: 35%; right: 4%; width: 70px; opacity: .38; }
+  .atlas-compass-asset { right: 6%; bottom: 6%; width: 58px; opacity: .62; }
   .home-next-trip,
   .home-lower-band,
   .mobile-home-secondary { display: none !important; }
@@ -1056,6 +1081,60 @@
     box-shadow: 0 -8px 24px rgba(35, 43, 46, .08);
     backdrop-filter: blur(14px);
   }
+}
+
+/* Reference-locked mobile composition: reserve a paper-led title area above
+ * the watercolor map instead of letting the atlas artwork cover the heading. */
+@media (max-width: 767px) {
+  :root {
+    --mobile-header-height: 56px;
+    --mobile-nav-height: 76px;
+  }
+
+  .site-header {
+    min-height: var(--mobile-header-height);
+    padding: 7px 14px;
+  }
+
+  .site-mobile-tools {
+    top: 16px;
+    left: 14px;
+    gap: 12px;
+  }
+
+  .site-mobile-tools svg { width: 21px; height: 21px; }
+  .site-mobile-tools-divider { height: 22px; }
+  .site-header .member-identity-trigger img,
+  .site-header .member-identity-trigger i { width: 28px; height: 28px; }
+
+  .mobile-home {
+    height: calc(100svh - var(--mobile-header-height) - var(--mobile-nav-height));
+  }
+
+  .home-title-picture,
+  .home-title-asset { width: 90%; }
+
+  .home-manifesto-line { margin-top: -24px; }
+
+  .atlas-paper-map {
+    inset: 40% 0 0;
+    height: 60%;
+  }
+
+  .atlas-paper-map img {
+    object-fit: cover;
+    object-position: center top;
+  }
+
+  .home-atlas > svg {
+    inset: 43% 9% 5%;
+    height: 52%;
+  }
+
+  .atlas-polaroid { width: 41%; max-width: 160px; }
+  .atlas-polaroid-primary { left: 8%; bottom: 24%; }
+  .atlas-stamp-asset { top: 41%; right: 4%; width: 64px; opacity: .38; }
+  .atlas-compass-asset { right: 6%; bottom: 13%; width: 56px; opacity: .62; }
 }
 
 /* Feedback polish: crop the stacked sticker sprite to its single top label so

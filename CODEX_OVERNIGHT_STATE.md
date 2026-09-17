@@ -37,6 +37,9 @@ Phase A/B/C complete: Preview and Production release regression. The cross-membe
 - Added this persistent state file.
 - Applied the CSS-only mobile atlas crop correction (`object-position: center top`) in `app/home-journal.css` in the prior release cycle.
 - Fixed Trip-cover authorization for members of the referencing Trip and added a read-only regression test; no data, binding, migration, secret, route, or Production changes.
+- Started a new reference-locked visual pass using the user-provided assets in `/Users/bossxie/Desktop/网站资产`; no replacement business imagery was generated.
+- Re-layered the mobile Atlas so its watercolor map begins below the title/stats paper area, reduced the mobile chrome scale, and added the supplied stamp/compass assets as non-interactive decoration.
+- Kept Homepage Atlas city-only and removed a tempting cross-Trip route overlay rather than implying a route that is not present in the data model.
 
 ## Blockers
 
@@ -44,4 +47,4 @@ Phase A/B/C complete: Preview and Production release regression. The cross-membe
 
 ## Next step
 
-Persist the final release report, keep `origin` untouched, and resume only for new user-scope work; the validated Production release is complete. No migration or local Wrangler.
+Run the final visual screenshot pass against the reference at 1440×810 and 375×667 after the visual changes are published through the existing non-production path. Keep `origin` untouched; no migration, local Wrangler, or Production data/config changes.
