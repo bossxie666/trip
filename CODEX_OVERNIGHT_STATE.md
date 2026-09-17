@@ -4,7 +4,7 @@ Last updated: 2026-09-17 (Asia/Shanghai)
 
 ## Current phase
 
-Phase C route and visual gate: Homepage V3 and the shared scrapbook surfaces are running on the non-production `homepage-v3` branch. Production remains untouched during this pass.
+Phase D release verification: the reference-locked Homepage V3 and shared scrapbook surfaces are live through the GitHub → Cloudflare Workers Builds chain. Both `homepage-v3` Preview and `v2.4-r1` Production have passed the current read-only smoke gates.
 
 ## Completed
 
@@ -24,6 +24,10 @@ Phase C route and visual gate: Homepage V3 and the shared scrapbook surfaces are
 - Read-only authenticated Preview route checks passed for `/`, `/trips`, `/map`, `/albums`, `/messages`, `/search`, `/trips/new`, and the real planning route `/trips/gogogo-2026/plan`; all returned the expected page rather than the unlock screen. GET health checks for `/api/trips`, `/api/albums`, `/api/guestbook`, and `/api/amap/config` returned 200 (method-specific 405 responses for POST-only endpoints are expected).
 - After the Preview hard gates passed, the same commit was fast-forwarded to `v2.4-r1`. Cloudflare Production Build `7c5c9d29-2f37-4d07-bd24-a794cc8377bc` completed successfully with Version `0f467a93-862a-4a57-b7e9-59672efd1037`; authenticated Production Homepage and `/api/amap/config` returned normally, with the desktop/mobile title and Atlas assets served from the new release.
 - Production Build `52567dad-3d6a-4fd0-bf27-b0ca022ef007` / Version `397c0a57-0218-4bd1-a496-b44cadae1be2` completed successfully after the authorized fast-forward to `v2.4-r1`; read-only Production route, AMap, responsive, and unauthenticated API-protection checks pass.
+- The presentation-only real-photo rail was added in commit `949bc8a58cdf5efd77f8a6d72e3e093fb0accb65`. It renders the existing authorized Trip-cover photos, keeps the `+` manager tile for sparse data, and enables arrows, pointer drag, and keyboard navigation only when four or more real photos exist.
+- Preview Build `edd6c7c1-939b-4842-939b-1b1af3fca16c` produced Version `31ee5b41-2d32-49f4-bb26-65fd2714ab26` and refreshed `https://homepage-v3-trip-archive.bossxie666.workers.dev`; authenticated Desktop 1440×810 and Mobile 375×667 captures were saved under `/Users/bossxie/Desktop/codex/旅行/visual-evidence`.
+- After the Preview gates passed, `949bc8a` was fast-forwarded to `v2.4-r1`. Production Build `8b9d77dc-20d3-46ba-8fc3-77259a091449` completed successfully with Version `fbb88cba-0eb8-44c1-8e63-8c9561cef130`; the live Homepage contains the rail component, serves the correct title assets, and remains overflow-free.
+- Production visual asset fetch audit returned HTTP 200 for the Homepage shell, title, Atlas, polaroid, stamp, compass, botanical, paper-plane, airmail, and real cover assets.
 
 ## Bugs / findings
 
@@ -55,4 +59,4 @@ Phase C route and visual gate: Homepage V3 and the shared scrapbook surfaces are
 
 ## Next step
 
-Release hard gates are complete for the current code baseline. Keep the evidence under `/Users/bossxie/Desktop/codex/旅行/visual-evidence`, preserve `origin` and the D1/R2 identities, and only open a new task for later visual refinements or additional user-acceptance coverage.
+Keep the evidence under `/Users/bossxie/Desktop/codex/旅行/visual-evidence`, preserve `origin` and the D1/R2 identities, and only open a new task for later visual refinements or additional user-acceptance coverage. No further deployment or migration is required for this pass.
