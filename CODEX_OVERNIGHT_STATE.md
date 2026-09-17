@@ -22,6 +22,7 @@ Phase C route and visual gate: Homepage V3 and the shared scrapbook surfaces are
 - The reference-locked visual pass was published to `homepage-v3` at commit `07579480d6cf6cccd309233adcfcf2632ac71b83`. Cloudflare Build `04e8d3cd-63e6-4084-a918-c51e97082352` produced Preview Version `d71b186b-e1f5-4e99-9c37-d135cd8a180b` at `https://d71b186b-trip-archive.bossxie666.workers.dev` and refreshed the `homepage-v3` alias.
 - The latest visual source commit is `8828b1c2fea3f9d7b0bd641d0d0eb70d7a530f42` (`fix mobile title and stats spacing`). GitHub Workers Builds completed Build `85179b35-6acd-4ed8-806c-554458c29c9a` and Preview Version `f72dedd7-9274-4115-8cbc-12923658e51f`; the alias remains `https://homepage-v3-trip-archive.bossxie666.workers.dev`.
 - Read-only authenticated Preview route checks passed for `/`, `/trips`, `/map`, `/albums`, `/messages`, `/search`, `/trips/new`, and the real planning route `/trips/gogogo-2026/plan`; all returned the expected page rather than the unlock screen. GET health checks for `/api/trips`, `/api/albums`, `/api/guestbook`, and `/api/amap/config` returned 200 (method-specific 405 responses for POST-only endpoints are expected).
+- After the Preview hard gates passed, the same commit was fast-forwarded to `v2.4-r1`. Cloudflare Production Build `7c5c9d29-2f37-4d07-bd24-a794cc8377bc` completed successfully with Version `0f467a93-862a-4a57-b7e9-59672efd1037`; authenticated Production Homepage and `/api/amap/config` returned normally, with the desktop/mobile title and Atlas assets served from the new release.
 - Production Build `52567dad-3d6a-4fd0-bf27-b0ca022ef007` / Version `397c0a57-0218-4bd1-a496-b44cadae1be2` completed successfully after the authorized fast-forward to `v2.4-r1`; read-only Production route, AMap, responsive, and unauthenticated API-protection checks pass.
 
 ## Bugs / findings
@@ -50,8 +51,8 @@ Phase C route and visual gate: Homepage V3 and the shared scrapbook surfaces are
 
 ## Blockers
 
-- No hard blocker. Cloudflare dashboard UI may still be behind Turnstile, but both Build/Version IDs were recovered from the GitHub Workers Builds check run. AMap console CSP/WebGL/JSONP warnings remain non-fatal because the API gate and visible map pass.
+- No hard blocker. Cloudflare dashboard UI may still be behind Turnstile, but Build/Version IDs were recovered from the GitHub Workers Builds check runs. AMap console CSP/WebGL/JSONP warnings remain non-fatal because the API gate and visible map pass. Destructive UI actions (delete/write) were not replayed against real Production records; their API and ownership paths remain covered by the 80/80 automated suite.
 
 ## Next step
 
-Keep the `homepage-v3` Preview available for final visual acceptance; the current desktop/mobile screenshots and route matrix are recorded under `/Users/bossxie/Desktop/codex/旅行/visual-evidence`. If the visual result is accepted, run the final hard-gate review before any authorized `v2.4-r1` promotion. Keep `origin` untouched and do not run migration, local Wrangler, or Production data/config changes during this Preview phase.
+Release hard gates are complete for the current code baseline. Keep the evidence under `/Users/bossxie/Desktop/codex/旅行/visual-evidence`, preserve `origin` and the D1/R2 identities, and only open a new task for later visual refinements or additional user-acceptance coverage.
