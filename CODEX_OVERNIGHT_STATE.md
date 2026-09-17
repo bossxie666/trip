@@ -19,6 +19,7 @@ Phase A/B/C complete: Preview and Production release regression. The cross-membe
 - Read-only AMap runtime check returned `/api/amap/config` HTTP 200 and rendered the map with real markers; no visible API-key/security-code failure.
 - Trip-cover authorization now permits a ready cover to be read by members of the Trip that references it, while keeping orphaned covers private; the regression test passes.
 - Preview Build `7699cf68-8608-4efc-9ea6-4c0ce863c618` / Version `4ac3a341-6535-48d0-9ba8-3c3bd803d8ae` completed successfully for commit `4e39bc6`.
+- The reference-locked visual pass was published to `homepage-v3` at commit `07579480d6cf6cccd309233adcfcf2632ac71b83`. Cloudflare Build `04e8d3cd-63e6-4084-a918-c51e97082352` produced Preview Version `d71b186b-e1f5-4e99-9c37-d135cd8a180b` at `https://d71b186b-trip-archive.bossxie666.workers.dev` and refreshed the `homepage-v3` alias.
 - Production Build `52567dad-3d6a-4fd0-bf27-b0ca022ef007` / Version `397c0a57-0218-4bd1-a496-b44cadae1be2` completed successfully after the authorized fast-forward to `v2.4-r1`; read-only Production route, AMap, responsive, and unauthenticated API-protection checks pass.
 
 ## Bugs / findings
@@ -31,6 +32,7 @@ Phase A/B/C complete: Preview and Production release regression. The cross-membe
 
 - Desktop 1440×810 and Mobile 375×667 evidence were captured from the real Preview; the mobile atlas artwork was corrected to restore the reference's top-edge crop.
 - The fresh `4ac3a341-6535-48d0-9ba8-3c3bd803d8ae` Preview passed read-only route, AMap, responsive, and visual checks; keep the sparse wall data-driven (no fake photos/messages).
+- The latest Preview screenshot now keeps the title/stats on blank paper above the Atlas, shows the supplied stamp/compass layers, separates nearby Shanghai/Hangzhou labels, keeps the desktop 30/43/27 hero geometry, and remains overflow-free at 320/375/390/430px. AMap config returned HTTP 200 with key material redacted.
 
 ## Changes made in this run
 
@@ -47,4 +49,4 @@ Phase A/B/C complete: Preview and Production release regression. The cross-membe
 
 ## Next step
 
-Run the final visual screenshot pass against the reference at 1440×810 and 375×667 after the visual changes are published through the existing non-production path. Keep `origin` untouched; no migration, local Wrangler, or Production data/config changes.
+Visual pass complete for this scope. Keep `homepage-v3` as the non-production review branch, keep `origin` untouched, and do not promote to `v2.4-r1` until the user explicitly accepts the screenshots. No migration, local Wrangler, or Production data/config changes.
