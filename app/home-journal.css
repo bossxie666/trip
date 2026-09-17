@@ -1497,5 +1497,98 @@ body:has(.journal-subpage) {
   .album-form { grid-template-columns: 1fr; padding: 20px; }
   .album-form label:last-of-type,
   .album-form > div { grid-column: auto; }
-  .album-detail-page .album-photo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.album-detail-page .album-photo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+}
+
+/* Reference reconciliation pass.  The supplied desktop reference uses the
+ * same two-line hand-lettered title as the mobile artwork; the earlier
+ * horizontal crop made the hero read like a SaaS landing page.  Keep this
+ * override last so the hero geometry is deterministic at the review widths. */
+@media (min-width: 768px) {
+  .home-manifesto {
+    padding: 28px 31px 18px;
+    background: rgba(255, 251, 241, .46);
+  }
+
+  .home-title-heading {
+    margin: 0 auto 4px;
+    width: 100%;
+  }
+
+  .home-title-picture,
+  .home-title-asset {
+    display: block;
+    width: min(88%, 322px);
+    max-width: 100%;
+    margin: 0 auto;
+  }
+
+  .home-manifesto-line {
+    justify-content: flex-start;
+    margin: 0 0 16px;
+  }
+
+  .home-manifesto-line span:nth-child(3) { display: none; }
+
+  .home-actions { gap: 9px; }
+
+  .home-atlas { min-height: 100%; }
+
+  .home-next-trip {
+    padding: 28px 24px 21px;
+  }
+
+  .home-next-trip h2 {
+    margin-top: 18px;
+    font-size: clamp(28px, 2.45vw, 38px);
+  }
+
+  .home-photo-strip-sparse {
+    min-height: 228px;
+    align-items: stretch;
+    gap: 18px;
+    padding: 4px 8px 8px;
+  }
+
+  .home-photo-strip-sparse .home-photo-card {
+    flex: 0 1 214px;
+    min-width: 190px;
+  }
+
+  .home-photo-strip-sparse .home-photo-manage-card {
+    flex: 1 1 280px;
+    min-height: 214px;
+    justify-items: center;
+  }
+
+  .home-photo-strip-sparse .home-photo-manage-icon {
+    width: 58px;
+    height: 58px;
+  }
+
+  .home-guestbook .guestbook-notes {
+    grid-template-columns: 1fr;
+  }
+
+  .home-guestbook .guestbook-note {
+    min-height: 214px;
+    padding: 22px;
+  }
+}
+
+@media (max-width: 767px) {
+  .site-header .member-identity-control {
+    grid-column: 2;
+    justify-self: end;
+    margin-left: auto;
+  }
+
+  .site-header .member-identity-trigger {
+    justify-content: flex-end;
+  }
+
+  .home-title-picture,
+  .home-title-asset {
+    width: min(92%, 336px);
+  }
 }

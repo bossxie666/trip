@@ -47,7 +47,7 @@ export default async function TravelArchiveHome() {
           <h1 className="home-title-heading">
             <picture className="home-title-picture">
               <source media="(max-width: 767px)" srcSet="/assets/homepage-v3/title-mobile.png" />
-              <img className="home-title-asset" src="/assets/homepage-v3/title-desktop.png" alt="跳进地理书的旅行" width={2172} height={724} />
+              <img className="home-title-asset" src="/assets/homepage-v3/title-mobile.png" alt="跳进地理书的旅行" width={1448} height={1086} />
             </picture>
           </h1>
           <p className="home-manifesto-line"><span>已点亮城市 <b>{dashboard.stats.cityCount}</b></span><span>已完成旅行 <b>{dashboard.stats.completed}</b></span><span>下一站 <b>{nextCityNames.join("·") || "等待决定"}</b></span></p>
