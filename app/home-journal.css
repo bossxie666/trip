@@ -1114,7 +1114,10 @@
   .home-title-picture,
   .home-title-asset { width: min(84%, 300px); }
 
-  .home-manifesto-line { margin-top: -24px; }
+  /* The mobile title asset is intentionally tall (two hand-lettered lines).
+   * Keep the stats below its transparent canvas instead of pulling them over
+   * the artwork; the atlas begins immediately after this paper-led header. */
+  .home-manifesto-line { margin-top: 8px; }
 
   .atlas-paper-map {
     inset: 45% 0 0;
