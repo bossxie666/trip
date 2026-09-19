@@ -35,7 +35,7 @@ export function HomeAtlas({ cities, photos, fallbackPrimary, fallbackSecondary, 
   const secondary = photos.find((photo) => photo.slotKey === "map_secondary");
   return <div className="home-atlas" aria-label="按真实行程城市生成的旅行地图">
     <div className="atlas-paper-map" aria-hidden="true">
-      {reference ? <img src="/assets/homepage-v4/china-map.webp" alt="" /> : <picture>
+      {reference ? <img src="/assets/china-map.webp" alt="" /> : <picture>
         <source media="(max-width: 767px)" srcSet="/assets/homepage-v3/atlas-mobile.webp" />
         <img src="/assets/homepage-v3/atlas-desktop.webp" alt="" />
       </picture>}
