@@ -5,6 +5,7 @@ import "./budget-overrides.css";
 import "./participant-presence.css";
 import "./travel-journal-v12.css";
 import "./home-journal.css";
+import "./reference-home.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
