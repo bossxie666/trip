@@ -13,7 +13,8 @@ const isSelfHostedBuild = process.env.TRIP_SELF_HOSTED_BUILD === "1";
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 
 const localBindingConfig = {
-  main: "./worker/index.ts",
+  main: process.env.TRIP_VISUAL_PREVIEW === "1" && process.env.NODE_ENV !== "production"
+    ? "./scripts/visual-preview-worker.ts" : "./worker/index.ts",
   compatibility_flags: isSelfHostedBuild ? [] : ["nodejs_compat"],
   d1_databases: !isSelfHostedBuild && d1
     ? [
@@ -47,7 +48,7 @@ export default defineConfig(async () => {
   return {
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }
-      : undefined,
+      : { host: "127.0.0.1" },
     plugins: [
       vinext(),
       sites(),
