@@ -29,19 +29,20 @@ function plotted(cities: City[]) {
   });
 }
 
-export function HomeAtlas({ cities, photos, fallbackPrimary, fallbackSecondary }: { cities: City[]; photos: Photo[]; fallbackPrimary?: string | null; fallbackSecondary?: string | null }) {
+export function HomeAtlas({ cities, photos, fallbackPrimary, fallbackSecondary, reference = false }: { cities: City[]; photos: Photo[]; fallbackPrimary?: string | null; fallbackSecondary?: string | null; reference?: boolean }) {
   const plot = plotted(cities);
   const primary = photos.find((photo) => photo.slotKey === "map_primary");
   const secondary = photos.find((photo) => photo.slotKey === "map_secondary");
   return <div className="home-atlas" aria-label="按真实行程城市生成的旅行地图">
     <div className="atlas-paper-map" aria-hidden="true">
-      <picture>
+      {reference ? <img src="/assets/homepage-v4/china-map.webp" alt="" /> : <picture>
         <source media="(max-width: 767px)" srcSet="/assets/homepage-v3/atlas-mobile.webp" />
         <img src="/assets/homepage-v3/atlas-desktop.webp" alt="" />
-      </picture>
+      </picture>}
     </div>
-    <div className="atlas-caption">我的旅行地图</div>
+    <div className="atlas-caption">{reference ? <>在地图上，<br />遇见更大的自己。</> : "我的旅行地图"}</div>
     {plot.length ? <svg viewBox="0 0 100 100" role="img" aria-label={`旅行城市：${plot.map((city) => city.name).join("、")}`}>
+      {plot.length > 1 ? <polyline className="atlas-route" points={plot.map((city) => `${city.x},${city.y}`).join(" ")} fill="none" /> : null}
       {plot.map((city) => <g key={city.cityId} className={`atlas-city-marker atlas-city-marker-${city.tripStatus || "planning"}`} transform={`translate(${city.x} ${city.y})`}><circle r="2.4" /><text x="3.6" y="1.5">{city.name}</text></g>)}
     </svg> : <div className="atlas-empty"><b>地图等待点亮</b><span>把城市加入一条真实行程后，它会出现在这里。</span></div>}
     <figure className="atlas-polaroid atlas-polaroid-primary">
