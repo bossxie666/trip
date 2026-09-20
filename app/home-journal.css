@@ -1567,16 +1567,20 @@ body:has(.journal-subpage) {
 .album-card h2 { color: var(--home-navy); font-family: "KaiTi", serif; }
 
 .album-detail-page .album-photo-grid figure {
-  border: 0;
-  background: url("/assets/homepage-v3/polaroid-frame-01.webp") center / 100% 100% no-repeat;
-  box-shadow: none;
-  filter: drop-shadow(0 5px 7px rgba(71, 56, 36, .12));
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid rgba(16, 58, 99, .14);
+  border-radius: 4px;
+  background: rgba(255, 253, 248, .94);
+  box-shadow: 0 5px 14px rgba(55, 45, 31, .1);
 }
 
-.album-detail-page .album-photo-grid figure:nth-child(even) {
-  background-image: url("/assets/homepage-v3/polaroid-frame-02.webp");
-  transform: rotate(.7deg);
-}
+.album-detail-page .album-photo-grid figure:nth-child(even) { transform: none; }
+.album-detail-page .album-photo-grid figcaption { padding: 7px; }
+
+.album-info-panel { margin-top: 30px; border-top: 1px solid rgba(16, 58, 99, .14); }
+.album-info-panel > summary { width: fit-content; margin: 18px 0 14px auto; color: var(--home-navy); cursor: pointer; font-size: 12px; font-weight: 750; }
+.album-info-panel .album-form { margin-bottom: 0; }
 
 .guestbook-composer {
   border: 0;
@@ -1623,6 +1627,18 @@ body:has(.journal-subpage) {
   .album-form label:last-of-type,
   .album-form > div { grid-column: auto; }
   .album-detail-page .album-photo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .album-detail-page > header { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 7px 13px; padding-bottom: 14px; }
+  .album-detail-page > header > a { grid-row: 1 / 3; margin: 0; font-size: 12px; white-space: nowrap; }
+  .album-detail-page > header > span { display: none; }
+  .album-detail-page > header h1 { overflow: hidden; margin: 0; font-size: 24px; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
+  .album-detail-page > header p { overflow: hidden; margin: 0; font-size: 10px; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+  .album-detail-page .album-upload { margin: 12px 0 10px; }
+  .album-detail-page .album-upload label { width: auto; min-height: 36px; margin-left: auto; padding: 7px 11px; font-size: 11px; }
+  .album-detail-page .album-photo-grid figure { padding: 0; }
+  .album-detail-page .album-photo-grid figcaption { flex-wrap: nowrap; padding: 5px; }
+  .album-detail-page .album-photo-grid figcaption span { width: auto; }
+  .album-detail-page .album-photo-grid figcaption button { width: 27px; height: 27px; }
+  .album-info-panel { margin-top: 20px; }
 }
 
 /* Final bookshelf lock: legacy archive rules above must not collapse the
