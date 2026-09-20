@@ -462,7 +462,7 @@ test("lists the Shanghai Hangzhou trip through the shared workspace", async () =
   assert.match(allHtml, /网站主导航/);
   assert.match(allHtml, /<a[^>]+href="\/trips\/new"[^>]*>＋ 新建行程<\/a>/);
   assert.match(allHtml, /<a[^>]+href="\/trips\?status=inspiration"/);
-  assert.match(allHtml, /<a[^>]+href="\/trips\/shanghai-hangzhou-2026"/);
+  assert.match(allHtml, /<a[^>]+href="\/trips\/shanghai-hangzhou-2026\/plan"/);
   assert.match(await planning.text(), /上海 \+ 杭州/);
   assert.doesNotMatch(await inspiration.text(), /上海 \+ 杭州/);
 });
@@ -978,12 +978,12 @@ test("requires a member session and supports collaborative edit and delete", asy
   const trip = await createTrip({ title: "朋友旅行", status: "planning", cities: ["苏州"], undated: true, people: 2, memberIds: ["member-zhu-jingqi"] });
   const listAfterCreate = await render("/trips");
   const listHtml = await listAfterCreate.text();
-  assert.match(listHtml, /class="trip-delete-button"[^>]+data-trip-slug="[^"]+"/);
-  assert.match(listHtml, /aria-label="删除行程：上海 \+ 杭州"/);
+  assert.match(listHtml, /class="trip-book-cover"[^>]+href="\/trips\/[^"]+\/plan"/);
+  assert.match(listHtml, /aria-label="管理行程：上海 \+ 杭州"/);
   const niniSession = sessionCookie;
   await loginAs("王静雯");
   const memberList = await render("/trips");
-  assert.match(await memberList.text(), /class="trip-delete-button"[^>]+disabled/);
+  assert.match(await memberList.text(), /aria-label="管理行程：[^"]+"/);
   const deniedDelete = await render(`/api/trips/${trip.slug}`, { method: "DELETE" });
   assert.equal(deniedDelete.status, 403);
   sessionCookie = niniSession;
