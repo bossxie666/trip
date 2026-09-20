@@ -1698,3 +1698,24 @@ body:has(.journal-subpage) {
 .trip-journal-workspace .library-console { grid-template-columns:1fr; }
 .trip-journal-workspace .library-console .console-title { min-height:84px; max-width:900px; }
 @media(max-width:900px){.trip-journal-workspace .trip-console{grid-template-columns:1fr}.trip-journal-workspace .trip-console-side{padding-top:0}}
+
+/* Mobile accommodation card: compact, readable rows without horizontal squeeze. */
+@media(max-width:680px){
+  .trip-journal-workspace .trip-console-side{grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start}
+  .trip-journal-workspace .booking-console{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:10px;row-gap:7px;width:100%;max-width:100%;min-width:0;padding:10px 11px;overflow:hidden}
+  .trip-journal-workspace .booking-console-label{grid-column:1;grid-row:1;align-self:start;margin:1px 0 0;white-space:nowrap;font-size:10px;line-height:1.45}
+  .trip-journal-workspace .accommodation-summary{grid-column:2;grid-row:1;display:grid;gap:4px;min-width:0;padding:0}
+  .trip-journal-workspace .accommodation-summary strong{display:block;min-width:0;color:var(--journal-red);font-size:11px;line-height:1.45;white-space:normal;overflow-wrap:anywhere}
+  .trip-journal-workspace .accommodation-summary small{display:block;color:var(--muted);font-size:9px;line-height:1.45;white-space:normal}
+  .trip-journal-workspace .accommodation-details{grid-column:1/-1;grid-row:2;min-width:0;margin-top:1px;padding-top:6px;border-top:1px dashed var(--journal-rule)}
+  .trip-journal-workspace .accommodation-details>summary{padding:2px 0;font-size:9px;line-height:1.5;white-space:normal}
+  .trip-journal-workspace .booking-console .booking-add-button{grid-column:1/-1;grid-row:3;width:auto;min-height:32px;margin:0;justify-self:start;padding:7px 10px;white-space:nowrap}
+  .trip-journal-workspace .booking-console-empty{grid-column:2;grid-row:1;margin:0;font-size:10px;line-height:1.5}
+  .trip-journal-workspace .trip-settings>summary{min-height:100%;padding:10px 11px;font-size:9px}
+}
+@media(max-width:390px){
+  .trip-journal-workspace .trip-console-side{grid-template-columns:1fr}
+  .trip-journal-workspace .trip-settings{width:max-content;max-width:100%;justify-self:start}
+  .trip-journal-workspace .booking-console{order:1}
+  .trip-journal-workspace .trip-settings{order:2}
+}
