@@ -1277,6 +1277,131 @@
   .journal-subpage.compact-page { padding-top: 18px; }
 }
 
+/* Travel bookshelf and page-turn workspace. */
+body:has(.archive-index-with-shell),
+body:has(.trip-book-shell) {
+  background: #eee4d1 url("/assets/homepage-v3/desktop-shell.webp") center top / cover fixed no-repeat;
+}
+
+.archive-index-with-shell {
+  width: min(1280px, 100%);
+  padding: 28px clamp(28px, 5vw, 72px) 112px;
+  background: rgba(255, 253, 247, .64);
+}
+
+.archive-index-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px;
+  padding: 0 0 14px;
+}
+
+.archive-index-toolbar .trip-tabs { gap: clamp(18px, 4vw, 52px); }
+.archive-index-toolbar .trip-tabs a { padding: 9px 5px; font-size: 15px; }
+.archive-index-toolbar .new-trip-link { position: static; flex: 0 0 auto; padding: 13px 20px; border-radius: 7px; background: #0e416f; font-size: 14px; }
+
+.trip-list {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(28px, 3.2vw, 48px) clamp(22px, 3vw, 42px);
+}
+
+.trip-book-card { position: relative; min-width: 0; perspective: 1300px; }
+.trip-book-cover {
+  position: relative;
+  display: grid;
+  grid-template-rows: 62% 38%;
+  aspect-ratio: .78;
+  overflow: hidden;
+  border-radius: 4px 9px 9px 4px;
+  background: #f7f0df;
+  box-shadow: 4px 8px 13px rgba(54, 43, 29, .24), inset -2px 0 rgba(77, 59, 34, .18);
+  color: #0f436f;
+  text-decoration: none;
+  transform-origin: left center;
+  transform-style: preserve-3d;
+  transition: transform .22s ease, box-shadow .22s ease;
+  touch-action: pan-y;
+}
+.trip-book-cover::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, rgba(16, 54, 78, .2), transparent 8%, transparent 91%, rgba(82, 61, 32, .12)); mix-blend-mode: multiply; }
+.trip-book-spine { position: absolute; inset: 0 auto 0 0; z-index: 4; width: 12%; background: #47798a; border-right: 1px solid rgba(255,255,255,.4); box-shadow: inset -5px 0 8px rgba(25,42,45,.22); }
+.trip-book-tone-1 .trip-book-spine { background: #3d7397; }
+.trip-book-tone-2 .trip-book-spine { background: #4e765b; }
+.trip-book-tone-3 .trip-book-spine { background: #988463; }
+.trip-book-image { display: block; min-height: 0; margin-left: 9%; overflow: hidden; background: #ded7c8; }
+.trip-book-image img, .trip-book-empty { display: block; width: 100%; height: 100%; object-fit: cover; }
+.trip-book-empty { display: grid; place-items: center; color: #5f5a50; background: linear-gradient(145deg,#f4efe3,#d9cfbc); font: 800 11px var(--font-geist-mono); letter-spacing: .1em; }
+.trip-book-status { position: absolute; z-index: 5; top: 10px; right: 10px; padding: 7px 10px; border-radius: 7px; background: #ffd8d2; color: #df5f57; font-size: 11px; font-weight: 800; }
+.trip-book-meta { position: relative; display: grid; align-content: center; gap: 10px; min-width: 0; padding: 10px 14px 12px 18%; background: linear-gradient(178deg,#faf5e9,#f0e6d2); }
+.trip-book-meta strong { overflow: hidden; color: #103f68; font-family: "KaiTi", serif; font-size: clamp(19px, 2vw, 27px); font-weight: 500; line-height: 1.12; text-overflow: ellipsis; white-space: nowrap; }
+.trip-book-meta small { display: flex; align-items: center; gap: 5px; color: #72746f; font-size: 11px; }
+.trip-book-mark { position: absolute; z-index: 4; right: 9%; bottom: 8%; width: 44px; height: 34px; opacity: .6; background: radial-gradient(circle at 20% 80%,#71926a 0 9%,transparent 10%),linear-gradient(145deg,transparent 42%,#71926a 43% 47%,transparent 48%); transform: rotate(-9deg); }
+.trip-book-cover:hover, .trip-book-cover:focus-visible { outline: 0; transform: translateY(-5px) rotateY(-3deg); box-shadow: 8px 16px 24px rgba(54,43,29,.27); }
+.trip-book-cover:focus-visible { outline: 3px solid #0785ff; outline-offset: 4px; }
+.trip-book-card.is-opening { z-index: 20; }
+.trip-book-card.is-opening .trip-book-cover { animation: book-cover-open .58s cubic-bezier(.2,.7,.2,1) forwards; }
+@keyframes book-cover-open { 0%{transform:none} 45%{transform:translateX(5%) rotateY(-38deg) scale(1.03)} 100%{opacity:0;transform:translateX(18%) rotateY(-88deg) scale(1.08)} }
+
+.trip-book-menu { position: absolute; z-index: 12; top: 7px; left: 7px; }
+.trip-book-menu-trigger { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; background: rgba(255,253,248,.9); color: #103f68; box-shadow: 0 2px 7px rgba(50,40,28,.18); cursor: pointer; }
+.trip-book-menu-popover { position: absolute; top: 39px; left: 0; display: grid; width: 150px; padding: 7px; border: 1px solid rgba(16,58,99,.18); border-radius: 7px; background: #fffaf0; box-shadow: 0 10px 24px rgba(50,40,28,.2); }
+.trip-book-menu-popover a, .trip-book-menu-popover button { display: block; width: 100%; min-height: 36px; padding: 9px; border: 0; background: transparent; color: #103f68; text-align: left; text-decoration: none; cursor: pointer; font-size: 11px; font-weight: 750; }
+.trip-book-menu-popover a:hover, .trip-book-menu-popover button:hover { background: #f1e8d6; }
+.trip-book-menu-popover button:disabled { color: #aaa397; cursor: not-allowed; }
+.trip-book-menu-popover .trip-delete-error { display: block; padding: 5px; color: #9d342c; font-size: 9px; }
+
+.trip-book-shell { position: relative; width: min(1480px, calc(100% - 42px)); min-height: calc(100vh - 94px); margin: 20px auto 86px; padding: 18px 26px 42px; perspective: 1800px; }
+.trip-book-shell::before { content: ""; position: absolute; inset: 0; border-radius: 12px; background: #d8c09a; box-shadow: 0 22px 45px rgba(45,35,24,.26); transform: translate(0,8px); }
+.trip-book-leaf { position: relative; z-index: 2; min-height: calc(100vh - 154px); overflow: hidden; border-radius: 7px; background: linear-gradient(90deg,#fbf7ed 0,#fffdf8 48%,#f1e9da 50%,#fffdf8 52%,#faf5e9 100%); box-shadow: 0 7px 22px rgba(51,41,28,.18); transform-origin: center; animation: book-leaf-in .34s ease both; }
+.trip-book-leaf::before { content: ""; position: absolute; inset: 0; z-index: -1; opacity: .24; pointer-events: none; background-image: radial-gradient(#876f4f 0.45px,transparent .65px); background-size: 5px 5px; }
+.trip-book-binding { position: absolute; z-index: 4; top: 18px; bottom: 42px; left: 50%; width: 34px; pointer-events: none; transform: translateX(-50%); background: linear-gradient(90deg,transparent,rgba(77,57,32,.12),rgba(255,255,255,.7),rgba(77,57,32,.13),transparent); }
+.trip-book-shell .trip-plan-page { width: 100%; max-width: none; min-height: inherit; margin: 0; padding: 28px clamp(28px,4vw,64px) 76px; background: transparent; }
+.trip-page-corner { position: absolute; z-index: 8; top: 50%; display: grid; place-items: center; width: 44px; height: 58px; border: 1px solid rgba(16,58,99,.2); border-radius: 50%; background: #fffdf8; color: #103f68; box-shadow: 0 5px 14px rgba(54,43,29,.18); cursor: pointer; transform: translateY(-50%); }
+.trip-page-corner-left { left: 3px; }
+.trip-page-corner-right { right: 3px; }
+.trip-page-corner:disabled { visibility: hidden; }
+.trip-page-count { position: absolute; z-index: 6; right: 44px; bottom: 22px; color: #806e56; font: 700 9px var(--font-geist-mono); letter-spacing: .14em; }
+.trip-book-shell.turning-forward .trip-book-leaf { animation: book-turn-forward .3s ease both; }
+.trip-book-shell.turning-back .trip-book-leaf { animation: book-turn-back .3s ease both; }
+@keyframes book-leaf-in { from{opacity:.4;transform:rotateY(-5deg)} to{opacity:1;transform:none} }
+@keyframes book-turn-forward { to{opacity:.25;transform:rotateY(-14deg) translateX(-2%)} }
+@keyframes book-turn-back { to{opacity:.25;transform:rotateY(14deg) translateX(2%)} }
+
+@media (max-width: 1080px) and (min-width: 681px) { .trip-list { grid-template-columns: repeat(3,minmax(0,1fr)); } }
+
+@media (max-width: 680px) {
+  body:has(.archive-index-with-shell), body:has(.trip-book-shell) { background-image: url("/assets/homepage-v3/mobile-shell.webp"); }
+  .archive-index-with-shell { padding: 20px 18px 94px; background: rgba(255,253,247,.58); }
+  .archive-index-toolbar { align-items: start; gap: 10px; margin-bottom: 20px; }
+  .archive-index-toolbar .trip-tabs { flex: 1; flex-wrap: nowrap; justify-content: space-between; gap: 4px; }
+  .archive-index-toolbar .trip-tabs a { padding: 8px 3px; font-size: 12px; white-space: nowrap; }
+  .archive-index-toolbar .new-trip-link { padding: 11px 13px; font-size: 11px; white-space: nowrap; }
+  .trip-list { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px 16px; }
+  .trip-book-status { top: 7px; right: 7px; padding: 5px 7px; font-size: 9px; }
+  .trip-book-meta { gap: 7px; padding: 8px 8px 9px 18%; }
+  .trip-book-meta strong { font-size: clamp(17px,5.2vw,22px); }
+  .trip-book-meta small { font-size: 9px; }
+  .trip-book-menu { top: 4px; left: 4px; }
+  .trip-book-menu-trigger { width: 29px; height: 29px; }
+  .trip-book-menu-popover { width: 132px; }
+  .trip-book-mark { width: 30px; height: 25px; }
+  .trip-book-shell { width: 100%; min-height: calc(100svh - var(--mobile-header-height,56px) - var(--mobile-nav-height,68px)); margin: 0 0 var(--mobile-nav-height,68px); padding: 0; perspective: 1200px; touch-action: pan-y; }
+  .trip-book-shell::before { inset: 4px 3px 0; border-radius: 0; transform: translateY(3px); }
+  .trip-book-leaf { min-height: inherit; border-radius: 0; background: linear-gradient(90deg,#fffaf0,#f8f0df); box-shadow: none; }
+  .trip-book-binding { display: none; }
+  .trip-book-shell .trip-plan-page { padding: 18px 14px 78px; }
+  .trip-page-corner { position: fixed; top: auto; bottom: calc(var(--mobile-nav-height,68px) + 10px); width: 38px; height: 38px; }
+  .trip-page-corner-left { left: 8px; }
+  .trip-page-corner-right { right: 8px; }
+  .trip-page-count { position: fixed; right: 50%; bottom: calc(var(--mobile-nav-height,68px) + 23px); transform: translateX(50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trip-book-cover, .trip-book-leaf { transition: none !important; animation: none !important; }
+  .trip-book-cover:hover { transform: none; }
+}
+
 /* Whole-site reference lock.  Subpages keep their real data and controls, but
  * use the same supplied paper shell and tactile card language as the homepage. */
 body:has(.archive-index-with-shell),
@@ -1498,4 +1623,26 @@ body:has(.journal-subpage) {
   .album-form label:last-of-type,
   .album-form > div { grid-column: auto; }
   .album-detail-page .album-photo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+}
+
+/* Final bookshelf lock: legacy archive rules above must not collapse the
+   reference two-column mobile shelf back into the former paper-card list. */
+.archive-index-with-shell {
+  width: min(1280px, 100%);
+  padding: 28px clamp(28px, 5vw, 72px) 112px;
+  background: rgba(255, 253, 247, .64);
+}
+.archive-index-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 28px; padding: 0 0 14px; }
+.archive-index-toolbar .trip-tabs { gap: clamp(18px, 4vw, 52px); }
+.archive-index-toolbar .trip-tabs a { padding: 9px 5px; font-size: 15px; }
+.archive-index-toolbar .new-trip-link { position: static; flex: 0 0 auto; padding: 13px 20px; border-radius: 7px; background: #0e416f; font-size: 14px; }
+.archive-index-with-shell .trip-list { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: clamp(28px, 3.2vw, 48px) clamp(22px, 3vw, 42px); }
+@media (max-width: 1080px) and (min-width: 681px) { .archive-index-with-shell .trip-list { grid-template-columns: repeat(3,minmax(0,1fr)); } }
+@media (max-width: 680px) {
+  .archive-index-with-shell { padding: 20px 18px 94px; background: rgba(255,253,247,.58); }
+  .archive-index-toolbar { align-items: start; gap: 10px; margin-bottom: 20px; padding-inline: 0; }
+  .archive-index-toolbar .trip-tabs { flex: 1; flex-wrap: nowrap; justify-content: space-between; gap: 4px; }
+  .archive-index-toolbar .trip-tabs a { padding: 8px 3px; font-size: 12px; white-space: nowrap; }
+  .archive-index-toolbar .new-trip-link { margin: 0; padding: 11px 13px; font-size: 11px; white-space: nowrap; }
+  .archive-index-with-shell .trip-list { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px 16px; }
 }
