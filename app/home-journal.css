@@ -1646,3 +1646,17 @@ body:has(.journal-subpage) {
   .archive-index-toolbar .new-trip-link { margin: 0; padding: 11px 13px; font-size: 11px; white-space: nowrap; }
   .archive-index-with-shell .trip-list { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px 16px; }
 }
+
+/* Physical book depth and seamless workspace paper. */
+.trip-book-card { isolation:isolate; padding:0 7px 9px 0; transform-style:preserve-3d; }
+.trip-book-card::before { content:""; position:absolute; z-index:-2; inset:5px 0 3px 7px; border-radius:3px 10px 10px 4px; background:repeating-linear-gradient(0deg,#d9ccb6 0 1px,#fff9ec 1px 3px); box-shadow:5px 8px 0 #b9a98e,9px 13px 18px rgba(54,43,29,.3); transform:translateZ(-12px); }
+.trip-book-card::after { content:""; position:absolute; z-index:-1; right:2px; bottom:3px; left:10%; height:10px; border-radius:0 0 7px 3px; background:repeating-linear-gradient(0deg,#cbbda6 0 1px,#f8f0df 1px 3px); box-shadow:0 2px 2px rgba(50,39,25,.18); transform:skewX(-24deg); }
+.trip-book-cover { border:1px solid rgba(69,52,31,.14); box-shadow:3px 5px 0 #d1c3aa,8px 13px 20px rgba(54,43,29,.28),inset -3px 0 4px rgba(75,55,30,.13); transform:rotateY(-1.5deg) translateZ(5px); }
+.trip-book-cover::before { content:""; position:absolute; z-index:6; inset:0 auto 0 10.5%; width:9px; pointer-events:none; background:linear-gradient(90deg,rgba(21,39,43,.25),rgba(255,255,255,.28),rgba(21,39,43,.1),transparent); }
+.trip-book-spine { border-radius:4px 0 0 4px; box-shadow:inset 5px 0 7px rgba(255,255,255,.13),inset -7px 0 9px rgba(20,35,39,.28),2px 0 2px rgba(255,255,255,.32); }
+.trip-book-image { cursor:pointer; }
+.trip-book-cover-input { position:fixed; width:1px; height:1px; opacity:0; pointer-events:none; }
+.trip-book-cover.is-replacing .trip-book-image { opacity:.55; }
+.trip-book-cover:hover,.trip-book-cover:focus-visible { transform:translateY(-7px) rotateY(-7deg) translateZ(10px); box-shadow:7px 8px 0 #cdbfa7,16px 23px 28px rgba(54,43,29,.3),inset -3px 0 4px rgba(75,55,30,.13); }
+.trip-book-leaf { background:#fcf8ee; box-shadow:0 7px 22px rgba(51,41,28,.18); }
+.trip-book-binding { display:none; }
