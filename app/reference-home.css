@@ -66,7 +66,7 @@ body:has(.reference-home) .site-header{position:relative;height:4.3vw;min-height
 @media(min-width:768px){body:has(.reference-home) .site-brand b{font:italic 700 2vw/1.2 'Segoe Print',cursive}body:has(.reference-home) .site-brand::after{display:none}}
 @media(max-width:767px){
   body:has(.reference-home){--mobile-header-height:56px;--mobile-nav-height:68px;background:#faf7ef}
-  body:has(.reference-home) .site-header{height:var(--mobile-header-height);min-height:var(--mobile-header-height);padding:7px 14px;box-shadow:none;border:0;display:flex;justify-content:flex-end}
+  body:has(.reference-home) .site-header{height:var(--mobile-header-height);min-height:var(--mobile-header-height);padding:7px 14px;box-shadow:none;border:0;display:flex;justify-content:flex-end;background:rgba(247,241,231,.94)}
   body:has(.reference-home) .site-mobile-tools{top:16px;left:14px;gap:12px}
   body:has(.reference-home) .site-mobile-tools svg{width:21px;height:21px}
   body:has(.reference-home) .site-mobile-tools-divider{height:22px}
