@@ -34,7 +34,7 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
       <div className="archive-index-toolbar"><nav className="trip-tabs" aria-label="行程状态">{filters.map((filter) => <Link key={filter.value} className={activeStatus === filter.value ? "active" : ""} href={filter.value === "all" ? "/trips" : `/trips?status=${filter.value}`}>{filter.label}</Link>)}</nav><Link className="new-trip-link" href="/trips/new">＋ 新建行程</Link></div>
       <section className="trip-list">
         {!trips.length && <div className="trip-empty"><h2>这里还没有行程</h2><p>{activeStatus === "completed" ? "完成一次旅行后，它会出现在这里。" : "可以新建一条行程开始记录。"}</p></div>}
-        {trips.map((trip, index) => <TripBookCard key={trip.id} index={index} canDelete={actor?.id === tripDeletionMemberId} trip={{ slug: trip.slug, title: trip.title, cover: trip.cover, statusLabel: statusLabels[trip.status], participantSummary: participantSummary(trip) }} />)}
+        {trips.map((trip, index) => <TripBookCard key={trip.id} index={index} canDelete={actor?.id === tripDeletionMemberId} trip={{ slug: trip.slug, title: trip.title, cover: trip.cover, status: trip.status, statusLabel: statusLabels[trip.status], participantSummary: participantSummary(trip), cities: trip.cities.map((city) => city.name), startDate: trip.startDate, endDate: trip.endDate, people: trip.people, memberIds: (trip.members || []).map((member) => member.id) }} />)}
       </section>
     </main>
   </>);
