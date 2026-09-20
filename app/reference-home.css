@@ -65,13 +65,13 @@ body:has(.reference-home){background:#f4ecdf;color:#07396b}
 body:has(.reference-home) .site-header{position:relative;height:4.3vw;min-height:50px;padding:0 6.3%;gap:2vw;background:#fcf9f1 url('/assets/desktop-background.png') center top/100% auto;backdrop-filter:none}
 @media(min-width:768px){body:has(.reference-home) .site-brand b{font:italic 700 2vw/1.2 'Segoe Print',cursive}body:has(.reference-home) .site-brand::after{display:none}}
 @media(max-width:767px){
-  body:has(.reference-home){--mobile-header-height:8vw;--mobile-nav-height:22.8vw;background:#faf7ef}
-  body:has(.reference-home) .site-header{height:8vw;min-height:0;padding:0 3.4%;box-shadow:none;border:0;display:flex;justify-content:flex-end}
-  body:has(.reference-home) .site-mobile-tools{top:1.8vw;left:3.4%;gap:4vw}
-  body:has(.reference-home) .site-mobile-tools svg{width:5vw;height:5vw}
-  body:has(.reference-home) .site-mobile-tools-divider{height:5vw}
-  body:has(.reference-home) .member-identity-trigger{min-height:0;padding:0;font-size:3vw}
-  body:has(.reference-home) .member-identity-trigger i,body:has(.reference-home) .member-identity-trigger img{width:7vw;height:7vw}
+  body:has(.reference-home){--mobile-header-height:56px;--mobile-nav-height:68px;background:#faf7ef}
+  body:has(.reference-home) .site-header{height:var(--mobile-header-height);min-height:var(--mobile-header-height);padding:7px 14px;box-shadow:none;border:0;display:flex;justify-content:flex-end}
+  body:has(.reference-home) .site-mobile-tools{top:16px;left:14px;gap:12px}
+  body:has(.reference-home) .site-mobile-tools svg{width:21px;height:21px}
+  body:has(.reference-home) .site-mobile-tools-divider{height:22px}
+  body:has(.reference-home) .member-identity-trigger{min-height:42px;padding:4px 2px 4px 4px;font-size:13px}
+  body:has(.reference-home) .member-identity-trigger i,body:has(.reference-home) .member-identity-trigger img{width:28px;height:28px}
   .reference-home{height:auto;min-height:0;background:none;padding:0}
   .reference-home .home-hero{height:146.9vw;max-height:none;min-height:0;background:url('/assets/homepage-v3/mobile-shell.webp') center/100% 100% no-repeat;overflow:hidden}
   .reference-home .home-manifesto{position:absolute;inset:0;width:100%;height:100%;padding:0;pointer-events:none}
@@ -91,8 +91,8 @@ body:has(.reference-home) .site-header{position:relative;height:4.3vw;min-height
   .reference-home .atlas-polaroid figcaption{font-size:4vw}
   .reference-home .atlas-polaroid-secondary{display:none}
   .reference-home .atlas-empty{top:57%;left:55%;width:30%;font-size:2.7vw}
-  body:has(.reference-home) .site-mobile-nav{position:relative;inset:auto;display:grid;grid-template-columns:repeat(4,1fr);height:22.8vw;min-height:0;padding:2.7vw 2% 6vw;background:#faf7ef;border:0;box-shadow:none;backdrop-filter:none}
-  body:has(.reference-home) .site-mobile-nav a{font-size:2.9vw;gap:1.1vw;padding:0;position:relative}
-  body:has(.reference-home) .site-mobile-nav svg{height:5.2vw;width:5.2vw}
-  body:has(.reference-home) .site-mobile-nav a.active::after{content:'';position:absolute;bottom:-2vw;left:35%;width:30%;height:2px;background:#0785ff;border-radius:2px}
+  body:has(.reference-home) .site-mobile-nav{position:fixed;inset:auto 0 0;display:grid;grid-template-columns:repeat(4,1fr);width:100%;height:var(--mobile-nav-height);min-height:0;padding:0 0 max(4px,env(safe-area-inset-bottom));background:rgba(255,253,248,.95);border-top:1px solid var(--home-rule);box-shadow:0 -8px 24px rgba(35,43,46,.08);backdrop-filter:blur(14px)}
+  body:has(.reference-home) .site-mobile-nav a{font-size:9px;gap:3px;padding:0;position:relative}
+  body:has(.reference-home) .site-mobile-nav svg{height:21px;width:21px}
+  body:has(.reference-home) .site-mobile-nav a.active::after{content:'';position:absolute;bottom:4px;left:35%;width:30%;height:2px;background:#0785ff;border-radius:2px}
 }
