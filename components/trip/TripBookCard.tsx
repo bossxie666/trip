@@ -17,7 +17,6 @@ type Props = {
 export function TripBookCard({ trip, index, canDelete }: Props) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [opening, setOpening] = useState(false);
   const [replacing, setReplacing] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -56,9 +55,7 @@ export function TripBookCard({ trip, index, canDelete }: Props) {
       return;
     }
     if (menuOpen) { setMenuOpen(false); return; }
-    setOpening(true);
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    window.setTimeout(() => router.push(href), reduced ? 0 : 580);
+    router.push(href);
   }
 
   async function replaceCover(event: ChangeEvent<HTMLInputElement>) {
@@ -78,7 +75,7 @@ export function TripBookCard({ trip, index, canDelete }: Props) {
   }
 
   const cover = trip.cover === "/og.png" ? "/og-card.jpg" : trip.cover;
-  return <article className={`trip-book-card trip-book-tone-${index % 4}${opening ? " is-opening" : ""}`}>
+  return <article className={`trip-book-card trip-book-tone-${index % 4}`}>
     <input ref={coverInputRef} className="trip-book-cover-input" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" tabIndex={-1} aria-hidden="true" onChange={replaceCover} />
     <a className={`trip-book-cover${replacing ? " is-replacing" : ""}`} href={href} onClick={openBook} onPointerDown={beginPress} onPointerMove={movePress} onPointerUp={clearPress} onPointerCancel={clearPress} onContextMenu={(event) => { event.preventDefault(); setMenuOpen(true); }}>
       <span className="trip-book-spine" aria-hidden="true" />
