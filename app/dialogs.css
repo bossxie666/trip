@@ -82,6 +82,42 @@
 .budget-expense-sheet { padding: 0; }
 .budget-expense-sheet > form { padding: 18px 22px 22px; }
 
+/* Dialog content stays quiet and solid: no scrapbook paper, tape or tilted-photo effects. */
+.workspace-surface::before,
+.workspace-surface::after,
+.budget-expense-sheet::before,
+.budget-expense-sheet::after {
+  content: none !important;
+  display: none !important;
+}
+
+.workspace-surface .tape-accent {
+  display: none !important;
+}
+
+.workspace-surface .album-form,
+.workspace-surface .edit-trip-form,
+.workspace-surface .booking-edit-sheet,
+.workspace-surface .recommendation-entry-grid,
+.workspace-surface .recommendation-create-form,
+.workspace-surface .recommendation-detail-body,
+.workspace-surface .recommendation-detail-hero,
+.budget-expense-sheet form {
+  background-color: var(--paper2) !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+.workspace-surface .recommendation-detail-hero {
+  border-color: var(--line);
+}
+
+.workspace-surface .recommendation-detail-body ul img {
+  transform: none;
+  border: 0;
+  box-shadow: none;
+}
+
 /* Legacy details editors use the same clean card geometry. */
 .trip-settings[open],
 .accommodation-details[open],
