@@ -96,6 +96,7 @@
 }
 
 .workspace-surface .album-form,
+.workspace-surface .guestbook-composer,
 .workspace-surface .edit-trip-form,
 .workspace-surface .booking-edit-sheet,
 .workspace-surface .recommendation-entry-grid,
@@ -106,6 +107,23 @@
   background-color: var(--paper2) !important;
   background-image: none !important;
   box-shadow: none !important;
+}
+
+/* These two forms have high-specificity scrapbook backgrounds in the page theme. */
+.workspace-surface.workspace-modal.compact-editor-dialog .album-form,
+.workspace-surface.workspace-modal.compact-editor-dialog .guestbook-composer,
+.workspace-surface.workspace-modal.book-edit-dialog .album-form {
+  border: 0 !important;
+  background: var(--paper2) !important;
+  box-shadow: none !important;
+}
+
+.workspace-surface.workspace-modal.compact-editor-dialog .album-form input,
+.workspace-surface.workspace-modal.compact-editor-dialog .album-form select,
+.workspace-surface.workspace-modal.compact-editor-dialog .album-form textarea,
+.workspace-surface.workspace-modal.compact-editor-dialog .guestbook-composer textarea {
+  background: var(--paper) !important;
+  background-image: none !important;
 }
 
 .workspace-surface .recommendation-detail-hero {
