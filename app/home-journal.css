@@ -1362,8 +1362,8 @@ body:has(.trip-book-shell) {
 .trip-page-corner-right { right: 3px; }
 .trip-page-corner:disabled { visibility: hidden; }
 .trip-page-count { position: absolute; z-index: 6; right: 44px; bottom: 22px; color: #806e56; font: 700 9px var(--font-geist-mono); letter-spacing: .14em; }
-.trip-book-shell.turning-forward .trip-book-leaf { animation: book-turn-forward .3s ease both; }
-.trip-book-shell.turning-back .trip-book-leaf { animation: book-turn-back .3s ease both; }
+.trip-book-shell.turning-forward .trip-book-leaf { animation: book-turn-forward .3s ease; }
+.trip-book-shell.turning-back .trip-book-leaf { animation: book-turn-back .3s ease; }
 @keyframes book-leaf-in { from{opacity:.4;transform:rotateY(-5deg)} to{opacity:1;transform:none} }
 @keyframes book-turn-forward { to{opacity:.25;transform:rotateY(-14deg) translateX(-2%)} }
 @keyframes book-turn-back { to{opacity:.25;transform:rotateY(14deg) translateX(2%)} }
