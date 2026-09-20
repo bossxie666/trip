@@ -34,6 +34,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ sl
     input.placeId = await resolvePlace(Object.prototype.hasOwnProperty.call(body, "place") ? body.place : undefined, row.booking.placeId);
     input.originPlaceId = await resolvePlace(Object.prototype.hasOwnProperty.call(body, "origin") ? body.origin : undefined, row.booking.originPlaceId);
     input.destinationPlaceId = await resolvePlace(Object.prototype.hasOwnProperty.call(body, "destination") ? body.destination : undefined, row.booking.destinationPlaceId);
+    if (Object.prototype.hasOwnProperty.call(body, "origin")) input.originLabel = null;
+    if (Object.prototype.hasOwnProperty.call(body, "destination")) input.destinationLabel = null;
     const booking = await updateBooking(id, input, actor.id, slug);
     return Response.json({ booking });
   } catch (error) {
