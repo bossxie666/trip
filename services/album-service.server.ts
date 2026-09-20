@@ -5,6 +5,7 @@ import { albumMediaRecords, albumMediaTagRecords, albumRecords, albumTagRecords,
 export type AlbumSummary = {
   id: string; title: string; description: string | null; tripId: string | null; tripTitle: string | null;
   createdByMemberId: string; coverMediaAssetId: string | null; photoCount: number; updatedAt: string;
+  canEditAlbum: boolean;
 };
 
 async function membership(tripId: string, memberId: string) {
@@ -45,7 +46,7 @@ export async function listAlbums(memberId: string): Promise<AlbumSummary[]> {
   const ids = visible.map((row) => row.id);
   const media = await db.select({ albumId: albumMediaRecords.albumId }).from(albumMediaRecords).where(inArray(albumMediaRecords.albumId, ids));
   const tripRows = tripIds.length ? await db.select({ id: tripRecords.id, title: tripRecords.title }).from(tripRecords).where(inArray(tripRecords.id, [...new Set(visible.map((row) => row.tripId).filter(Boolean) as string[])])) : [];
-  return visible.map((row) => ({ ...row, tripTitle: tripRows.find((trip) => trip.id === row.tripId)?.title || null, photoCount: media.filter((item) => item.albumId === row.id).length }));
+  return visible.map((row) => ({ ...row, tripTitle: tripRows.find((trip) => trip.id === row.tripId)?.title || null, photoCount: media.filter((item) => item.albumId === row.id).length, canEditAlbum: !row.tripId || row.createdByMemberId === memberId }));
 }
 
 export async function getAlbum(id: string, memberId: string) {

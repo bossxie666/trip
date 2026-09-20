@@ -4,6 +4,7 @@ import type { TripStatus } from "@/models/travel";
 import { TripBookCard } from "@/components/trip/TripBookCard";
 import { WorkspaceNavLink as Link } from "@/components/trip/WorkspaceNavLink";
 import { SiteHeader } from "@/components/site/SiteHeader";
+import { listActiveMembers } from "@/services/member-repository.server";
 
 const statusLabels = {
   inspiration: "灵感",
@@ -26,7 +27,7 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
   const requested = (await searchParams).status;
   const activeStatus = filters.some((filter) => filter.value === requested) ? requested as TripStatus : "all";
   const actor = await getCurrentMember();
-  const trips = actor ? await listTrips(activeStatus, actor.id) : [];
+  const [trips, members] = actor ? await Promise.all([listTrips(activeStatus, actor.id), listActiveMembers()]) : [[], []];
 
   return (<>
     {actor && <SiteHeader active="trips" currentMember={{ id: actor.id, displayName: actor.displayName, avatar: actor.avatar }} />}
@@ -34,7 +35,7 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
       <div className="archive-index-toolbar"><nav className="trip-tabs" aria-label="行程状态">{filters.map((filter) => <Link key={filter.value} className={activeStatus === filter.value ? "active" : ""} href={filter.value === "all" ? "/trips" : `/trips?status=${filter.value}`}>{filter.label}</Link>)}</nav></div><Link className="global-floating-add" aria-label="新建行程" href="/trips/new">＋</Link>
       <section className="trip-list">
         {!trips.length && <div className="trip-empty"><h2>暂无行程</h2></div>}
-        {trips.map((trip, index) => <TripBookCard key={trip.id} index={index} canDelete={actor?.id === tripDeletionMemberId} trip={{ slug: trip.slug, title: trip.title, cover: trip.cover, status: trip.status, statusLabel: statusLabels[trip.status], participantSummary: participantSummary(trip), cities: trip.cities.map((city) => city.name), startDate: trip.startDate, endDate: trip.endDate, people: trip.people, memberIds: (trip.members || []).map((member) => member.id) }} />)}
+        {trips.map((trip, index) => <TripBookCard key={trip.id} index={index} canDelete={actor?.id === tripDeletionMemberId} members={members.map((member) => ({ id: member.id, displayName: member.displayName }))} trip={{ slug: trip.slug, title: trip.title, cover: trip.cover, status: trip.status, statusLabel: statusLabels[trip.status], participantSummary: participantSummary(trip), cities: trip.cities.map((city) => city.name), startDate: trip.startDate, endDate: trip.endDate, people: trip.people, memberIds: (trip.members || []).map((member) => member.id) }} />)}
       </section>
     </main>
   </>);

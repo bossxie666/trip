@@ -1,35 +1,30 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { MoreHorizontal, Users } from "lucide-react";
+import { MoreHorizontal, Users, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type ChangeEvent, type MouseEvent as ReactMouseEvent, type PointerEvent } from "react";
+import { useRef, useState, type ChangeEvent, type MouseEvent as ReactMouseEvent, type PointerEvent } from "react";
 import { uploadMediaFile } from "@/components/media/client-upload";
 import type { TripStatus } from "@/models/travel";
 import { TripDeleteButton } from "./TripDeleteButton";
+import { WorkspaceOverlay } from "./WorkspaceOverlay";
+import { EditTripForm } from "./EditTripForm";
 
 type Props = {
   trip: { slug: string; title: string; cover: string | null; status: TripStatus; statusLabel: string; participantSummary: string; cities: string[]; startDate: string | null; endDate: string | null; people: number; memberIds: string[] };
   index: number;
   canDelete: boolean;
+  members: { id: string; displayName: string }[];
 };
 
-export function TripBookCard({ trip, index, canDelete }: Props) {
+export function TripBookCard({ trip, index, canDelete, members }: Props) {
   const router = useRouter();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [replacing, setReplacing] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressOrigin = useRef({ x: 0, y: 0 });
   const coverInputRef = useRef<HTMLInputElement>(null);
   const href = `/trips/${trip.slug}/plan`;
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const close = (event: MouseEvent) => { if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false); };
-    document.addEventListener("pointerdown", close);
-    return () => document.removeEventListener("pointerdown", close);
-  }, [menuOpen]);
 
   function clearPress() {
     if (pressTimer.current) clearTimeout(pressTimer.current);
@@ -40,7 +35,7 @@ export function TripBookCard({ trip, index, canDelete }: Props) {
     if (event.pointerType === "mouse") return;
     pressOrigin.current = { x: event.clientX, y: event.clientY };
     clearPress();
-    pressTimer.current = setTimeout(() => { setMenuOpen(true); pressTimer.current = null; }, 520);
+    pressTimer.current = setTimeout(() => { setEditOpen(true); pressTimer.current = null; }, 520);
   }
 
   function movePress(event: PointerEvent<HTMLAnchorElement>) {
@@ -54,7 +49,7 @@ export function TripBookCard({ trip, index, canDelete }: Props) {
       coverInputRef.current?.click();
       return;
     }
-    if (menuOpen) { setMenuOpen(false); return; }
+    if (editOpen) return;
     router.push(href);
   }
 
@@ -77,16 +72,14 @@ export function TripBookCard({ trip, index, canDelete }: Props) {
   const cover = trip.cover === "/og.png" ? "/og-card.jpg" : trip.cover;
   return <article className={`trip-book-card trip-book-tone-${index % 4}`}>
     <input ref={coverInputRef} className="trip-book-cover-input" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" tabIndex={-1} aria-hidden="true" onChange={replaceCover} />
-    <a className={`trip-book-cover${replacing ? " is-replacing" : ""}`} href={href} onClick={openBook} onPointerDown={beginPress} onPointerMove={movePress} onPointerUp={clearPress} onPointerCancel={clearPress} onContextMenu={(event) => { event.preventDefault(); setMenuOpen(true); }}>
+    <a className={`trip-book-cover${replacing ? " is-replacing" : ""}`} href={href} onClick={openBook} onPointerDown={beginPress} onPointerMove={movePress} onPointerUp={clearPress} onPointerCancel={clearPress} onContextMenu={(event) => { event.preventDefault(); setEditOpen(true); }}>
       <span className="trip-book-spine" aria-hidden="true" />
       <span className="trip-book-image">{cover ? <img src={cover} alt="" width={640} height={480} loading={index < 4 ? "eager" : "lazy"} /> : <span className="trip-book-empty">NO COVER</span>}</span>
       <span className="trip-book-status">{trip.statusLabel}</span>
       <span className="trip-book-meta"><strong>{trip.title}</strong><small><Users size={14} />{trip.participantSummary}</small></span>
       <i className="trip-book-mark" aria-hidden="true" />
     </a>
-    <div className="trip-book-menu" ref={menuRef}>
-      <button className="trip-book-menu-trigger" type="button" aria-label={`管理行程：${trip.title}`} aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}><MoreHorizontal size={18} /></button>
-      {menuOpen && <div className="trip-book-menu-popover" role="menu"><a role="menuitem" href={`${href}?settings=open`}>编辑旅行</a><TripDeleteButton slug={trip.slug} title={trip.title} canDelete={canDelete} /></div>}
-    </div>
+    <button className="trip-book-menu-trigger" type="button" aria-label={`编辑旅行：${trip.title}`} aria-haspopup="dialog" aria-expanded={editOpen} onClick={() => setEditOpen(true)}><MoreHorizontal size={18} /></button>
+    <WorkspaceOverlay open={editOpen} onClose={() => setEditOpen(false)} mode="modal" ariaLabel={`编辑旅行：${trip.title}`} className="book-edit-dialog"><header className="editor-dialog-heading"><h2>编辑旅行</h2><button type="button" aria-label="关闭" onClick={() => setEditOpen(false)}><X size={20}/></button></header><EditTripForm trip={{ ...trip, cities: trip.cities.map((name) => ({ name })), members: trip.memberIds.map((id) => ({ id })) }} members={members} onSaved={() => setEditOpen(false)} /><div className="book-edit-danger"><TripDeleteButton slug={trip.slug} title={trip.title} canDelete={canDelete} /></div></WorkspaceOverlay>
   </article>;
 }
