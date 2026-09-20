@@ -186,6 +186,39 @@ export async function listTrips(status: TripStatus | "all" = "all", memberId?: s
   return [...storedTrips, ...seeds.filter((trip) => !storedSlugs.has(trip.slug))];
 }
 
+/** Lightweight query for the bookshelf. It deliberately skips days, stages and
+ * place relations because the index only renders the cover and member summary. */
+export async function listTripSummaries(status: TripStatus | "all" = "all", memberId?: string) {
+  if (!memberId) return [];
+  const db = getDb();
+  const conditions = [eq(tripMemberRecords.memberId, memberId)];
+  if (status !== "all") conditions.push(eq(tripRecords.status, status));
+  const rows = await db.select({ trip: tripRecords })
+    .from(tripRecords)
+    .innerJoin(tripMemberRecords, eq(tripMemberRecords.tripId, tripRecords.id))
+    .where(and(...conditions))
+    .orderBy(desc(tripRecords.createdAt));
+  if (!rows.length) return [];
+  const tripIds = rows.map(({ trip }) => trip.id);
+  const [cityLinks, memberLinks] = await Promise.all([
+    db.select({ tripId: tripCityRecords.tripId, name: cityRecords.name })
+      .from(tripCityRecords)
+      .innerJoin(cityRecords, eq(tripCityRecords.cityId, cityRecords.id))
+      .where(inArray(tripCityRecords.tripId, tripIds))
+      .orderBy(asc(tripCityRecords.position)),
+    db.select({ tripId: tripMemberRecords.tripId, id: memberRecords.id, displayName: memberRecords.displayName })
+      .from(tripMemberRecords)
+      .innerJoin(memberRecords, eq(tripMemberRecords.memberId, memberRecords.id))
+      .where(inArray(tripMemberRecords.tripId, tripIds)),
+  ]);
+  return rows.map(({ trip }) => ({
+    ...trip,
+    status: trip.status as TripStatus,
+    cities: cityLinks.filter((city) => city.tripId === trip.id).map(({ name }) => ({ name })),
+    members: memberLinks.filter((member) => member.tripId === trip.id).map(({ id, displayName }) => ({ id, displayName })),
+  }));
+}
+
 export async function findTripBySlug(slug: string) {
   const db = getDb();
   const rows = await db.select().from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1);

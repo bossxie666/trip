@@ -1,4 +1,4 @@
-import { listTrips } from "@/services/trip-repository.server";
+import { listTripSummaries } from "@/services/trip-repository.server";
 import { getCurrentMember, tripDeletionMemberId } from "@/services/auth.server";
 import type { TripStatus } from "@/models/travel";
 import { TripBookCard } from "@/components/trip/TripBookCard";
@@ -17,9 +17,7 @@ const filters: { value: TripStatus | "all"; label: string }[] = [
   { value: "planning", label: "待出行" }, { value: "completed", label: "已出行" },
 ];
 
-function participantSummary(trip: Awaited<ReturnType<typeof listTrips>>[number]) {
-  const stages = trip.stages?.filter((stage) => stage.members?.length);
-  if (stages?.length) return stages.map((stage) => `${stage.city?.name || stage.title}${stage.members?.length}人`).join(" · ");
+function participantSummary(trip: Awaited<ReturnType<typeof listTripSummaries>>[number]) {
   return `${trip.members?.length || trip.people} 人`;
 }
 
@@ -27,7 +25,7 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
   const requested = (await searchParams).status;
   const activeStatus = filters.some((filter) => filter.value === requested) ? requested as TripStatus : "all";
   const actor = await getCurrentMember();
-  const [trips, members] = actor ? await Promise.all([listTrips(activeStatus, actor.id), listActiveMembers()]) : [[], []];
+  const [trips, members] = actor ? await Promise.all([listTripSummaries(activeStatus, actor.id), listActiveMembers()]) : [[], []];
 
   return (<>
     {actor && <SiteHeader active="trips" currentMember={{ id: actor.id, displayName: actor.displayName, avatar: actor.avatar }} />}

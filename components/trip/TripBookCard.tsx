@@ -3,7 +3,7 @@
 
 import { MoreHorizontal, Users, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useRef, useState, type ChangeEvent, type MouseEvent as ReactMouseEvent, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type MouseEvent as ReactMouseEvent, type PointerEvent } from "react";
 import { uploadMediaFile } from "@/components/media/client-upload";
 import type { TripStatus } from "@/models/travel";
 import { TripDeleteButton } from "./TripDeleteButton";
@@ -25,6 +25,10 @@ export function TripBookCard({ trip, index, canDelete, members }: Props) {
   const pressOrigin = useRef({ x: 0, y: 0 });
   const coverInputRef = useRef<HTMLInputElement>(null);
   const href = `/trips/${trip.slug}/plan`;
+
+  useEffect(() => {
+    if (index < 4) router.prefetch(href);
+  }, [href, index, router]);
 
   function clearPress() {
     if (pressTimer.current) clearTimeout(pressTimer.current);
