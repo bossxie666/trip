@@ -139,7 +139,6 @@ test("keeps Session Member separate from Member View and safely resets view on i
     const viewedWang = await render("/trips/shanghai-hangzhou-2026/plan?view=planning&day=trip-shanghai-hangzhou-2026-day-1&member=member-wang-jingwen");
     assert.equal(viewedWang.status, 200);
     const viewedWangHtml = await viewedWang.text();
-    assert.match(viewedWangHtml, /当前身份/);
     assert.match(viewedWangHtml, /nini/);
     assert.match(viewedWangHtml, /成员视角/);
     assert.match(viewedWangHtml, /王静雯/);
@@ -155,12 +154,10 @@ test("keeps Session Member separate from Member View and safely resets view on i
     await loginAs("刘徐");
     const switched = await render("/trips/shanghai-hangzhou-2026/plan?view=planning&day=trip-shanghai-hangzhou-2026-day-1");
     const switchedHtml = await switched.text();
-    assert.match(switchedHtml, /当前身份[\s\S]{0,120}刘徐/);
     assert.match(switchedHtml, /<a(?=[^>]*member=member-liu-xu)(?=[^>]*class="active")[^>]*>刘徐<\/a>/);
 
     const viewedAgain = await render("/trips/shanghai-hangzhou-2026/plan?view=planning&day=trip-shanghai-hangzhou-2026-day-1&member=member-wang-jingwen");
     const viewedAgainHtml = await viewedAgain.text();
-    assert.match(viewedAgainHtml, /当前身份[\s\S]{0,120}刘徐/);
     assert.match(viewedAgainHtml, /<a(?=[^>]*member=member-wang-jingwen)(?=[^>]*class="active")[^>]*>王静雯<\/a>/);
 
     const loggedOut = await render("/api/session", { method: "DELETE", headers: { accept: "application/json" } });
@@ -174,14 +171,14 @@ test("keeps Session Member separate from Member View and safely resets view on i
   }
 });
 
-test("renders the identity control on the archive and workspace shells", async () => {
+test("keeps identity control in the global header and out of the workspace masthead", async () => {
   await loginAs("nini");
   const tripsHtml = await (await render("/trips")).text();
   assert.match(tripsHtml, /class="member-identity-trigger"/);
   assert.match(tripsHtml, /aria-haspopup="menu"/);
   const planHtml = await (await render("/trips/shanghai-hangzhou-2026/plan?view=map")).text();
   assert.match(planHtml, /class="member-identity-trigger"/);
-  assert.match(planHtml, /当前身份/);
+  assert.doesNotMatch(planHtml, /当前身份/);
 });
 
 test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership consistent", () => {
@@ -829,7 +826,6 @@ test("keeps production workspace navigation targets and member perspective seman
     assert.match(mapHtml, /<h2>行程路线<\/h2>/);
     assert.match(budgetHtml, /<h2>我的费用<\/h2>/);
     assert.match(nextDayHtml, /<h2>09\/24/);
-    assert.match(memberHtml, /当前身份[\s\S]{0,120}nini/);
     assert.match(memberHtml, /<a(?=[^>]*member=member-liu-xu)(?=[^>]*class="active")[^>]*>刘徐<\/a>/);
   } finally {
     sessionCookie = savedSession;
@@ -1216,3 +1212,4 @@ test("keeps budget plans, expenses, and booking edits member-scoped", async () =
   const finalHtml = await (await render("/trips/shanghai-hangzhou-2026/plan?view=budget")).text();
   assert.match(finalHtml, /value="120\.00"/); assert.match(finalHtml, /共享晚餐均摊/); assert.match(finalHtml, /我的费用待确认/);
 });
+
