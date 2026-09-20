@@ -35,5 +35,5 @@ export default async function TripPlanPage({ params, searchParams }: { params: P
         ? actor.id
         : "all";
   const costMode = query.cost === "actual" ? "actual" : "expected";
-  return <><SiteHeader active="trips" currentMember={{ id: actor!.id, displayName: actor!.displayName, avatar: actor!.avatar }} /><TripPlanWorkspace workspace={workspace} activeDayId={activeDayId} view={view} mapMode={mapMode} query={(query.q || "").trim()} areaFilter={areaFilter} categoryFilter={categoryFilter} libraryMode={query.library === "all"} librarySort={librarySort} libraryPage={libraryPage} memberFilter={memberFilter} costMode={costMode} settingsOpen={query.settings === "open"} currentMember={{ id: actor!.id, displayName: actor!.displayName, avatar: actor!.avatar }}/></>;
+  return <><SiteHeader active="trips" currentMember={{ id: actor!.id, displayName: actor!.displayName, avatar: actor!.avatar }} /><TripPlanWorkspace workspace={workspace} activeDayId={activeDayId} view={view} mapMode={mapMode} query={(query.q || "").trim()} areaFilter={areaFilter} categoryFilter={categoryFilter} libraryMode={query.library === "all"} librarySort={librarySort} libraryPage={libraryPage} memberFilter={memberFilter} costMode={costMode} /></>;
 }

@@ -3,10 +3,11 @@
 
 import { FormEvent, useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, Plus } from "lucide-react";
+import { BookOpen, Plus, X } from "lucide-react";
 import { WorkspaceNavLink as Link } from "@/components/trip/WorkspaceNavLink";
 import { uploadMediaFile } from "@/components/media/client-upload";
 import type { AlbumSummary } from "@/services/album-service.server";
+import { WorkspaceOverlay } from "@/components/trip/WorkspaceOverlay";
 
 type TripOption = { id: string; title: string };
 
@@ -57,8 +58,8 @@ export function AlbumIndexClient({ albums, trips }: { albums: AlbumSummary[]; tr
     finally { setSaving(false); }
   }
   return <>
-    <div className="album-index-actions"><button type="button" onClick={() => setOpen((value) => !value)}><Plus size={18} />添加相册</button></div>
-    {open && <form className="album-form" onSubmit={submit}><label>相册标题<input required maxLength={80} value={title} onChange={(event) => setTitle(event.target.value)} /></label><label>关联旅行（可选）<select value={tripId} onChange={(event) => setTripId(event.target.value)}><option value="">不关联旅行 · 全员共同相册</option>{trips.map((trip) => <option key={trip.id} value={trip.id}>{trip.title}</option>)}</select></label><label>简介<textarea maxLength={500} rows={3} value={description} onChange={(event) => setDescription(event.target.value)} /></label>{error && <p role="alert" className="form-error">{error}</p>}<div><button type="button" onClick={() => setOpen(false)}>取消</button><button type="submit" disabled={saving}>{saving ? "创建中…" : "创建相册"}</button></div></form>}
-    {!albums.length ? <section className="album-empty"><BookOpen size={72} strokeWidth={1.2} /><h2>暂无相册</h2><button type="button" onClick={() => setOpen(true)}><Plus size={18} />添加相册</button></section> : <div className="album-grid album-book-grid">{albums.map((album, index) => <AlbumBookCard album={album} index={index} key={album.id} />)}</div>}
+    <button type="button" className="global-floating-add" aria-label="添加相册" onClick={() => setOpen(true)}><Plus size={30} /></button>
+    <WorkspaceOverlay open={open} onClose={() => { if (!saving) setOpen(false); }} mode="modal" ariaLabel="添加相册" className="compact-editor-dialog"><header className="editor-dialog-heading"><h2>添加相册</h2><button type="button" aria-label="关闭" onClick={() => setOpen(false)}><X size={20} /></button></header><form className="album-form" onSubmit={submit}><label>相册标题<input required maxLength={80} value={title} onChange={(event) => setTitle(event.target.value)} /></label><label>关联旅行（可选）<select value={tripId} onChange={(event) => setTripId(event.target.value)}><option value="">不关联旅行 · 全员共同相册</option>{trips.map((trip) => <option key={trip.id} value={trip.id}>{trip.title}</option>)}</select></label><label>简介<textarea maxLength={500} rows={3} value={description} onChange={(event) => setDescription(event.target.value)} /></label>{error && <p role="alert" className="form-error">{error}</p>}<div><button type="button" onClick={() => setOpen(false)}>取消</button><button type="submit" disabled={saving}>{saving ? "创建中…" : "创建相册"}</button></div></form></WorkspaceOverlay>
+    {!albums.length ? <section className="album-empty"><BookOpen size={72} strokeWidth={1.2} /><h2>暂无相册</h2></section> : <div className="album-grid album-book-grid">{albums.map((album, index) => <AlbumBookCard album={album} index={index} key={album.id} />)}</div>}
   </>;
 }
