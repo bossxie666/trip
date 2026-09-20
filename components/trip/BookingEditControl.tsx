@@ -90,7 +90,7 @@ export function BookingEditControl({ slug, booking: record, members, existingPla
   const headingId = `booking-edit-title-${booking.id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   return <>
     <div className="booking-edit-control"><button type="button" className="booking-edit-trigger button-ghost" onClick={openEditor}>{booking.type === "hotel" ? "编辑住宿" : "编辑交通"}</button></div>
-    {open && <WorkspaceOverlay open={open} onClose={closeEditor} mode="drawer" ariaLabel={booking.type === "hotel" ? "编辑住宿" : "编辑交通"} ariaLabelledBy={headingId} className="booking-edit-dialog">
+    {open && <WorkspaceOverlay open={open} onClose={closeEditor} mode="modal" ariaLabel={booking.type === "hotel" ? "编辑住宿" : "编辑交通"} ariaLabelledBy={headingId} className="booking-edit-dialog">
         <header><div><span>BOOKING</span><h2 id={headingId}>{booking.type === "hotel" ? "编辑住宿" : "编辑交通"}</h2><p>{booking.title}</p></div><button type="button" className="workspace-close booking-edit-close" aria-label="关闭编辑器" onClick={closeEditor}>×</button></header>
         <div className="booking-edit-sheet">
           <label>显示名称<input value={title} onChange={(event) => setTitle(event.target.value)} /></label>

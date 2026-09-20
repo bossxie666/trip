@@ -90,7 +90,7 @@ export function RecommendationCreateControl({ slug, cities, existingPlaces = [] 
   const isPlace = entry === "place" || (entry === "xiaohongshu" && xhsKind === "place");
   return <>
     <button type="button" className="recommendation-create-trigger" onClick={openControl}>＋ 添加素材</button>
-    {open && <WorkspaceOverlay open={open} onClose={() => setOpen(false)} ariaLabel="添加攻略素材" className="recommendation-create-sheet" mode="drawer">
+    {open && <WorkspaceOverlay open={open} onClose={() => setOpen(false)} ariaLabel="添加攻略素材" className="recommendation-create-sheet" mode="modal">
       <header><div><span>ADD MATERIAL</span><h3>{entry === "menu" ? "添加攻略素材" : entry === "place" ? "添加地点" : entry === "guide" ? "添加攻略" : "添加小红书"}</h3><p>新增素材先进入资料库，不会自动加入 Day。</p></div><button type="button" className="workspace-close" aria-label="关闭" onClick={() => setOpen(false)}>×</button></header>
       {entry === "menu" ? <div className="recommendation-entry-grid">
         <button type="button" onClick={() => setEntry("place")}><b>添加地点</b><small>高德确认真实 Place</small></button>

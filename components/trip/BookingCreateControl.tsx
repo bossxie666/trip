@@ -67,7 +67,7 @@ export function BookingCreateControl({ slug, members, existingPlaces = [] }: { s
 
   return <>
     <button type="button" className="booking-add-button button-primary" onClick={() => { requestTripModalOpen(modalOwner); setOpen(true); }}>＋ 添加住宿</button>
-    {open && <WorkspaceOverlay open={open} onClose={() => setOpen(false)} mode="drawer" ariaLabel="添加住宿" className="plan-add-sheet">
+    {open && <WorkspaceOverlay open={open} onClose={() => setOpen(false)} mode="modal" ariaLabel="添加住宿" className="plan-add-sheet">
       <header><div><span>ACCOMMODATION</span><h3>添加住宿</h3><p>先记录计划，预订状态之后也可以修改。</p></div><button type="button" className="workspace-close" aria-label="关闭" onClick={() => setOpen(false)}>×</button></header>
       <label>住哪里？<GenericPlacePicker slug={slug} existing={existingPlaces} value={place} onChange={setPlace} autoFocus /></label>
       <div className="plan-add-two-columns"><label>入住日期<input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label>退房日期<input type="date" min={startDate} value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label></div>

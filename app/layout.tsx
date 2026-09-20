@@ -6,6 +6,7 @@ import "./participant-presence.css";
 import "./travel-journal-v12.css";
 import "./home-journal.css";
 import "./reference-home.css";
+import "./dialogs.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

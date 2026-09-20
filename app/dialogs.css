@@ -1,0 +1,132 @@
+/* One centered dialog language shared by profile, trip, album and workspace editors. */
+.workspace-overlay,
+.workspace-overlay-modal,
+.workspace-overlay-drawer,
+.budget-expense-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(18, 41, 57, .35);
+  backdrop-filter: blur(3px);
+  overscroll-behavior: contain;
+}
+
+.workspace-surface,
+.workspace-surface.workspace-modal,
+.workspace-surface.workspace-drawer,
+.workspace-surface.plan-add-sheet,
+.workspace-surface.booking-edit-dialog,
+.workspace-surface.day-presence-panel,
+.budget-expense-sheet {
+  position: relative;
+  inset: auto;
+  width: min(620px, calc(100vw - 36px));
+  height: auto;
+  max-width: calc(100vw - 36px);
+  max-height: calc(100dvh - 36px);
+  margin: 0;
+  overflow: auto;
+  border: 1px solid rgba(16, 67, 106, .2);
+  border-radius: 18px;
+  background: var(--paper2);
+  background-image: none !important;
+  box-shadow: 0 24px 70px rgba(22, 45, 55, .28);
+}
+
+.workspace-surface.recommendation-detail-drawer {
+  width: min(760px, calc(100vw - 36px));
+}
+
+.workspace-surface > header,
+.budget-expense-sheet > header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 22px 14px;
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper2);
+  background-image: none !important;
+}
+
+.workspace-close,
+.budget-close {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.workspace-close:hover,
+.budget-close:hover {
+  background: rgba(16, 67, 106, .08);
+  color: var(--ink);
+}
+
+.budget-expense-sheet { padding: 0; }
+.budget-expense-sheet > form { padding: 18px 22px 22px; }
+
+/* Legacy details editors use the same clean card geometry. */
+.trip-settings[open],
+.accommodation-details[open],
+.item-control[open],
+.item-place-control[open],
+.booking-place-control[open],
+.budget-booking-edit[open],
+.expense-edit[open] {
+  inset: 50% auto auto 50%;
+  width: min(620px, calc(100vw - 36px));
+  max-height: calc(100dvh - 36px);
+  transform: translate(-50%, -50%);
+  border-radius: 18px;
+  background: var(--paper2);
+  background-image: none !important;
+  box-shadow: 0 24px 70px rgba(22, 45, 55, .28);
+}
+
+@media (max-width: 680px) {
+  .workspace-overlay,
+  .workspace-overlay-modal,
+  .workspace-overlay-drawer,
+  .budget-expense-modal {
+    place-items: center;
+    padding: 14px;
+  }
+
+  .workspace-surface,
+  .workspace-surface.workspace-modal,
+  .workspace-surface.workspace-drawer,
+  .workspace-surface.plan-add-sheet,
+  .workspace-surface.booking-edit-dialog,
+  .workspace-surface.day-presence-panel,
+  .workspace-surface.recommendation-detail-drawer,
+  .budget-expense-sheet {
+    width: calc(100vw - 28px);
+    height: auto;
+    max-width: calc(100vw - 28px);
+    max-height: calc(100dvh - 28px);
+    border-width: 1px;
+    border-radius: 18px;
+    box-shadow: 0 24px 70px rgba(22, 45, 55, .28);
+  }
+
+  .workspace-surface > header,
+  .budget-expense-sheet > header { padding: 16px 16px 13px; }
+  .budget-expense-sheet > form { padding: 16px; }
+}
