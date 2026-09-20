@@ -206,7 +206,7 @@ export const recommendationReferenceRecords = sqliteTable("recommendation_refere
 export const mediaAssetRecords = sqliteTable("media_assets", {
   id: text("id").primaryKey(),
   uploaderMemberId: text("uploader_member_id").notNull().references(() => memberRecords.id, { onDelete: "restrict" }),
-  purpose: text("purpose", { enum: ["home_featured", "guestbook", "recommendation_reference", "trip_cover", "album"] }).notNull(),
+  purpose: text("purpose", { enum: ["home_featured", "guestbook", "recommendation_reference", "trip_cover", "album", "member_avatar"] }).notNull(),
   objectKey: text("object_key").notNull(),
   originalFilename: text("original_filename").notNull(),
   contentType: text("content_type").notNull(),

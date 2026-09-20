@@ -18,13 +18,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "跳进地理书的旅行 · Travel Archive",
-  description: "旅行档案、攻略与城市影集。",
+  title: "Trip.Bossxie",
+  description: "旅行、地图、相册与费用管理。",
   openGraph: {
-    title: "跳进地理书的旅行",
-    description: "深圳 → 上海迪士尼 → 外滩 → 杭州",
+    title: "Trip.Bossxie",
+    description: "旅行、地图、相册与费用管理。",
     type: "website",
-    images: [{ url: "/og.png", width: 1200, height: 630, alt: "上海杭州旅行手帐" }],
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "Trip.Bossxie" }],
   },
   twitter: { card: "summary_large_image", images: ["/og.png"] },
   icons: {

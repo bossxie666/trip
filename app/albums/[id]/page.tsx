@@ -10,5 +10,5 @@ export default async function AlbumDetailPage({ params }: { params: Promise<{ id
   const actor = await getCurrentMember(); if (!actor) redirect("/unlock?returnTo=%2Falbums");
   let album; try { album = await getAlbum((await params).id, actor.id); } catch { notFound(); }
   const trips = await listAlbumTripOptions(actor.id);
-  return <><SiteHeader active="albums" currentMember={{ id: actor.id, displayName: actor.displayName, avatar: actor.avatar }} /><main className="journal-subpage album-page album-detail-page"><header><Link href="/albums">← 返回相册</Link><span>{album.tripTitle || "SHARED ALBUM"}</span><h1>{album.title}</h1><p>{album.description || "等待照片写下这一页。"}</p></header><AlbumDetailClient album={album} trips={trips} /></main></>;
+  return <><SiteHeader active="albums" currentMember={{ id: actor.id, displayName: actor.displayName, avatar: actor.avatar }} /><main className="journal-subpage album-page album-detail-page"><header><Link href="/albums">← 返回相册</Link><h1>{album.title}</h1>{album.description && <p>{album.description}</p>}</header><AlbumDetailClient album={album} trips={trips} /></main></>;
 }

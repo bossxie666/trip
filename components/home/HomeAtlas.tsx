@@ -40,7 +40,7 @@ export function HomeAtlas({ cities, photos, fallbackPrimary, fallbackSecondary, 
         <img src="/assets/homepage-v3/atlas-desktop.webp" alt="" />
       </picture>}
     </div>
-    <div className="atlas-caption">{reference ? <>在地图上，<br />遇见更大的自己。</> : "我的旅行地图"}</div>
+    <div className="atlas-caption">旅行地图</div>
     {plot.length ? <svg viewBox="0 0 100 100" role="img" aria-label={`旅行城市：${plot.map((city) => city.name).join("、")}`}>
       {plot.length > 1 ? <polyline className="atlas-route" points={plot.map((city) => `${city.x},${city.y}`).join(" ")} fill="none" /> : null}
       {plot.map((city) => <g key={city.cityId} className={`atlas-city-marker atlas-city-marker-${city.tripStatus || "planning"}`} transform={`translate(${city.x} ${city.y})`}><circle r="2.4" /><text x="3.6" y="1.5">{city.name}</text></g>)}

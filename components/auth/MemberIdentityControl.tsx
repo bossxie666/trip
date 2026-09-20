@@ -1,65 +1,20 @@
 "use client";
-
 /* eslint-disable @next/next/no-img-element */
-
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { Camera, X } from "lucide-react";
 import { buildIdentitySwitchReturnTo } from "@/services/identity-navigation";
-
+import { uploadMediaFile } from "@/components/media/client-upload";
 export type SessionMemberSummary = { id: string; displayName: string; avatar?: string | null };
-
-function currentPath() {
-  if (typeof window === "undefined") return "/";
-  return `${window.location.pathname}${window.location.search}${window.location.hash}`;
-}
-
+function currentPath() { return typeof window === "undefined" ? "/" : `${window.location.pathname}${window.location.search}${window.location.hash}`; }
 export function MemberIdentityControl({ currentMember, compact = false }: { currentMember?: SessionMemberSummary | null; compact?: boolean }) {
-  const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState<"switch" | "logout" | null>(null);
-  const [error, setError] = useState("");
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", closeOnOutsidePointer);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeOnOutsidePointer);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [open]);
-
-  if (!currentMember) return null;
-
-  async function clearSession(destination: "switch" | "logout") {
-    setBusy(destination);
-    setError("");
-    try {
-      const response = await fetch("/api/session", { method: "DELETE", credentials: "same-origin", headers: { accept: "application/json" } });
-      if (!response.ok) throw new Error("旅行空间退出失败，请重试。");
-      const returnTo = destination === "switch" ? buildIdentitySwitchReturnTo(currentPath()) : "/";
-      window.location.assign(`/unlock?returnTo=${encodeURIComponent(returnTo)}`);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "旅行空间退出失败，请重试。");
-      setBusy(null);
-    }
-  }
-
-  return <div className={`member-identity-control${compact ? " member-identity-compact" : ""}`} ref={rootRef}>
-    <button type="button" className="member-identity-trigger" aria-haspopup="menu" aria-expanded={open} onClick={() => { setOpen((value) => !value); setError(""); }}>
-      {compact && (currentMember.avatar ? <img src={currentMember.avatar} alt="" width={34} height={34} /> : <i aria-hidden="true">{currentMember.displayName.slice(0, 1).toUpperCase()}</i>)}<span>{compact ? "成员" : "当前身份"}</span><strong>{currentMember.displayName}</strong><span aria-hidden="true">⌄</span>
-    </button>
-    {open && <div className="member-identity-menu" role="menu" aria-label="成员身份操作">
-      <div className="member-identity-current"><div><span>当前身份</span><strong>{currentMember.displayName}</strong></div><button type="button" className="member-identity-close" aria-label="关闭身份菜单" onClick={() => setOpen(false)}>×</button></div>
-      <button type="button" role="menuitem" onClick={() => void clearSession("switch")} disabled={busy !== null}>切换身份</button>
-      <button type="button" role="menuitem" className="member-identity-logout" onClick={() => void clearSession("logout")} disabled={busy !== null}>退出旅行空间</button>
-      {busy && <small className="member-identity-status">{busy === "switch" ? "正在准备切换…" : "正在退出…"}</small>}
-      {error && <small className="member-identity-error" role="alert">{error}</small>}
-    </div>}
+  const [member, setMember] = useState(currentMember), [open, setOpen] = useState(false), [busy, setBusy] = useState<"avatar" | "switch" | "logout" | null>(null), [error, setError] = useState("");
+  const triggerRef = useRef<HTMLButtonElement>(null), inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (!open) return; const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); }; document.addEventListener("keydown", escape); const old = document.body.style.overflow; document.body.style.overflow = "hidden"; return () => { document.removeEventListener("keydown", escape); document.body.style.overflow = old; }; }, [open]);
+  if (!member) return null;
+  function close() { setOpen(false); setError(""); window.setTimeout(() => triggerRef.current?.focus(), 0); }
+  async function uploadAvatar(event: ChangeEvent<HTMLInputElement>) { const file = event.target.files?.[0]; event.target.value = ""; if (!file) return; setBusy("avatar"); setError(""); try { const assetId = await uploadMediaFile(file, "member_avatar"); const response = await fetch("/api/member", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ assetId }) }); const payload = await response.json() as { member?: SessionMemberSummary; error?: string }; if (!response.ok || !payload.member) throw new Error(payload.error || "头像更新失败。"); setMember(payload.member); window.dispatchEvent(new CustomEvent("member-avatar-updated", { detail: payload.member })); } catch (caught) { setError(caught instanceof Error ? caught.message : "头像更新失败。"); } finally { setBusy(null); } }
+  async function clearSession(destination: "switch" | "logout") { setBusy(destination); setError(""); try { const response = await fetch("/api/session", { method: "DELETE", credentials: "same-origin" }); if (!response.ok) throw new Error("操作失败，请重试。"); const returnTo = destination === "switch" ? buildIdentitySwitchReturnTo(currentPath()) : "/"; window.location.assign(`/unlock?returnTo=${encodeURIComponent(returnTo)}`); } catch (caught) { setError(caught instanceof Error ? caught.message : "操作失败，请重试。"); setBusy(null); } }
+  return <div className={`member-identity-control${compact ? " member-identity-compact" : ""}`}><button ref={triggerRef} type="button" className="member-identity-trigger" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>{member.avatar ? <img src={member.avatar} alt="" width={36} height={36} /> : <i aria-hidden="true">{member.displayName.slice(0, 1).toUpperCase()}</i>}<strong>{member.displayName}</strong><span aria-hidden="true">⌄</span></button>
+    {open && <div className="member-profile-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) close(); }}><section className="member-profile-dialog" role="dialog" aria-modal="true" aria-label="个人资料"><header><h2>个人资料</h2><button type="button" aria-label="关闭" onClick={close} disabled={!!busy}><X size={20} /></button></header><div className="member-profile-avatar">{member.avatar ? <img src={member.avatar} alt={`${member.displayName}的头像`} /> : <i>{member.displayName.slice(0, 1).toUpperCase()}</i>}<button type="button" onClick={() => inputRef.current?.click()} disabled={!!busy}><Camera size={17} />{busy === "avatar" ? "上传中…" : "更换头像"}</button><input ref={inputRef} type="file" hidden accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" onChange={uploadAvatar} /></div><label className="member-profile-name"><span>名字</span><input readOnly value={member.displayName} /></label>{error && <p className="member-identity-error" role="alert">{error}</p>}<footer><button type="button" onClick={() => void clearSession("switch")} disabled={!!busy}>切换身份</button><button type="button" className="member-identity-logout" onClick={() => void clearSession("logout")} disabled={!!busy}>退出</button></footer></section></div>}
   </div>;
 }

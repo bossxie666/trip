@@ -38,15 +38,9 @@ export function ReferenceHome({ current, dashboard }: { current: SessionMemberSu
       </div>
       <section className="home-hero mobile-book-page">
         <article className="home-manifesto">
-          <div className="home-eyebrow">旅行 · 收藏 · 探索</div>
-          <h1 className="home-title-heading">
-            <picture className="home-title-picture">
-              <source media="(max-width: 767px)" srcSet="/assets/homepage-v3/title-mobile.png" />
-              <img className="home-title-asset" src="/assets/homepage-v3/title-mobile.png" alt="跳进地理书的旅行" width={1448} height={1086} />
-            </picture>
-          </h1>
+          <h1 className="home-title-heading">我的旅行</h1>
           <p className="home-manifesto-line"><span>已点亮城市 <b>{dashboard.stats.cityCount}</b></span><span>已完成旅行 <b>{dashboard.stats.completed}</b></span><span>下一站 <b>{nextCityNames.join("·") || "等待决定"}</b></span></p>
-          <div className="home-actions"><Link className="home-primary-action" href={next ? `/trips/${next.slug}/plan` : "/trips/new"}><Plane size={18} />规划下一段旅程<ArrowRight size={17} /></Link><Link className="home-secondary-action" href="/trips"><BookOpen size={18} />浏览旅行灵感</Link></div>
+          <div className="home-actions"><Link className="home-primary-action" href={next ? `/trips/${next.slug}/plan` : "/trips/new"}><Plane size={18} />{next ? "打开行程" : "新建行程"}<ArrowRight size={17} /></Link></div>
         </article>
         <HomeAtlas reference cities={dashboard.cities} photos={dashboard.featuredPhotos as { slotKey: "map_primary" | "map_secondary"; assetId: string }[]} fallbackPrimary={fallbackPhotos[0]} fallbackSecondary={fallbackPhotos[1]} />
         <article className="home-next-trip">
@@ -57,7 +51,7 @@ export function ReferenceHome({ current, dashboard }: { current: SessionMemberSu
 
       <div className="home-lower-band mobile-home-secondary">
         <section className="home-section home-photo-wall mobile-home-secondary" id="travel-wall">
-          <header><div><Camera size={25} /><h2>旅行影像墙</h2></div><span>来自真实行程照片</span></header>
+          <header><div><Camera size={25} /><h2>照片</h2></div></header>
           <HomePhotoRail items={wallPhotos} />
         </section>
 
@@ -65,9 +59,9 @@ export function ReferenceHome({ current, dashboard }: { current: SessionMemberSu
           <section className="home-section reference-trips">
             <header><div><BookOpen size={24} /><h2>我的旅行</h2></div><Link href="/trips">查看全部 →</Link></header>
             <div className="reference-trip-list">{dashboard.trips.map(trip => <Link key={trip.id} className="reference-trip-card" href={`/trips/${trip.slug}/plan`}>
-              {cover(trip.cover) ? <img src={cover(trip.cover)!} alt={trip.title} /> : <div className="reference-trip-no-photo">下一段风景</div>}
+              {cover(trip.cover) ? <img src={cover(trip.cover)!} alt={trip.title} /> : <div className="reference-trip-no-photo">暂无封面</div>}
               <b>{trip.title}</b><small>{range(trip.startDate, trip.endDate)} · {trip.people} 人</small><ArrowRight size={16} />
-            </Link>)}{!dashboard.trips.length && <Link href="/trips/new">在书里记录第一段旅行 →</Link>}</div>
+            </Link>)}{!dashboard.trips.length && <Link href="/trips/new">新建行程 →</Link>}</div>
           </section>
           <section className="home-section home-guestbook">
             <header><div><MessageSquareText size={24} /><h2>留言板</h2></div><Link href="/messages">查看全部 →</Link></header>
