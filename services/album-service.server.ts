@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { getDb, getRuntimeEnv } from "@/db";
-import { albumMediaRecords, albumRecords, mediaAssetRecords, tripMemberRecords, tripRecords } from "@/db/schema";
+import { albumMediaRecords, albumMediaTagRecords, albumRecords, albumTagRecords, mediaAssetRecords, tripMemberRecords, tripRecords } from "@/db/schema";
 
 export type AlbumSummary = {
   id: string; title: string; description: string | null; tripId: string | null; tripTitle: string | null;
@@ -50,13 +50,15 @@ export async function listAlbums(memberId: string): Promise<AlbumSummary[]> {
 
 export async function getAlbum(id: string, memberId: string) {
   const album = await requireAlbumAccess(id, memberId);
-  const [trip, photos] = await Promise.all([
+  const [trip, photos, tags, photoTags] = await Promise.all([
     album.tripId ? getDb().select({ title: tripRecords.title }).from(tripRecords).where(eq(tripRecords.id, album.tripId)).limit(1) : [],
-    getDb().select({ assetId: mediaAssetRecords.id, filename: mediaAssetRecords.originalFilename, width: mediaAssetRecords.width, height: mediaAssetRecords.height, uploadedByMemberId: albumMediaRecords.uploadedByMemberId, sortOrder: albumMediaRecords.sortOrder })
+    getDb().select({ assetId: mediaAssetRecords.id, filename: mediaAssetRecords.originalFilename, width: mediaAssetRecords.width, height: mediaAssetRecords.height, uploadedByMemberId: albumMediaRecords.uploadedByMemberId, sortOrder: albumMediaRecords.sortOrder, capturedAt: albumMediaRecords.capturedAt, createdAt: albumMediaRecords.createdAt, isFavorite: albumMediaRecords.isFavorite })
       .from(albumMediaRecords).innerJoin(mediaAssetRecords, eq(mediaAssetRecords.id, albumMediaRecords.mediaAssetId))
-      .where(and(eq(albumMediaRecords.albumId, id), eq(mediaAssetRecords.status, "ready"))).orderBy(asc(albumMediaRecords.sortOrder)),
+      .where(and(eq(albumMediaRecords.albumId, id), eq(mediaAssetRecords.status, "ready"))).orderBy(desc(albumMediaRecords.capturedAt), asc(albumMediaRecords.sortOrder)),
+    getDb().select().from(albumTagRecords).where(eq(albumTagRecords.albumId, id)).orderBy(asc(albumTagRecords.name)),
+    getDb().select().from(albumMediaTagRecords).where(eq(albumMediaTagRecords.albumId, id)),
   ]);
-  return { ...album, tripTitle: trip[0]?.title || null, photos, canEditAlbum: !album.tripId || album.createdByMemberId === memberId };
+  return { ...album, tripTitle: trip[0]?.title || null, tags, photos: photos.map((photo) => ({ ...photo, capturedAt: photo.capturedAt || photo.createdAt, tagIds: photoTags.filter((item) => item.mediaAssetId === photo.assetId).map((item) => item.tagId) })), canEditAlbum: !album.tripId || album.createdByMemberId === memberId };
 }
 
 export async function createAlbum(memberId: string, input: { title?: string; description?: string | null; tripId?: string | null }) {
@@ -92,7 +94,7 @@ export async function softDeleteAlbum(id: string, memberId: string) {
   await getDb().update(albumRecords).set({ deletedAt: now, updatedAt: now }).where(eq(albumRecords.id, id));
 }
 
-export async function attachAlbumMedia(id: string, memberId: string, assetIds: string[]) {
+export async function attachAlbumMedia(id: string, memberId: string, assetIds: string[], capturedAtByAsset: Record<string, string> = {}) {
   await requireAlbumAccess(id, memberId);
   const unique = [...new Set(assetIds)].slice(0, 20);
   if (!unique.length) throw new Error("INVALID_ALBUM_MEDIA");
@@ -105,9 +107,49 @@ export async function attachAlbumMedia(id: string, memberId: string, assetIds: s
   const additions = unique.filter((assetId) => !existingIds.has(assetId));
   if (additions.length) {
     const now = new Date().toISOString(), start = existing.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
-    await getDb().insert(albumMediaRecords).values(additions.map((assetId, index) => ({ albumId: id, mediaAssetId: assetId, uploadedByMemberId: memberId, sortOrder: start + index, createdAt: now })));
+    await getDb().insert(albumMediaRecords).values(additions.map((assetId, index) => ({ albumId: id, mediaAssetId: assetId, uploadedByMemberId: memberId, sortOrder: start + index, capturedAt: validCapturedAt(capturedAtByAsset[assetId]) || now, createdAt: now })));
     await getDb().update(albumRecords).set({ coverMediaAssetId: existing.length ? undefined : additions[0], updatedAt: now }).where(eq(albumRecords.id, id));
   }
+  return getAlbum(id, memberId);
+}
+
+function validCapturedAt(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) && date.getTime() <= Date.now() + 86400000 ? date.toISOString() : null;
+}
+
+export async function updateAlbumMedia(id: string, memberId: string, assetIds: string[], input: { isFavorite?: boolean; capturedAt?: string | null; addTagName?: string; removeTagId?: string }) {
+  const album = await requireAlbumAccess(id, memberId);
+  const unique = [...new Set(assetIds)].slice(0, 500);
+  if (!unique.length) throw new Error("INVALID_ALBUM_MEDIA");
+  const current = await getDb().select({ id: albumMediaRecords.mediaAssetId }).from(albumMediaRecords).where(and(eq(albumMediaRecords.albumId, id), inArray(albumMediaRecords.mediaAssetId, unique)));
+  if (current.length !== unique.length) throw new Error("ALBUM_MEDIA_NOT_FOUND");
+  const values: Partial<typeof albumMediaRecords.$inferInsert> = {};
+  if (input.isFavorite !== undefined) values.isFavorite = Boolean(input.isFavorite);
+  if (input.capturedAt !== undefined) {
+    if (album.tripId && album.createdByMemberId !== memberId) throw new Error("ALBUM_AUTHOR_REQUIRED");
+    const capturedAt = validCapturedAt(input.capturedAt);
+    if (!capturedAt) throw new Error("INVALID_ALBUM_DATE");
+    values.capturedAt = capturedAt;
+  }
+  if (Object.keys(values).length) await getDb().update(albumMediaRecords).set(values).where(and(eq(albumMediaRecords.albumId, id), inArray(albumMediaRecords.mediaAssetId, unique)));
+  if (input.addTagName !== undefined) {
+    const name = input.addTagName.trim().replace(/\s+/g, " ");
+    if (!name || name.length > 24) throw new Error("INVALID_ALBUM_TAG");
+    let tag = (await getDb().select().from(albumTagRecords).where(and(eq(albumTagRecords.albumId, id), eq(albumTagRecords.name, name))).limit(1))[0];
+    if (!tag) { tag = { id: crypto.randomUUID(), albumId: id, name, createdAt: new Date().toISOString() }; await getDb().insert(albumTagRecords).values(tag); }
+    await getDb().insert(albumMediaTagRecords).values(unique.map((mediaAssetId) => ({ albumId: id, mediaAssetId, tagId: tag.id }))).onConflictDoNothing();
+  }
+  if (input.removeTagId) await getDb().delete(albumMediaTagRecords).where(and(eq(albumMediaTagRecords.albumId, id), inArray(albumMediaTagRecords.mediaAssetId, unique), eq(albumMediaTagRecords.tagId, input.removeTagId)));
+  await getDb().update(albumRecords).set({ updatedAt: new Date().toISOString() }).where(eq(albumRecords.id, id));
+  return getAlbum(id, memberId);
+}
+
+export async function deleteAlbumMediaBatch(id: string, memberId: string, assetIds: string[]) {
+  const unique = [...new Set(assetIds)].slice(0, 500);
+  if (!unique.length) throw new Error("INVALID_ALBUM_MEDIA");
+  for (const assetId of unique) await deleteAlbumMedia(id, memberId, assetId);
   return getAlbum(id, memberId);
 }
 
