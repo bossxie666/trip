@@ -38,7 +38,7 @@ export function ReferenceHome({ current, dashboard }: { current: SessionMemberSu
       </div>
       <section className="home-hero mobile-book-page">
         <article className="home-manifesto">
-          <h1 className="home-title-heading">我的旅行</h1>
+          <h1 className="home-title-heading"><picture className="home-title-picture"><source media="(max-width: 767px)" srcSet="/assets/homepage-v3/title-mobile.png" /><img className="home-title-asset" src="/assets/homepage-v3/title-mobile.png" alt="跳进地理书的旅行" width={1448} height={1086} /></picture></h1>
           <p className="home-manifesto-line"><span>已点亮城市 <b>{dashboard.stats.cityCount}</b></span><span>已完成旅行 <b>{dashboard.stats.completed}</b></span><span>下一站 <b>{nextCityNames.join("·") || "等待决定"}</b></span></p>
           <div className="home-actions"><Link className="home-primary-action" href={next ? `/trips/${next.slug}/plan` : "/trips/new"}><Plane size={18} />{next ? "打开行程" : "新建行程"}<ArrowRight size={17} /></Link></div>
         </article>

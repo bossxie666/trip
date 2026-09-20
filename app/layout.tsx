@@ -18,13 +18,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Trip.Bossxie",
+  title: "跳进地理书的旅行 · Travel Archive",
   description: "旅行、地图、相册与费用管理。",
   openGraph: {
-    title: "Trip.Bossxie",
+    title: "跳进地理书的旅行",
     description: "旅行、地图、相册与费用管理。",
     type: "website",
-    images: [{ url: "/og.png", width: 1200, height: 630, alt: "Trip.Bossxie" }],
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "跳进地理书的旅行" }],
   },
   twitter: { card: "summary_large_image", images: ["/og.png"] },
   icons: {
