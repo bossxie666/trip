@@ -280,11 +280,31 @@ export const albumMediaRecords = sqliteTable("album_media", {
   mediaAssetId: text("media_asset_id").notNull().references(() => mediaAssetRecords.id, { onDelete: "restrict" }),
   uploadedByMemberId: text("uploaded_by_member_id").notNull().references(() => memberRecords.id, { onDelete: "restrict" }),
   sortOrder: integer("sort_order").notNull(),
+  capturedAt: text("captured_at"),
+  isFavorite: integer("is_favorite", { mode: "boolean" }).notNull().default(false),
   createdAt: text("created_at").notNull(),
 }, (table) => [
   primaryKey({ columns: [table.albumId, table.mediaAssetId] }),
   uniqueIndex("idx_album_media_order").on(table.albumId, table.sortOrder),
   index("idx_album_media_asset").on(table.mediaAssetId),
+]);
+
+export const albumTagRecords = sqliteTable("album_tags", {
+  id: text("id").primaryKey(),
+  albumId: text("album_id").notNull().references(() => albumRecords.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("idx_album_tags_name").on(table.albumId, table.name),
+]);
+
+export const albumMediaTagRecords = sqliteTable("album_media_tags", {
+  albumId: text("album_id").notNull(),
+  mediaAssetId: text("media_asset_id").notNull(),
+  tagId: text("tag_id").notNull().references(() => albumTagRecords.id, { onDelete: "cascade" }),
+}, (table) => [
+  primaryKey({ columns: [table.albumId, table.mediaAssetId, table.tagId] }),
+  index("idx_album_media_tags_tag").on(table.tagId),
 ]);
 
 export const recommendationMemberStateRecords = sqliteTable("recommendation_member_states", {

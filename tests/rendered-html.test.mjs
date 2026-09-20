@@ -71,7 +71,7 @@ class TestD1Database {
 const DB = new TestD1Database();
 globalThis.__TRIP_TEST_D1__ = DB;
 globalThis.__TRIP_TEST_ENV__ = { TRIP_SPACE_INVITE_CODE: "test-invite", TRIP_SPACE_SESSION_SECRET: "test-session-secret-at-least-32-characters", AMAP_JS_API_KEY: "test-js-key", AMAP_JS_SECURITY_CODE: "test-js-code", AMAP_WEB_SERVICE_KEY: "test-web-key" };
-for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql", "0014_v2_2_1_confirmed_facts.sql", "0015_v2_4_r1_booking_endpoint_labels.sql", "0016_recommendation_v2.sql", "0017_home_media_guestbook.sql", "0018_recommendation_member_authoring.sql", "0019_albums.sql", "0020_city_centers.sql", "0021_security_rate_limits.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
+for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql", "0014_v2_2_1_confirmed_facts.sql", "0015_v2_4_r1_booking_endpoint_labels.sql", "0016_recommendation_v2.sql", "0017_home_media_guestbook.sql", "0018_recommendation_member_authoring.sql", "0019_albums.sql", "0020_city_centers.sql", "0021_security_rate_limits.sql", "0022_album_photo_management.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
 
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
@@ -386,6 +386,13 @@ test("creates and fully manages shared albums without leaking album media into o
     DB.database.prepare("INSERT INTO media_assets (id,uploader_member_id,purpose,object_key,original_filename,content_type,byte_size,status,created_at,updated_at,ready_at) VALUES (?,?,?,?,?,'image/jpeg',100,'ready',?,?,?)").run(assetB,"member-nini","album","album/test-b.jpg","b.jpg",now,now,now);
     const attached = await render(`/api/albums/${albumId}/media`, { method: "POST", body: { assetIds: [assetA, assetB] } });
     assert.equal(attached.status, 200); assert.equal((await attached.json()).album.photos.length, 2);
+    const favorited = await render(`/api/albums/${albumId}/media/batch`, { method: "PATCH", body: { action: "favorite", assetIds: [assetA], isFavorite: true } });
+    assert.equal(favorited.status, 200); assert.equal((await favorited.json()).album.photos.find((photo) => photo.assetId === assetA).isFavorite, true);
+    const tagged = await render(`/api/albums/${albumId}/media/batch`, { method: "PATCH", body: { action: "addTag", assetIds: [assetA, assetB], tagName: "桂林山水" } });
+    assert.equal(tagged.status, 200); assert.equal((await tagged.json()).album.tags[0].name, "桂林山水");
+    const dated = await render(`/api/albums/${albumId}/media/batch`, { method: "PATCH", body: { action: "date", assetIds: [assetA], capturedAt: "2026-08-16T12:00:00" } });
+    assert.equal(dated.status, 200); assert.match((await dated.json()).album.photos.find((photo) => photo.assetId === assetA).capturedAt, /^2026-08-16/);
+    const detailHtml = await (await render(`/albums/${albumId}`)).text(); assert.match(detailHtml, /aria-label="添加照片"/); assert.match(detailHtml, /照片筛选/);
     assert.equal(DB.database.prepare("SELECT cover_media_asset_id cover FROM albums WHERE id=?").get(albumId).cover, assetA);
     const reordered = await render(`/api/albums/${albumId}/media`, { method: "PATCH", body: { assetIds: [assetB, assetA] } }); assert.equal(reordered.status, 200);
     const covered = await render(`/api/albums/${albumId}`, { method: "PATCH", body: { coverMediaAssetId: assetB } }); assert.equal(covered.status, 200);
