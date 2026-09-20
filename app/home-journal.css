@@ -1686,3 +1686,15 @@ body:has(.journal-subpage) {
 .album-book:hover .album-book-open { transform:translateY(-5px) rotateY(-4deg) translateZ(8px); }
 @media(max-width:1080px) and (min-width:681px){.album-book-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
 @media(max-width:680px){.album-book-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px 16px;padding:20px 18px 94px}.album-book-meta{padding:8px 8px 9px 18%}.album-book-meta strong{font-size:clamp(17px,5.2vw,22px)}.album-book-meta small,.album-book-meta span{font-size:9px}}
+
+/* Compact workspace masthead: identity lives in the global navigation. */
+.trip-journal-workspace .trip-console { grid-template-columns:minmax(250px,.7fr) minmax(440px,1.3fr); gap:36px; padding:10px 0 12px; }
+.trip-journal-workspace .console-title { min-height:96px; padding:0 12px 0 16px; }
+.trip-journal-workspace .console-title > span { margin-top:8px; }
+.trip-journal-workspace .console-title h1 { margin:4px 0; font-size:clamp(31px,3vw,44px); }
+.trip-journal-workspace .console-title p { margin-top:5px; }
+.trip-journal-workspace .trip-console-side { grid-template-columns:minmax(145px,.42fr) minmax(300px,1.58fr); gap:12px; padding-top:16px; }
+.trip-journal-workspace .booking-console { min-height:62px; padding:9px 12px; }
+.trip-journal-workspace .library-console { grid-template-columns:1fr; }
+.trip-journal-workspace .library-console .console-title { min-height:84px; max-width:900px; }
+@media(max-width:900px){.trip-journal-workspace .trip-console{grid-template-columns:1fr}.trip-journal-workspace .trip-console-side{padding-top:0}}
