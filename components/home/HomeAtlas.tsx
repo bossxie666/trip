@@ -48,12 +48,12 @@ export function HomeAtlas({ cities, photos, fallbackPrimary, fallbackSecondary, 
     <figure className="atlas-polaroid atlas-polaroid-primary">
       {(primary || fallbackPrimary) ? <div className="atlas-polaroid-window"><img className={`atlas-polaroid-photo${primary ? "" : " atlas-polaroid-photo-fallback"}`} src={primary ? `/api/media/${primary.assetId}?variant=card` : fallbackPrimary!} alt="旅行地图照片一" width={360} height={260} /></div> : <div className="atlas-photo-empty">暂无照片</div>}
       <img className="atlas-polaroid-frame" src="/assets/homepage-v3/polaroid-frame-01.webp" alt="" aria-hidden="true" />
-      <figcaption>旅行照片</figcaption><HomeFeaturedPhotoEditor slotKey="map_primary" />
+      <HomeFeaturedPhotoEditor slotKey="map_primary" hasPhoto={Boolean(primary || fallbackPrimary)} />
     </figure>
     <figure className="atlas-polaroid atlas-polaroid-secondary">
       {(secondary || fallbackSecondary) ? <div className="atlas-polaroid-window"><img className={`atlas-polaroid-photo${secondary ? "" : " atlas-polaroid-photo-fallback"}`} src={secondary ? `/api/media/${secondary.assetId}?variant=card` : fallbackSecondary!} alt="旅行地图照片二" width={300} height={220} /></div> : <div className="atlas-photo-empty">暂无照片</div>}
       <img className="atlas-polaroid-frame" src="/assets/homepage-v3/polaroid-frame-02.webp" alt="" aria-hidden="true" />
-      <figcaption>地图照片</figcaption><HomeFeaturedPhotoEditor slotKey="map_secondary" />
+      <HomeFeaturedPhotoEditor slotKey="map_secondary" hasPhoto={Boolean(secondary || fallbackSecondary)} />
     </figure>
     <img className="atlas-stamp-asset" src="/assets/homepage-v3/sticker-airmail.webp" alt="" aria-hidden="true" />
     <img className="atlas-compass-asset" src="/assets/homepage-v3/sticker-compass.webp" alt="" aria-hidden="true" />
