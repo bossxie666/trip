@@ -3,14 +3,14 @@ import { getDb } from "@/db";
 import { cityRecords, tripCityRecords, tripRecords } from "@/db/schema";
 import { listGuestbookMessages } from "@/services/guestbook-service.server";
 import { listHomeFeaturedPhotos } from "@/services/media-service.server";
-import { listTrips } from "@/services/trip-repository.server";
+import { listTripSummaries } from "@/services/trip-repository.server";
 
 function todayInShanghai() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
 
 export async function getHomeDashboard(memberId: string) {
-  const trips = await listTrips("all", memberId);
+  const trips = await listTripSummaries("all", memberId);
   const tripIds = trips.map((trip) => trip.id);
   const db = getDb();
   const cityRows = tripIds.length ? await db.select({

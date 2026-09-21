@@ -10,6 +10,7 @@ import type { getHomeDashboard } from "@/services/home-dashboard.server";
 
 function cover(value: string | null | undefined) { return value === "/og.png" ? "/og-card.jpg" : value || null; }
 function range(start: string | null, end: string | null) { return start && end ? `${start.replaceAll("-", ".")} — ${end.slice(5).replaceAll("-", ".")}` : "日期未定"; }
+function dayCount(start: string | null, end: string | null) { if (!start || !end) return null; return Math.max(1, Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000) + 1); }
 
 type Dashboard = Awaited<ReturnType<typeof getHomeDashboard>>;
 export function ReferenceHome({ current, dashboard }: { current: SessionMemberSummary; dashboard: Omit<Dashboard, "upcoming"> & { upcoming: Dashboard["upcoming"] | null } }) {
@@ -38,14 +39,14 @@ export function ReferenceHome({ current, dashboard }: { current: SessionMemberSu
       </div>
       <section className="home-hero mobile-book-page">
         <article className="home-manifesto">
-          <h1 className="home-title-heading"><picture className="home-title-picture"><source media="(max-width: 767px)" srcSet="/assets/homepage-v3/title-mobile.png" /><img className="home-title-asset" src="/assets/homepage-v3/title-mobile.png" alt="跳进地理书的旅行" width={1448} height={1086} /></picture></h1>
+          <h1 className="home-title-heading"><picture className="home-title-picture"><source media="(max-width: 767px)" srcSet="/assets/homepage-v3/title-mobile.webp" /><img className="home-title-asset" src="/assets/homepage-v3/title-desktop.webp" alt="跳进地理书的旅行" width={2172} height={724} fetchPriority="high" /></picture></h1>
           <p className="home-manifesto-line"><span>已点亮城市 <b>{dashboard.stats.cityCount}</b></span><span>已完成旅行 <b>{dashboard.stats.completed}</b></span><span>下一站 <b>{nextCityNames.join("·") || "等待决定"}</b></span></p>
           <div className="home-actions"><Link className="home-primary-action" href={next ? `/trips/${next.slug}/plan` : "/trips/new"}><Plane size={18} />{next ? "打开行程" : "新建行程"}<ArrowRight size={17} /></Link></div>
         </article>
         <HomeAtlas reference cities={dashboard.cities} photos={dashboard.featuredPhotos as { slotKey: "map_primary" | "map_secondary"; assetId: string }[]} fallbackPrimary={fallbackPhotos[0]} fallbackSecondary={fallbackPhotos[1]} />
         <article className="home-next-trip">
           <div className="next-trip-label"><span>下一站</span></div>
-          {next ? <><h2>{nextCityNames.join(" · ") || next.title}</h2><time>{range(next.startDate, next.endDate)}</time>{cover(next.cover) ? <img src={cover(next.cover)!} alt={`${next.title}封面`} width={560} height={340} /> : <div className="next-trip-photo-empty">下一站，等一张照片</div>}<footer><span><MapPin size={16} />{nextCityNames.length || next.cities.length} 城市</span><span><Route size={16} />{next.days.length || "—"} 天</span><span>{next.members?.length || next.people} 人</span><Link href={`/trips/${next.slug}/plan`} aria-label={`打开${next.title}`}><ArrowRight size={19} /></Link></footer></> : <><h2>下一站待定</h2><p>先把想去的地方放进一条新行程。</p><Link className="home-primary-action" href="/trips/new">新建行程<ArrowRight size={17} /></Link></>}
+          {next ? <><h2>{nextCityNames.join(" · ") || next.title}</h2><time>{range(next.startDate, next.endDate)}</time>{cover(next.cover) ? <img src={cover(next.cover)!} alt={`${next.title}封面`} width={560} height={340} fetchPriority="high" /> : <div className="next-trip-photo-empty">下一站，等一张照片</div>}<footer><span><MapPin size={16} />{nextCityNames.length || next.cities.length} 城市</span><span><Route size={16} />{dayCount(next.startDate, next.endDate) || "—"} 天</span><span>{next.members?.length || next.people} 人</span><Link href={`/trips/${next.slug}/plan`} aria-label={`打开${next.title}`}><ArrowRight size={19} /></Link></footer></> : <><h2>下一站待定</h2><p>先把想去的地方放进一条新行程。</p><Link className="home-primary-action" href="/trips/new">新建行程<ArrowRight size={17} /></Link></>}
         </article>
       </section>
 
@@ -59,7 +60,7 @@ export function ReferenceHome({ current, dashboard }: { current: SessionMemberSu
           <section className="home-section reference-trips">
             <header><div><BookOpen size={24} /><h2>我的旅行</h2></div><Link href="/trips">查看全部 →</Link></header>
             <div className="reference-trip-list">{dashboard.trips.map(trip => <Link key={trip.id} className="reference-trip-card" href={`/trips/${trip.slug}/plan`}>
-              {cover(trip.cover) ? <img src={cover(trip.cover)!} alt={trip.title} /> : <div className="reference-trip-no-photo">暂无封面</div>}
+              {cover(trip.cover) ? <img src={cover(trip.cover)!} alt={trip.title} loading="lazy" width={480} height={300} /> : <div className="reference-trip-no-photo">暂无封面</div>}
               <b>{trip.title}</b><small>{range(trip.startDate, trip.endDate)} · {trip.people} 人</small><ArrowRight size={16} />
             </Link>)}{!dashboard.trips.length && <Link href="/trips/new">新建行程 →</Link>}</div>
           </section>
