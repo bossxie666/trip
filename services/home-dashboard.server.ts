@@ -1,6 +1,6 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
-import { cityRecords, tripCityRecords, tripMemberRecords, tripRecords } from "@/db/schema";
+import { cityRecords, tripCityRecords, tripRecords } from "@/db/schema";
 import { listGuestbookMessages } from "@/services/guestbook-service.server";
 import { listHomeFeaturedPhotos } from "@/services/media-service.server";
 import { listTripSummaries } from "@/services/trip-repository.server";
@@ -11,7 +11,9 @@ function todayInShanghai() {
 
 export async function getHomeDashboard(memberId: string) {
   const db = getDb();
-  const cityRowsPromise = db.select({
+  const trips = await listTripSummaries("all", memberId);
+  const tripIds = trips.map((trip) => trip.id);
+  const cityRowsPromise = tripIds.length ? db.select({
     cityId: cityRecords.id,
     name: cityRecords.name,
     slug: cityRecords.slug,
@@ -22,11 +24,9 @@ export async function getHomeDashboard(memberId: string) {
   }).from(tripCityRecords)
     .innerJoin(cityRecords, eq(tripCityRecords.cityId, cityRecords.id))
     .innerJoin(tripRecords, eq(tripCityRecords.tripId, tripRecords.id))
-    .innerJoin(tripMemberRecords, eq(tripMemberRecords.tripId, tripRecords.id))
-    .where(eq(tripMemberRecords.memberId, memberId))
-    .orderBy(asc(tripCityRecords.position));
-  const [trips, cityRows, featuredPhotos, messages] = await Promise.all([
-    listTripSummaries("all", memberId),
+    .where(inArray(tripCityRecords.tripId, tripIds))
+    .orderBy(asc(tripCityRecords.position)) : Promise.resolve([]);
+  const [cityRows, featuredPhotos, messages] = await Promise.all([
     cityRowsPromise,
     listHomeFeaturedPhotos(),
     listGuestbookMessages(3),
