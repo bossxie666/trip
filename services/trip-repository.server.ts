@@ -201,7 +201,7 @@ export async function listTripSummaries(status: TripStatus | "all" = "all", memb
   if (!rows.length) return [];
   const tripIds = rows.map(({ trip }) => trip.id);
   const [cityLinks, memberLinks] = await Promise.all([
-    db.select({ tripId: tripCityRecords.tripId, name: cityRecords.name })
+    db.select({ tripId: tripCityRecords.tripId, cityId: cityRecords.id, name: cityRecords.name, slug: cityRecords.slug, centerLat: cityRecords.centerLat, centerLng: cityRecords.centerLng })
       .from(tripCityRecords)
       .innerJoin(cityRecords, eq(tripCityRecords.cityId, cityRecords.id))
       .where(inArray(tripCityRecords.tripId, tripIds))
@@ -214,7 +214,7 @@ export async function listTripSummaries(status: TripStatus | "all" = "all", memb
   return rows.map(({ trip }) => ({
     ...trip,
     status: trip.status as TripStatus,
-    cities: cityLinks.filter((city) => city.tripId === trip.id).map(({ name }) => ({ name })),
+    cities: cityLinks.filter((city) => city.tripId === trip.id).map((city) => ({ cityId: city.cityId, name: city.name, slug: city.slug, centerLat: city.centerLat, centerLng: city.centerLng })),
     members: memberLinks.filter((member) => member.tripId === trip.id).map(({ id, displayName }) => ({ id, displayName })),
   }));
 }

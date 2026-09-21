@@ -1,3 +1,4 @@
+import dynamic from "next/dynamic";
 import { PlanningPanels } from "./PlanningPanels";
 import { WorkspaceNavLink } from "./WorkspaceNavLink";
 import { RecommendationAddControl } from "./RecommendationAddControl";
@@ -5,12 +6,10 @@ import { RecommendationDetailControl } from "./RecommendationDetailControl";
 import { RecommendationCreateControl } from "./RecommendationCreateControl";
 import { RecommendationCover } from "./RecommendationCover";
 import { FieldLabel, RouteSketch, TapeAccent } from "./TravelJournalPrimitives";
-import { PlanMap } from "./PlanMap";
 import { DayPresenceControl } from "./DayPresenceControl";
 import { ItineraryItemControl } from "./ItineraryItemControl";
 import { ItineraryOrderControls } from "./ItineraryOrderControls";
 import { PlanAddControl } from "./PlanAddControl";
-import { BudgetWorkspace } from "./BudgetWorkspace";
 import { BookingPlaceControl } from "./BookingPlaceControl";
 import { BookingCreateControl } from "./BookingCreateControl";
 import { BookingEditControl } from "./BookingEditControl";
@@ -26,6 +25,9 @@ import { filterTimelineForMember, numberTimelineNodes, type TimelineEdge, type T
 import { isTransportBooking, transportDisplayLabel } from "@/services/booking-semantics";
 import { summarizeAccommodation } from "@/services/accommodation-summary";
 import { TripBookShell } from "./TripBookShell";
+
+const PlanMap = dynamic(() => import("./PlanMap").then((module) => module.PlanMap));
+const BudgetWorkspace = dynamic(() => import("./BudgetWorkspace").then((module) => module.BudgetWorkspace));
 
 type Workspace = NonNullable<Awaited<ReturnType<typeof getPlanWorkspace>>>;
 type View = "planning" | "map" | "budget";
