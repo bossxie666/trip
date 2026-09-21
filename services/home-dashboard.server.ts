@@ -3,7 +3,7 @@ import { getDb } from "@/db";
 import { cityRecords, tripCityRecords, tripRecords } from "@/db/schema";
 import { listGuestbookMessages } from "@/services/guestbook-service.server";
 import { listHomeFeaturedPhotos } from "@/services/media-service.server";
-import { ensureCityCenter, listTrips } from "@/services/trip-repository.server";
+import { listTrips } from "@/services/trip-repository.server";
 
 function todayInShanghai() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -26,11 +26,7 @@ export async function getHomeDashboard(memberId: string) {
     .innerJoin(tripRecords, eq(tripCityRecords.tripId, tripRecords.id))
     .where(inArray(tripCityRecords.tripId, tripIds))
     .orderBy(asc(tripCityRecords.position)) : [];
-  const resolvedCities = await Promise.all(cityRows.map(async (city) => {
-    const resolved = await ensureCityCenter({ id: city.cityId, name: city.name, centerLat: city.centerLat, centerLng: city.centerLng });
-    return { cityId: city.cityId, name: city.name, slug: city.slug, centerLat: resolved.centerLat, centerLng: resolved.centerLng, tripStatus: city.tripStatus };
-  }));
-  const cities = [...new Map(resolvedCities.map((city) => [city.cityId, city])).values()];
+  const cities = [...new Map(cityRows.map((city) => [city.cityId, city])).values()];
   const today = todayInShanghai();
   const upcoming = trips.filter((trip) => trip.status === "planning" && (!trip.endDate || trip.endDate >= today)).sort((left, right) => (left.startDate || "9999").localeCompare(right.startDate || "9999"))[0]
     || trips.find((trip) => trip.status === "planning") || null;
