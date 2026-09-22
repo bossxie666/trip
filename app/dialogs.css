@@ -40,6 +40,23 @@
   width: min(760px, calc(100vw - 36px));
 }
 
+.workspace-surface.workspace-modal.accommodation-edit-dialog {
+  width: min(480px, calc(100vw - 36px));
+}
+
+.workspace-surface.accommodation-create-dialog > .accommodation-date-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 14px 22px 0;
+}
+
+.workspace-surface .accommodation-date-fields label,
+.workspace-surface .accommodation-date-fields input {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .workspace-surface > header,
 .budget-expense-sheet > header {
   position: sticky;
@@ -183,4 +200,10 @@
   .workspace-surface > header,
   .budget-expense-sheet > header { padding: 16px 16px 13px; }
   .budget-expense-sheet > form { padding: 16px; }
+
+  .workspace-surface.accommodation-create-dialog > .accommodation-date-fields {
+    grid-template-columns: minmax(0, 1fr);
+    margin-right: 16px;
+    margin-left: 16px;
+  }
 }

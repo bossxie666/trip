@@ -17,11 +17,9 @@ export function BookingCreateControl({ slug, members, existingPlaces = [] }: { s
   const { refreshWorkspace } = useWorkspaceNavigation();
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<"tentative" | "confirmed">("tentative");
-  const [title, setTitle] = useState("");
   const [place, setPlace] = useState<GenericPlaceChoice | null>(null);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [startTime, setStartTime] = useState("");
   const [amount, setAmount] = useState("");
   const [notes, setNotes] = useState("");
   const [memberIds, setMemberIds] = useState(members.map((member) => member.id));
@@ -33,7 +31,6 @@ export function BookingCreateControl({ slug, members, existingPlaces = [] }: { s
   const payloadPlace = (value: GenericPlaceChoice) => value.source === "existing"
     ? { placeId: value.id }
     : { providerPlaceId: value.providerPlaceId || value.id };
-  const instant = (date: string, time: string) => date && time ? new Date(`${date}T${time}:00+08:00`).toISOString() : null;
 
   async function save() {
     setSaving(true); setError("");
@@ -45,10 +42,10 @@ export function BookingCreateControl({ slug, members, existingPlaces = [] }: { s
         body: JSON.stringify({
           type: "hotel",
           status,
-          title: title.trim() || place.name,
+          title: place.name,
           startDateLocal: startDate,
           endDateLocal: endDate,
-          startAt: instant(startDate, startTime),
+          startAt: null,
           endAt: null,
           place: payloadPlace(place),
           totalAmountMinor: amount.trim() ? Math.round(Number(amount) * 100) : null,
@@ -67,12 +64,10 @@ export function BookingCreateControl({ slug, members, existingPlaces = [] }: { s
 
   return <>
     <button type="button" className="booking-add-button button-primary" onClick={() => { requestTripModalOpen(modalOwner); setOpen(true); }}>＋ 添加住宿</button>
-    {open && <WorkspaceOverlay open={open} onClose={() => setOpen(false)} mode="modal" ariaLabel="添加住宿" className="plan-add-sheet">
+    {open && <WorkspaceOverlay open={open} onClose={() => setOpen(false)} mode="modal" ariaLabel="添加住宿" className="plan-add-sheet accommodation-create-dialog">
       <header><div><span>ACCOMMODATION</span><h3>添加住宿</h3><p>先记录计划，预订状态之后也可以修改。</p></div><button type="button" className="workspace-close" aria-label="关闭" onClick={() => setOpen(false)}>×</button></header>
       <label>住哪里？<GenericPlacePicker slug={slug} existing={existingPlaces} value={place} onChange={setPlace} autoFocus /></label>
-      <div className="plan-add-two-columns"><label>入住日期<input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label>退房日期<input type="date" min={startDate} value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label></div>
-      <label>入住时间（可选）<input type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} /></label>
-      <label>显示名称（可选）<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="默认使用真实酒店名" /></label>
+      <div className="plan-add-two-columns accommodation-date-fields"><label>入住日期<input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label>退房日期<input type="date" min={startDate} value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label></div>
       <label>状态<select value={status} onChange={(event) => setStatus(event.target.value as typeof status)}><option value="tentative">计划中 / 未预订</option><option value="confirmed">已预订</option></select></label>
       <label>总价（元，可选）<input inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} /></label>
       <fieldset className="plan-add-participants"><legend>入住成员</legend><div className="participant-checkboxes">{members.map((member) => <label key={member.id}><input type="checkbox" checked={memberIds.includes(member.id)} onChange={() => setMemberIds((current) => current.includes(member.id) ? current.filter((id) => id !== member.id) : [...current, member.id])}/><span>{member.displayName}</span></label>)}</div></fieldset>
