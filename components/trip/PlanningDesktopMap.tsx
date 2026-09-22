@@ -10,7 +10,10 @@ export function PlanningDesktopMap({ fullHref, ...props }: PlanMapProps & { full
   const panel = useRef<HTMLElement>(null);
   const [visible, setVisible] = useState(false);
   useEffect(() => {
-    if (typeof IntersectionObserver === "undefined") { setVisible(true); return; }
+    if (typeof IntersectionObserver === "undefined") {
+      const timer = window.setTimeout(() => setVisible(true), 0);
+      return () => window.clearTimeout(timer);
+    }
     const observer = new IntersectionObserver(([entry]) => {
       if (!entry.isIntersecting) return;
       setVisible(true);

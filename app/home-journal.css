@@ -1684,24 +1684,24 @@ body:has(.journal-subpage) {
 .album-book { position:relative; isolation:isolate; min-width:0; padding:0 7px 9px 0; perspective:1300px; transform-style:preserve-3d; }
 .album-book::before { content:""; position:absolute; z-index:-2; inset:5px 0 3px 7px; border-radius:3px 10px 10px 4px; background:repeating-linear-gradient(0deg,#d9ccb6 0 1px,#fff9ec 1px 3px); box-shadow:5px 8px 0 #b9a98e,9px 13px 18px rgba(54,43,29,.3); transform:translateZ(-12px); }
 .album-book::after { content:""; position:absolute; z-index:-1; right:2px; bottom:3px; left:10%; height:10px; border-radius:0 0 7px 3px; background:repeating-linear-gradient(0deg,#cbbda6 0 1px,#f8f0df 1px 3px); box-shadow:0 2px 2px rgba(50,39,25,.18); transform:skewX(-24deg); }
-.album-book-open { position:relative; display:grid; grid-template-rows:62% 38%; aspect-ratio:.78; overflow:hidden; border:1px solid rgba(69,52,31,.14); border-radius:4px 9px 9px 4px; background:#f7f0df; color:#103f68; text-decoration:none; box-shadow:3px 5px 0 #d1c3aa,8px 13px 20px rgba(54,43,29,.28),inset -3px 0 4px rgba(75,55,30,.13); transform:rotateY(-1.5deg) translateZ(5px); }
+.album-book-open { position:relative; display:grid; grid-template-rows:54% 46%; aspect-ratio:.78; overflow:hidden; border:1px solid rgba(69,52,31,.14); border-radius:4px 9px 9px 4px; background:#f7f0df; color:#103f68; text-decoration:none; box-shadow:3px 5px 0 #d1c3aa,8px 13px 20px rgba(54,43,29,.28),inset -3px 0 4px rgba(75,55,30,.13); transform:rotateY(-1.5deg) translateZ(5px); }
 .album-book-open::after { content:""; position:absolute; inset:0; pointer-events:none; background:linear-gradient(90deg,rgba(16,54,78,.2),transparent 8%,transparent 91%,rgba(82,61,32,.12)); mix-blend-mode:multiply; }
 .album-book-spine { position:absolute; inset:0 auto 0 0; z-index:4; width:12%; border-radius:4px 0 0 4px; background:#47798a; box-shadow:inset 5px 0 7px rgba(255,255,255,.13),inset -7px 0 9px rgba(20,35,39,.28),2px 0 2px rgba(255,255,255,.32); }
 .album-book-tone-1 .album-book-spine { background:#3d7397; }.album-book-tone-2 .album-book-spine { background:#4e765b; }.album-book-tone-3 .album-book-spine { background:#988463; }
 .album-book-image { display:block; min-height:0; margin-left:9%; overflow:hidden; background:#ded7c8; }
 .album-book-image img,.album-book-empty { display:grid; place-items:center; width:100%; height:100%; object-fit:cover; }
 .album-book-empty { color:#746b5c; background:linear-gradient(145deg,#f4efe3,#d9cfbc); }
-.album-book-meta { display:grid; align-content:center; gap:7px; min-width:0; padding:10px 14px 12px 18%; background:linear-gradient(178deg,#faf5e9,#f0e6d2); }
+.album-book-meta { display:grid; align-content:center; gap:5px; min-width:0; padding:8px 12px 9px 16%; background:linear-gradient(178deg,#faf5e9,#f0e6d2); }
 .album-book-meta small { overflow:hidden; color:#d96557; font-size:10px; font-weight:800; text-overflow:ellipsis; white-space:nowrap; }
-.album-book-meta strong { overflow:hidden; font-family:"KaiTi",serif; font-size:clamp(19px,2vw,27px); font-weight:500; text-overflow:ellipsis; white-space:nowrap; }
+.album-book-meta strong { min-width:0; font-family:"KaiTi",serif; font-size:clamp(16px,1.5vw,22px); font-weight:500; line-height:1.2; overflow-wrap:anywhere; }
 .album-book-meta span { color:#72746f; font-size:11px; }
-.album-book-replace { position:absolute; z-index:7; top:0; right:7px; left:12%; height:62%; border:0; background:transparent; cursor:pointer; }
+.album-book-replace { position:absolute; z-index:7; top:0; right:7px; left:12%; height:54%; border:0; background:transparent; cursor:pointer; }
 .album-book-replace:focus-visible { outline:3px solid #0785ff; outline-offset:3px; }
 .album-book-cover-input { position:fixed; width:1px; height:1px; opacity:0; pointer-events:none; }
 .album-book-image.is-replacing { opacity:.55; }
 .album-book:hover .album-book-open { transform:translateY(-5px) rotateY(-4deg) translateZ(8px); }
 @media(max-width:1080px) and (min-width:681px){.album-book-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
-@media(max-width:680px){.album-book-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px 16px;padding:20px 18px 94px}.album-book-meta{padding:8px 8px 9px 18%}.album-book-meta strong{font-size:clamp(17px,5.2vw,22px)}.album-book-meta small,.album-book-meta span{font-size:9px}}
+@media(max-width:680px){.album-book-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px 16px;padding:20px 18px 94px}.album-book-meta{gap:3px;padding:5px 7px 6px 16%}.album-book-meta strong{font-size:clamp(14px,3.8vw,17px);line-height:1.2}.album-book-meta small,.album-book-meta span{font-size:9px;line-height:1.2}}
 
 /* Compact workspace masthead: identity lives in the global navigation. */
 .trip-journal-workspace .trip-console { grid-template-columns:minmax(250px,.7fr) minmax(440px,1.3fr); gap:36px; padding:10px 0 12px; }
