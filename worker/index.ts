@@ -41,8 +41,9 @@ function isPublicPath(pathname: string) {
     || publicAssetPrefixes.some((prefix) => pathname.startsWith(prefix));
 }
 
-function withSecurityHeaders(response: Response, url: URL) {
+function withSecurityHeaders(response: Response, url: URL, requestId: string) {
   const headers = new Headers(response.headers);
+  headers.set("x-request-id", requestId);
   headers.set("x-content-type-options", "nosniff");
   headers.set("x-frame-options", "DENY");
   headers.set("referrer-policy", "strict-origin-when-cross-origin");
@@ -61,8 +62,17 @@ function withSecurityHeaders(response: Response, url: URL) {
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    const requestId = crypto.randomUUID();
+    const startedAt = Date.now();
 
-    if (url.pathname === "/_vinext/image") {
+    const finish = (response: Response, failureCategory?: string) => {
+      const secured = withSecurityHeaders(response, url, requestId);
+      console.log(JSON.stringify({ type: "request", requestId, method: request.method, route: url.pathname, status: secured.status, durationMs: Date.now() - startedAt, failureCategory: failureCategory || null }));
+      return secured;
+    };
+
+    try {
+      if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
       const response = await handleImageOptimization(request, {
         fetchAsset: (path) => env.ASSETS.fetch(new Request(new URL(path, request.url))),
@@ -71,20 +81,24 @@ const worker = {
           return result.response();
         },
       }, allowedWidths);
-      return withSecurityHeaders(response, url);
-    }
-
-    if (!isPublicPath(url.pathname)) {
-      const memberId = await verifySessionToken(readCookie(request, sessionCookieName), env.TRIP_SPACE_SESSION_SECRET);
-      const member = memberId ? await env.DB.prepare("SELECT active FROM members WHERE id = ? LIMIT 1").bind(memberId).first<{ active: number }>() : null;
-      if (!member?.active) {
-        const unlock = new URL("/unlock", request.url);
-        unlock.searchParams.set("returnTo", safeInternalReturnTo(`${url.pathname}${url.search}`));
-        return withSecurityHeaders(Response.redirect(unlock, 302), url);
+        return finish(response);
       }
-    }
 
-    return withSecurityHeaders(await handler.fetch(request, env, ctx), url);
+      if (!isPublicPath(url.pathname)) {
+        const memberId = await verifySessionToken(readCookie(request, sessionCookieName), env.TRIP_SPACE_SESSION_SECRET);
+        const member = memberId ? await env.DB.prepare("SELECT active FROM members WHERE id = ? LIMIT 1").bind(memberId).first<{ active: number }>() : null;
+        if (!member?.active) {
+          const unlock = new URL("/unlock", request.url);
+          unlock.searchParams.set("returnTo", safeInternalReturnTo(`${url.pathname}${url.search}`));
+          return finish(Response.redirect(unlock, 302), "authentication");
+        }
+      }
+
+      return finish(await handler.fetch(request, env, ctx));
+    } catch (caught) {
+      console.error(JSON.stringify({ type: "request_error", requestId, method: request.method, route: url.pathname, durationMs: Date.now() - startedAt, error: caught instanceof Error ? caught.name : "UnknownError" }));
+      return finish(Response.json({ code: "INTERNAL_ERROR", message: "服务暂时不可用，请稍后重试。", requestId }, { status: 500, headers: { "cache-control": "no-store" } }), "internal");
+    }
   },
 };
 
