@@ -18,6 +18,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://trip.bossxie.win"),
   title: "跳进地理书的旅行 · Travel Archive",
   description: "旅行、地图、相册与费用管理。",
   openGraph: {
@@ -31,6 +32,8 @@ export const metadata: Metadata = {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
   },
+  manifest: "/manifest.webmanifest",
+  robots: { index: false, follow: false, nocache: true },
 };
 
 export default function RootLayout({

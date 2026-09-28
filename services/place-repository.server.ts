@@ -81,8 +81,9 @@ export async function createAmapPlace(slug: string, input: { providerPlaceId: st
   if (!city) {
     const cityName = (poi.cityName || poi.provinceName || poi.district || "未知地区").replace(/市$/, "");
     city = (await db.select().from(cityRecords).where(eq(cityRecords.name, cityName)).limit(1))[0];
-    if (!city) { const id = crypto.randomUUID(); city = { id, slug: `city-${id.slice(0, 8)}`, name: cityName, createdAt: now }; await db.insert(cityRecords).values(city); }
+    if (!city) { const id = crypto.randomUUID(); city = { id, slug: `city-${id.slice(0, 8)}`, name: cityName, centerLat: null, centerLng: null, createdAt: now }; await db.insert(cityRecords).values(city); }
   }
+  if (!city) throw new Error("CITY_RESOLUTION_FAILED");
   const cityLink = await db.select().from(tripCityRecords).where(and(eq(tripCityRecords.tripId, trip.id), eq(tripCityRecords.cityId, city.id))).limit(1);
   if (!cityLink.length) {
     const links = await db.select().from(tripCityRecords).where(eq(tripCityRecords.tripId, trip.id));

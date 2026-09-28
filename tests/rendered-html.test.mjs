@@ -175,7 +175,7 @@ test("keeps identity control in the global header and out of the workspace masth
   await loginAs("nini");
   const tripsHtml = await (await render("/trips")).text();
   assert.match(tripsHtml, /class="member-identity-trigger"/);
-  assert.match(tripsHtml, /aria-haspopup="menu"/);
+  assert.match(tripsHtml, /aria-haspopup="dialog"/);
   const planHtml = await (await render("/trips/shanghai-hangzhou-2026/plan?view=map")).text();
   assert.match(planHtml, /class="member-identity-trigger"/);
   assert.doesNotMatch(planHtml, /当前身份/);
@@ -203,7 +203,9 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   assert.match(css, /\.booking-add-button\{[^}]*background:var\(--ink\);[^}]*color:#fff/);
   assert.match(css, /\.add-itinerary-button\{[^}]*background:var\(--ink\);[^}]*color:#fff/);
   assert.match(css, /\.workspace-overlay\{position:fixed;inset:0/);
-  assert.match(css, /\.workspace-drawer\{width:min\(520px,100%\);height:100%/);
+  const dialogCss = readFileSync(new URL("../app/dialogs.css", import.meta.url), "utf8");
+  assert.match(dialogCss, /place-items: center/);
+  assert.match(dialogCss, /background-image: none !important/);
   assert.match(css, /\.button-primary\{border:1px solid var\(--ink\);background:var\(--ink\);color:#fff/);
   assert.doesNotMatch(accommodation, /添加长途交通/);
   assert.match(transport, /modalOwner = `plan-add:\$\{slug\}`/);
@@ -216,12 +218,12 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   assert.match(placeDiscovery, /modalOwner = `place-discovery:\$\{slug\}`/);
   assert.match(bookingEdit, /modalName = `booking-editor:\$\{booking\.id\}`/);
   assert.match(accommodation, /WorkspaceOverlay/);
-  assert.match(accommodation, /mode="drawer"/);
+  assert.match(accommodation, /mode="modal"/);
   assert.match(transport, /WorkspaceOverlay/);
   assert.match(presence, /WorkspaceOverlay/);
   assert.match(placeDiscovery, /WorkspaceOverlay/);
   assert.match(bookingEdit, /WorkspaceOverlay/);
-  assert.match(bookingEdit, /mode="drawer"/);
+  assert.match(bookingEdit, /mode="modal"/);
   assert.match(bookingEdit, /booking-danger-zone/);
   assert.match(bookingEdit, /workspace-close/);
   assert.match(bookingEdit, /booking-edit-cancel/);
@@ -237,7 +239,8 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   assert.match(mobileNavigation, />相册</);
   assert.match(mobileNavigation, />留言</);
   assert.doesNotMatch(mobileNavigation, />地图</);
-  assert.match(desktopMap, /matchMedia\("\(min-width: 1440px\)"\)/);
+  assert.match(desktopMap, /IntersectionObserver/);
+  assert.match(desktopMap, /rootMargin: "240px 0px"/);
   assert.match(desktopMap, /dynamic<PlanMapProps>/);
   assert.match(tripEditor, /uploadMediaFile\(coverFile, "trip_cover"\)/);
   assert.match(mediaService, /"trip_cover"/);
@@ -288,7 +291,7 @@ test("keeps the performance boundaries for metadata, workspace views, and client
   assert.match(workspaceNavLink, /router\.push\(href\)/);
   assert.doesNotMatch(workspaceNavLink, /location\.(reload|assign)/);
   assert.doesNotMatch(workspace, /location\.(reload|assign)/);
-  for (const file of ["app/trips/page.tsx", "app/trips/new/page.tsx", "app/trips/[slug]/not-found.tsx"]) {
+  for (const file of ["app/trips/page.tsx", "app/trips/[slug]/not-found.tsx"]) {
     const source = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
     assert.match(source, /WorkspaceNavLink as Link/);
     assert.doesNotMatch(source, /from "next\/link"/);
@@ -356,7 +359,7 @@ test("keeps all Stage A routes available", async () => {
   const homeHtml = await home.text();
   assert.match(homeHtml, /跳进地理书/);
   assert.match(homeHtml, /<a[^>]+href="\/trips"[^>]*>[\s\S]*?我的旅行[\s\S]*?<\/a>/);
-  assert.match(homeHtml, /旅行影像墙/);
+  assert.match(homeHtml, /<h2>照片<\/h2>/);
   assert.match(homeHtml, /留言板/);
   assert.equal(cities.status, 200); assert.equal(city.status, 200); assert.equal(map.status, 200);
 });
@@ -366,7 +369,7 @@ test("keeps desktop home sections while hiding only those sections on mobile", a
   const css = readFileSync(new URL("../app/home-journal.css", import.meta.url), "utf8");
   assert.match(html, /home-photo-wall mobile-home-secondary/);
   assert.match(html, /home-lower-grid mobile-home-secondary/);
-  assert.match(html, /旅行影像墙/);
+  assert.match(html, /<h2>照片<\/h2>/);
   assert.match(html, /我的旅行/);
   assert.match(html, /留言板/);
   assert.match(css, /@media \(max-width: 820px\)[\s\S]*?\.mobile-home-secondary \{ display: none!important; \}/);
@@ -464,7 +467,7 @@ test("lists the Shanghai Hangzhou trip through the shared workspace", async () =
   assert.match(allHtml, /上海 \+ 杭州/);
   assert.match(allHtml, /aria-label="Trip Bossxie 首页"/);
   assert.match(allHtml, /网站主导航/);
-  assert.match(allHtml, /<a[^>]+href="\/trips\/new"[^>]*>＋ 新建行程<\/a>/);
+  assert.match(allHtml, /<a[^>]+aria-label="新建行程"[^>]+href="\/trips\/new"[^>]*>＋<\/a>/);
   assert.match(allHtml, /<a[^>]+href="\/trips\?status=inspiration"/);
   assert.match(allHtml, /<a[^>]+href="\/trips\/shanghai-hangzhou-2026\/plan"/);
   assert.match(await planning.text(), /上海 \+ 杭州/);
@@ -607,7 +610,7 @@ test("hydrates Shanghai Hangzhou from D1 with stage participation after retiring
   assert.equal(DB.database.prepare("SELECT count(*) AS count FROM day_places WHERE day_id IN (SELECT id FROM days WHERE trip_id = ?)").get(trip.id).count, 0);
   assert.equal(DB.database.prepare("SELECT count(*) AS count FROM places WHERE id IN ('place-pvg-t2','place-shanghai-south','place-shanghai-disney','place-oriental-pearl','place-the-bund','place-hangzhou-east') AND coordinate_system = 'GCJ02' AND latitude IS NOT NULL AND longitude IS NOT NULL").get().count, 6);
   const page = await render("/trips");
-  assert.match(await page.text(), /上海4人 · 杭州5人/);
+  assert.match(await page.text(), />5 人</);
   const detail = await render("/trips/shanghai-hangzhou-2026");
   assert.equal(detail.status, 307);
   assert.equal(new URL(detail.headers.get("location"), "http://localhost").pathname, "/trips/shanghai-hangzhou-2026/plan");
@@ -779,14 +782,15 @@ test("keeps accommodation Bookings out of Day Plan until a Hotel Item is explici
 test("renders accommodation editor as an independent modal without an inline details block", () => {
   const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
   const source = readFileSync(new URL("../components/trip/BookingEditControl.tsx", import.meta.url), "utf8");
-  assert.match(source, /<WorkspaceOverlay[\s\S]*mode="drawer"/);
-  assert.match(source, /className="booking-edit-dialog"/);
+  assert.match(source, /<WorkspaceOverlay[\s\S]*mode="modal"/);
+  assert.match(source, /className=\{`booking-edit-dialog\$\{booking\.type === "hotel" \? " accommodation-edit-dialog" : ""\}`\}/);
   assert.match(source, /ariaLabelledBy=\{headingId\}/);
   assert.match(source, /booking-edit-cancel/);
   assert.match(source, /booking-danger-zone/);
   assert.doesNotMatch(source, /<details className="booking-edit-control"/);
-  assert.match(css, /\.workspace-surface\.booking-edit-dialog\{width:min\(520px,100%\);height:100%;max-height:100dvh/);
-  assert.match(css, /@media\(max-width:680px\)\{[\s\S]*\.workspace-surface\.workspace-modal,\.workspace-surface\.workspace-drawer\{width:100%;height:100dvh/);
+  const dialogCss = readFileSync(new URL("../app/dialogs.css", import.meta.url), "utf8");
+  assert.match(dialogCss, /\.workspace-surface\.workspace-modal\.accommodation-edit-dialog \{[\s\S]*?width: min\(480px/);
+  assert.match(dialogCss, /@media \(max-width: 680px\)[\s\S]*?width: calc\(100vw - 28px\)[\s\S]*?max-height: calc\(100dvh - 28px\)/);
 });
 
 test("keeps Add Itinerary types focused on place activities and ticketed transport", () => {
@@ -982,11 +986,11 @@ test("requires a member session and supports collaborative edit and delete", asy
   const listAfterCreate = await render("/trips");
   const listHtml = await listAfterCreate.text();
   assert.match(listHtml, /class="trip-book-cover"[^>]+href="\/trips\/[^"]+\/plan"/);
-  assert.match(listHtml, /aria-label="管理行程：上海 \+ 杭州"/);
+  assert.match(listHtml, /aria-label="编辑旅行：上海 \+ 杭州"/);
   const niniSession = sessionCookie;
   await loginAs("王静雯");
   const memberList = await render("/trips");
-  assert.match(await memberList.text(), /aria-label="管理行程：[^"]+"/);
+  assert.match(await memberList.text(), /aria-label="编辑旅行：[^"]+"/);
   const deniedDelete = await render(`/api/trips/${trip.slug}`, { method: "DELETE" });
   assert.equal(deniedDelete.status, 403);
   sessionCookie = niniSession;

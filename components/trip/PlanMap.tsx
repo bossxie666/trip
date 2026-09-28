@@ -92,7 +92,7 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
     ? persistedDaySegments.filter((segment) => memberFilter === "all" || (segment.from.memberStates?.[memberFilter] !== "absent" && segment.to.memberStates?.[memberFilter] !== "absent"))
     : workspace ? [] : dayStops.slice(1).map((to, index) => { const from = dayStops[index]; return { id: `${from.id}-${to.id}`, from, to, crossCity: from.place.cityId !== to.place.cityId }; });
   const entries = useMemo<MapEntry[]>(() => workspace?.mapPlaces || places.map((place) => ({ place: { ...place, cityId: "", address: null }, kind: place.candidate ? "candidate" : "itinerary", planStatus: place.candidate ? "candidate" : "selected" })), [workspace, places]);
-  const mapEntries = useMemo(() => {
+  const mapEntries = useMemo<MapEntry[]>(() => {
     if (workspace && mapMode === "day") {
       return dayStops.map((stop, index) => ({
         place: stop.place,
@@ -101,6 +101,7 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
         category: null,
         areaKey: null,
         recommendationTitle: null,
+        recommendations: undefined,
         timelineId: stop.id,
         nodeNumber: timelineNumbers.get(stop.id) || index + 1,
       }));

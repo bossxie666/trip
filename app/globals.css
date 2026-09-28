@@ -311,3 +311,15 @@ body:before{opacity:.14;background-image:linear-gradient(rgba(79,137,166,.07) 1p
 @media(max-width:767px){.global-floating-add{right:18px;bottom:calc(92px + env(safe-area-inset-bottom));width:58px;height:58px}.new-trip-page{padding:26px 16px 120px}.new-trip-page h1{font-size:38px;margin:8px 0 20px}.new-trip-form{width:100%;margin-top:20px;padding:20px 16px}.guestbook-composer{width:100%}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.recommendation-panel,.itinerary-panel,.map-view,.recommendation-card{animation:none!important}.recommendation-card,.recommendation-card>img{transition:none!important;transform:none!important}}
 
+/* Shared route recovery surfaces stay visually quiet and do not replace the
+   established travel-book artwork. */
+.route-loading{position:fixed;z-index:60;top:78px;left:50%;translate:-50% 0;display:flex;align-items:center;gap:9px;padding:9px 14px;border:1px solid #174b7440;border-radius:999px;background:#fffdf5ed;color:#103e68;font-weight:700;box-shadow:0 8px 24px #163b5920;backdrop-filter:blur(8px)}
+.route-loading span{width:9px;height:9px;border-radius:50%;background:#2499ef;animation:route-loading-pulse 1s ease-in-out infinite alternate}
+@keyframes route-loading-pulse{to{opacity:.32;scale:.72}}
+.system-state-page{min-height:100dvh;display:grid;place-items:center;padding:24px;background:#f7f1e6;color:#103e68}
+.system-state-card{width:min(460px,100%);padding:28px;border:1px solid #174b7430;border-radius:18px;background:#fffdf7;box-shadow:0 14px 40px #173a5720;text-align:center}
+.system-state-card h1{margin:0 0 12px;font-family:var(--font-serif,serif);font-size:clamp(1.7rem,5vw,2.35rem)}
+.system-state-card p{margin:0 0 22px;line-height:1.7;color:#536779}
+.system-state-card div{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
+.system-state-card a,.system-state-card button{display:inline-grid;place-items:center;min-height:44px;padding:0 18px;border:1px solid #103e68;border-radius:10px;background:#103e68;color:#fff;font:inherit;font-weight:700;text-decoration:none;cursor:pointer}
+@media(max-width:680px){.route-loading{top:82px;max-width:calc(100vw - 32px);white-space:nowrap}}

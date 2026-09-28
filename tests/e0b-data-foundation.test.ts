@@ -263,11 +263,11 @@ test("E0B data foundation", async (t) => {
 
   await t.test("aggregates transit legs and removes empty station steps", () => {
     const result = transitSteps.aggregateTransitSteps([
-      { mode: "walking", instruction: "起点", lineName: null, direction: null, stationCount: null, fromStation: null, toStation: "首站", transfer: null, durationSeconds: 120, distanceMeters: 180, polyline: [] },
-      { mode: "subway", instruction: null, lineName: "2号线", direction: "徐泾东方向", stationCount: 3, fromStation: "首站", toStation: "世纪大道", transfer: null, durationSeconds: 600, distanceMeters: 2600, polyline: [] },
-      { mode: "subway", instruction: null, lineName: "2号线", direction: "徐泾东方向", stationCount: 2, fromStation: "世纪大道", toStation: "人民广场", transfer: null, durationSeconds: 360, distanceMeters: 1500, polyline: [] },
-      { mode: "bus", instruction: null, lineName: "", direction: null, stationCount: 0, fromStation: null, toStation: null, transfer: null, durationSeconds: 0, distanceMeters: 0, polyline: [] },
-      { mode: "walking", instruction: "下车后", lineName: null, direction: null, stationCount: null, fromStation: null, toStation: "终点", transfer: null, durationSeconds: 180, distanceMeters: 260, polyline: [] },
+      { mode: "walking", rawType: "walking", instruction: "起点", lineName: null, direction: null, stationCount: null, fromStation: null, toStation: "首站", departureStop: null, arrivalStop: "首站", transfer: null, durationSeconds: 120, distanceMeters: 180, polyline: [] },
+      { mode: "subway", rawType: "subway", instruction: null, lineName: "2号线", direction: "徐泾东方向", stationCount: 3, fromStation: "首站", toStation: "世纪大道", departureStop: "首站", arrivalStop: "世纪大道", transfer: null, durationSeconds: 600, distanceMeters: 2600, polyline: [] },
+      { mode: "subway", rawType: "subway", instruction: null, lineName: "2号线", direction: "徐泾东方向", stationCount: 2, fromStation: "世纪大道", toStation: "人民广场", departureStop: "世纪大道", arrivalStop: "人民广场", transfer: null, durationSeconds: 360, distanceMeters: 1500, polyline: [] },
+      { mode: "bus", rawType: "bus", instruction: null, lineName: "", direction: null, stationCount: 0, fromStation: null, toStation: null, departureStop: null, arrivalStop: null, transfer: null, durationSeconds: 0, distanceMeters: 0, polyline: [] },
+      { mode: "walking", rawType: "walking", instruction: "下车后", lineName: null, direction: null, stationCount: null, fromStation: null, toStation: "终点", departureStop: null, arrivalStop: "终点", transfer: null, durationSeconds: 180, distanceMeters: 260, polyline: [] },
     ]);
     assert.deepEqual(result.map((step) => [step.mode, step.lineName, step.stationCount]), [["walking", null, null], ["subway", "2号线", 5], ["walking", null, null]]);
     assert.equal(result.some((step) => step.stationCount === 0), false);

@@ -1,0 +1,10 @@
+{
+  "name": "跳进地理书的旅行",
+  "short_name": "旅行地理书",
+  "description": "固定亲友团使用的私密旅行协作空间，需要网络连接。",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f1e6",
+  "theme_color": "#f7f1e6",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

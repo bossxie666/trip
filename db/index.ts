@@ -16,6 +16,13 @@ export function getRuntimeEnv() {
     R2_ACCESS_KEY_ID?: string;
     R2_SECRET_ACCESS_KEY?: string;
     R2_BUCKET_NAME?: string;
+    IMAGES: {
+      input(stream: ReadableStream): {
+        transform(options: Record<string, unknown>): {
+          output(options: { format: string; quality: number }): Promise<{ response(): Response }>;
+        };
+      };
+    };
   };
 }
 
