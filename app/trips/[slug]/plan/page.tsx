@@ -20,7 +20,7 @@ export default async function TripPlanPage({ params, searchParams }: { params: P
   const requestContext = await createTripRequestContext(slug);
   if (!requestContext.permissions.canRead || !requestContext.actor) notFound();
   const actor = requestContext.actor;
-  const workspace = await getPlanWorkspace(slug, actor?.id, { view, requestContext, recommendations: { area: areaFilter, category: categoryFilter, query: (query.q || "").trim(), library: query.library === "all", page: libraryPage, sort: librarySort } });
+  const workspace = await getPlanWorkspace(slug, actor?.id, { view, activeDayId: query.day, requestContext, recommendations: { area: areaFilter, category: categoryFilter, query: (query.q || "").trim(), library: query.library === "all", page: libraryPage, sort: librarySort } });
   if (!workspace) notFound();
   const activeDayId = workspace.days.some((day) => day.id === query.day) ? query.day! : workspace.days[0]?.id || "";
   const mapMode = modes.has(query.mode || "") ? query.mode as "day" | "library" : "day";

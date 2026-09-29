@@ -1,4 +1,5 @@
 import { and, eq, isNull, like } from "drizzle-orm";
+import { AwsV4Signer } from "aws4fetch";
 import { getDb, getRuntimeEnv } from "@/db";
 import { albumMediaRecords, albumRecords, homeFeaturedPhotoRecords, mediaAssetRecords, recommendationRecords, recommendationReferenceMediaRecords, recommendationReferenceRecords, tripMemberRecords, tripRecords } from "@/db/schema";
 
@@ -40,7 +41,38 @@ export async function createDirectUpload(actorMemberId: string, raw: { purpose?:
     createdAt: now,
     updatedAt: now,
   });
-  return { assetId: id, uploadUrl: `/api/media/uploads/${encodeURIComponent(id)}/content`, method: "PUT" as const, headers: { "content-type": input.contentType }, expiresInSeconds: 600 };
+  const direct = await createR2PresignedPut(objectKey, input.contentType);
+  return {
+    assetId: id,
+    uploadUrl: direct?.url || `/api/media/uploads/${encodeURIComponent(id)}/content`,
+    method: "PUT" as const,
+    headers: direct?.headers || { "content-type": input.contentType },
+    expiresInSeconds: 600,
+    uploadMode: direct ? "r2" as const : "worker" as const,
+  };
+}
+
+async function createR2PresignedPut(objectKey: string, contentType: string) {
+  const env = getRuntimeEnv();
+  const accountId = env.R2_ACCOUNT_ID?.trim();
+  const accessKeyId = env.R2_ACCESS_KEY_ID?.trim();
+  const secretAccessKey = env.R2_SECRET_ACCESS_KEY?.trim();
+  const bucket = (env.R2_BUCKET_NAME || "trip-archive-media").trim();
+  if (!accountId || !accessKeyId || !secretAccessKey || !bucket) return null;
+  const encodedKey = objectKey.split("/").map(encodeURIComponent).join("/");
+  const url = new URL(`https://${accountId}.r2.cloudflarestorage.com/${encodeURIComponent(bucket)}/${encodedKey}`);
+  url.searchParams.set("X-Amz-Expires", "600");
+  const signed = await new AwsV4Signer({
+    accessKeyId,
+    secretAccessKey,
+    method: "PUT",
+    url: url.toString(),
+    headers: { "content-type": contentType },
+    service: "s3",
+    region: "auto",
+    signQuery: true,
+  }).sign();
+  return { url: signed.url.toString(), headers: { "content-type": contentType } };
 }
 
 export async function uploadMediaContent(actorMemberId: string, assetId: string, contentType: string | null, bytes: ArrayBuffer) {

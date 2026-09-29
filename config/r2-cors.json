@@ -1,0 +1,17 @@
+{
+  "rules": [
+    {
+      "allowed": {
+        "origins": [
+          "https://trip.bossxie.win",
+          "https://trip-archive.bossxie666.workers.dev",
+          "https://trip-archive-preview.bossxie666.workers.dev"
+        ],
+        "methods": ["PUT"],
+        "headers": ["Content-Type"]
+      },
+      "exposeHeaders": ["ETag"],
+      "maxAgeSeconds": 3600
+    }
+  ]
+}

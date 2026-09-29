@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import "./budget-overrides.css";
-import "./participant-presence.css";
-import "./travel-journal-v12.css";
 import "./home-journal.css";
 import "./dialogs.css";
 

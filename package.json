@@ -14,6 +14,7 @@
     "test": "npm run build:self-hosted && node --experimental-strip-types --test tests/rendered-html.test.mjs tests/e0b-data-foundation.test.ts tests/e0c-real-trip-migration.test.mjs",
     "typecheck": "tsc --noEmit --pretty false",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "test:e2e": "playwright test",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
@@ -24,10 +25,12 @@
     "react-dom": "19.2.6"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.10.2",
     "@cloudflare/vite-plugin": "1.37.1",
     "@eslint/js": "9.39.4",
     "@next/eslint-plugin-next": "16.2.6",
     "@openai/sites-vite-plugin": "0.1.0",
+    "@playwright/test": "1.55.0",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",

@@ -101,6 +101,23 @@ const worker = {
       return finish(Response.json({ code: "INTERNAL_ERROR", message: "服务暂时不可用，请稍后重试。", requestId }, { status: 500, headers: { "cache-control": "no-store" } }), "internal");
     }
   },
+  async scheduled(_controller: unknown, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(cleanExpiredOperationalData(env));
+  },
 };
+
+async function cleanExpiredOperationalData(env: Env) {
+  const pendingBefore = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const rateLimitBefore = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+  const pending = await env.DB.prepare("SELECT id, object_key FROM media_assets WHERE status = 'pending' AND created_at < ? LIMIT 500").bind(pendingBefore).all<{ id: string; object_key: string }>();
+  for (const asset of pending.results || []) await env.MEDIA.delete(asset.object_key);
+  const statements = [env.DB.prepare("DELETE FROM rate_limits WHERE window_started_at < ?").bind(rateLimitBefore)];
+  if (pending.results?.length) {
+    const placeholders = pending.results.map(() => "?").join(",");
+    statements.push(env.DB.prepare(`DELETE FROM media_assets WHERE status = 'pending' AND id IN (${placeholders})`).bind(...pending.results.map((asset) => asset.id)));
+  }
+  const results = await env.DB.batch(statements);
+  console.log(JSON.stringify({ type: "scheduled_cleanup", pendingMediaDeleted: pending.results?.length || 0, operations: results.length }));
+}
 
 export default worker;
