@@ -62,5 +62,5 @@ export async function revokeSession(token: string | undefined, allForMember = fa
 }
 export async function isAdminMember(memberId: string) {
   try { return Boolean((await getRuntimeEnv().DB.prepare("SELECT role FROM members WHERE id = ? AND active = 1 LIMIT 1").bind(memberId).first<{ role: string }>())?.role === "admin"); }
-  catch { return memberId === "member-nini"; }
+  catch { return false; }
 }

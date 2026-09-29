@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   }
   const memberName = body.memberName?.trim().slice(0, 80) || "";
   const env = getRuntimeEnv();
-  if (!env.TRIP_SPACE_INVITE_CODE || !env.TRIP_SPACE_SESSION_SECRET) return Response.json({ error: "旅行空间尚未完成安全配置。" }, { status: 503 });
+  if (!env.TRIP_SPACE_SESSION_SECRET) return Response.json({ error: "旅行空间尚未完成安全配置。" }, { status: 503 });
   try {
     const clientKey = requestClientIdentifier(request);
     const [ipLimit, memberLimit] = await Promise.all([
@@ -47,6 +47,7 @@ export async function POST(request: Request) {
     if (!password || !await verifyPassword(member.id, password)) return Response.json({ code: "INVALID_CREDENTIALS", error: "成员或密码不正确。" }, { status: 401 });
     token = await issueServerSession(member.id, request.headers.get("user-agent"));
   } else {
+    if (!env.TRIP_SPACE_INVITE_CODE) return Response.json({ code: "ACTIVATION_CLOSED", error: "共享暗号激活已经关闭，请联系管理员。" }, { status: 403 });
     if (body.code !== env.TRIP_SPACE_INVITE_CODE) return Response.json({ code: "INVALID_CREDENTIALS", error: "成员或暗号不正确。" }, { status: 401 });
     if (status && body.newPassword) {
       try { await activateCredential(member.id, body.newPassword); }

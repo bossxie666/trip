@@ -207,3 +207,10 @@
     margin-left: 16px;
   }
 }
+.member-admin-panel{display:grid;gap:8px;padding-top:12px;border-top:1px solid rgba(16,58,99,.14)}
+.member-admin-panel>button{justify-self:start}
+.member-admin-panel>div{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:9px 0;border-top:1px solid rgba(16,58,99,.1)}
+.member-admin-panel>div span{display:grid;min-width:0;gap:2px}
+.member-admin-panel>div b,.member-admin-panel>div small{overflow-wrap:anywhere}
+.member-admin-panel>div small{color:#6d7780;font-size:12px}
+.member-profile-dialog footer{flex-wrap:wrap}

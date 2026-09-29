@@ -214,6 +214,26 @@ test("keeps identity control in the global header and out of the workspace masth
   assert.doesNotMatch(planHtml, /当前身份/);
 });
 
+test("lets an administrator disable a member and revoke every active session", async () => {
+  await loginAs("nini");
+  const memberId = "member-admin-disable-test";
+  try {
+    DB.database.prepare("INSERT INTO members (id,name,display_name,active,created_at,role,credential_status) VALUES (?,?,?,1,?,'member','active')").run(memberId, "disable-test", "停用测试", new Date().toISOString());
+    DB.database.prepare("INSERT INTO member_sessions (id,token_digest,member_id,created_at,last_used_at,expires_at) VALUES (?,?,?,?,?,?)").run("session-admin-disable-test", "digest-admin-disable-test", memberId, new Date().toISOString(), new Date().toISOString(), new Date(Date.now() + 86_400_000).toISOString());
+    const listed = await render("/api/admin/members");
+    assert.equal(listed.status, 200);
+    assert.ok((await listed.json()).members.some((member) => member.id === memberId));
+    const disabled = await render("/api/admin/members", { method: "PATCH", body: { memberId, active: false } });
+    assert.equal(disabled.status, 200);
+    assert.deepEqual({ ...DB.database.prepare("SELECT active,credential_status FROM members WHERE id=?").get(memberId) }, { active: 0, credential_status: "disabled" });
+    assert.ok(DB.database.prepare("SELECT revoked_at FROM member_sessions WHERE member_id=?").get(memberId).revoked_at);
+  } finally {
+    DB.database.prepare("DELETE FROM member_sessions WHERE member_id=?").run(memberId);
+    DB.database.prepare("DELETE FROM member_credentials WHERE member_id=?").run(memberId);
+    DB.database.prepare("DELETE FROM members WHERE id=?").run(memberId);
+  }
+});
+
 test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership consistent", () => {
   const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
   const accommodation = readFileSync(new URL("../components/trip/BookingCreateControl.tsx", import.meta.url), "utf8");

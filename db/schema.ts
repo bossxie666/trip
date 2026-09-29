@@ -6,6 +6,9 @@ export const memberRecords = sqliteTable("members", {
   displayName: text("display_name").notNull(),
   avatar: text("avatar"),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
+  role: text("role", { enum: ["admin", "member"] }).notNull().default("member"),
+  credentialStatus: text("credential_status", { enum: ["legacy", "active", "disabled"] }).notNull().default("legacy"),
+  lastLoginAt: text("last_login_at"),
   createdAt: text("created_at").notNull(),
 }, (table) => [uniqueIndex("idx_members_name").on(table.name)]);
 

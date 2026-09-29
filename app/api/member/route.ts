@@ -4,7 +4,7 @@ import { updateMemberAvatar } from "@/services/member-repository.server";
 export async function GET() {
   const member = await getCurrentMember();
   if (!member) return Response.json({ error: "请先登录。" }, { status: 401 });
-  return Response.json({ member: { id: member.id, displayName: member.displayName, avatar: member.avatar } });
+  return Response.json({ member: { id: member.id, displayName: member.displayName, avatar: member.avatar, role: member.role } });
 }
 
 export async function PATCH(request: Request) {
