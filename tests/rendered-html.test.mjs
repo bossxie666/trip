@@ -171,6 +171,39 @@ test("keeps Session Member separate from Member View and safely resets view on i
   }
 });
 
+test("activates an individual password and revokes server-side sessions", async () => {
+  const savedSession = sessionCookie;
+  const memberId = "member-auth-migration-test";
+  try {
+    DB.database.prepare("INSERT INTO members (id,name,display_name,active,created_at,role,credential_status) VALUES (?,?,?,1,?,'member','legacy')").run(memberId, "auth-test", "身份测试", new Date().toISOString());
+    const legacy = await render("/api/session", { method: "POST", body: { memberName: "auth-test", code: "test-invite" } });
+    assert.equal(legacy.status, 200);
+    assert.equal((await legacy.clone().json()).activationRequired, true);
+    const activated = await render("/api/session", { method: "POST", body: { memberName: "auth-test", code: "test-invite", newPassword: "personal-pass-2026" } });
+    assert.equal(activated.status, 200);
+    sessionCookie = activated.headers.get("set-cookie").split(";")[0];
+    const firstDeviceCookie = sessionCookie;
+    assert.match(sessionCookie, /trip_space_session=v2\./);
+    assert.equal(DB.database.prepare("SELECT credential_status FROM members WHERE id=?").get(memberId).credential_status, "active");
+    assert.equal((await render("/api/session", { method: "POST", body: { memberName: "auth-test", code: "test-invite" } })).status, 401);
+    const passwordLogin = await render("/api/session", { method: "POST", body: { memberName: "auth-test", password: "personal-pass-2026" } });
+    assert.equal(passwordLogin.status, 200);
+    sessionCookie = passwordLogin.headers.get("set-cookie").split(";")[0];
+    assert.equal((await render("/api/session", { method: "DELETE" })).status, 200);
+    assert.equal(DB.database.prepare("SELECT count(*) count FROM member_sessions WHERE member_id=? AND revoked_at IS NULL").get(memberId).count, 1);
+    sessionCookie = firstDeviceCookie;
+    assert.equal((await render("/api/session?all=true", { method: "DELETE" })).status, 200);
+    assert.equal(DB.database.prepare("SELECT count(*) count FROM member_sessions WHERE member_id=? AND revoked_at IS NULL").get(memberId).count, 0);
+    DB.database.prepare("UPDATE members SET credential_status='disabled' WHERE id=?").run(memberId);
+    assert.equal((await render("/api/session", { method: "POST", body: { memberName: "auth-test", password: "personal-pass-2026" } })).status, 403);
+  } finally {
+    sessionCookie = savedSession;
+    DB.database.prepare("DELETE FROM member_sessions WHERE member_id=?").run(memberId);
+    DB.database.prepare("DELETE FROM member_credentials WHERE member_id=?").run(memberId);
+    DB.database.prepare("DELETE FROM members WHERE id=?").run(memberId);
+  }
+});
+
 test("keeps identity control in the global header and out of the workspace masthead", async () => {
   await loginAs("nini");
   const tripsHtml = await (await render("/trips")).text();
@@ -780,7 +813,6 @@ test("keeps accommodation Bookings out of Day Plan until a Hotel Item is explici
 });
 
 test("renders accommodation editor as an independent modal without an inline details block", () => {
-  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
   const source = readFileSync(new URL("../components/trip/BookingEditControl.tsx", import.meta.url), "utf8");
   assert.match(source, /<WorkspaceOverlay[\s\S]*mode="modal"/);
   assert.match(source, /className=\{`booking-edit-dialog\$\{booking\.type === "hotel" \? " accommodation-edit-dialog" : ""\}`\}/);

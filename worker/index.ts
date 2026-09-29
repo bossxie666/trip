@@ -1,7 +1,7 @@
 /** Cloudflare Worker entry point for the vinext-starter template. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
-import { readCookie, sessionCookieName, verifySessionToken } from "../services/session";
+import { readCookie, sessionCookieName, verifySessionMemberId } from "../services/session";
 import { safeInternalReturnTo } from "../services/return-to";
 
 interface Env {
@@ -85,7 +85,7 @@ const worker = {
       }
 
       if (!isPublicPath(url.pathname)) {
-        const memberId = await verifySessionToken(readCookie(request, sessionCookieName), env.TRIP_SPACE_SESSION_SECRET);
+        const memberId = await verifySessionMemberId(readCookie(request, sessionCookieName), env.TRIP_SPACE_SESSION_SECRET, env.DB);
         const member = memberId ? await env.DB.prepare("SELECT active FROM members WHERE id = ? LIMIT 1").bind(memberId).first<{ active: number }>() : null;
         if (!member?.active) {
           const unlock = new URL("/unlock", request.url);
@@ -94,7 +94,8 @@ const worker = {
         }
       }
 
-      return finish(await handler.fetch(request, env, ctx));
+      const appHeaders = new Headers(request.headers); appHeaders.set("x-request-id", requestId);
+      return finish(await handler.fetch(new Request(request, { headers: appHeaders }), env, ctx));
     } catch (caught) {
       console.error(JSON.stringify({ type: "request_error", requestId, method: request.method, route: url.pathname, durationMs: Date.now() - startedAt, error: caught instanceof Error ? caught.name : "UnknownError" }));
       return finish(Response.json({ code: "INTERNAL_ERROR", message: "服务暂时不可用，请稍后重试。", requestId }, { status: 500, headers: { "cache-control": "no-store" } }), "internal");
