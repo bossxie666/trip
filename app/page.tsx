@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import "./reference-home.css";
+import "./home-page.css";
 import { ReferenceHome } from "@/components/home/ReferenceHome";
 import { getCurrentMember } from "@/services/auth.server";
 import { getHomeDashboard } from "@/services/home-dashboard.server";

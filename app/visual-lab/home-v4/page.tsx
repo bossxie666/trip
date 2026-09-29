@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import "../../home-page.css";
 import { ReferenceHome } from "@/components/home/ReferenceHome";
 import type { getHomeDashboard } from "@/services/home-dashboard.server";
 
