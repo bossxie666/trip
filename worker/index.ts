@@ -108,10 +108,15 @@ const worker = {
 
 async function cleanExpiredOperationalData(env: Env) {
   const pendingBefore = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const rateLimitBefore = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+  const rateLimitBefore = Date.now() - 48 * 60 * 60 * 1000;
+  const now = new Date().toISOString();
+  const revokedSessionBefore = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
   const pending = await env.DB.prepare("SELECT id, object_key FROM media_assets WHERE status = 'pending' AND created_at < ? LIMIT 500").bind(pendingBefore).all<{ id: string; object_key: string }>();
-  for (const asset of pending.results || []) await env.MEDIA.delete(asset.object_key);
-  const statements = [env.DB.prepare("DELETE FROM rate_limits WHERE window_started_at < ?").bind(rateLimitBefore)];
+  if (pending.results?.length) await env.MEDIA.delete(pending.results.map((asset) => asset.object_key));
+  const statements = [
+    env.DB.prepare("DELETE FROM rate_limits WHERE window_started_at < ?").bind(rateLimitBefore),
+    env.DB.prepare("DELETE FROM member_sessions WHERE expires_at < ? OR (revoked_at IS NOT NULL AND revoked_at < ?)").bind(now, revokedSessionBefore),
+  ];
   if (pending.results?.length) {
     const placeholders = pending.results.map(() => "?").join(",");
     statements.push(env.DB.prepare(`DELETE FROM media_assets WHERE status = 'pending' AND id IN (${placeholders})`).bind(...pending.results.map((asset) => asset.id)));
