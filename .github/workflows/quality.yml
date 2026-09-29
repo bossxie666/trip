@@ -47,7 +47,7 @@ jobs:
       - run: pnpm exec wrangler d1 execute DB --local --file scripts/e2e-seed.sql
       - run: pnpm build:self-hosted
       - run: pnpm test:e2e
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: playwright-report
