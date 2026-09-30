@@ -1,6 +1,7 @@
-import { BriefcaseBusiness, Home, Images, Map, MessageSquareText, Search, Menu } from "lucide-react";
+import { BriefcaseBusiness, Home, Images, Map, MessageSquareText, Search } from "lucide-react";
 import { MemberIdentityControl, type SessionMemberSummary } from "@/components/auth/MemberIdentityControl";
 import { WorkspaceNavLink } from "@/components/trip/WorkspaceNavLink";
+import { KnowledgeDrawer } from "./KnowledgeDrawer";
 
 const links = [
   { href: "/", label: "首页", icon: Home },
@@ -31,7 +32,7 @@ export function SiteMobileNav({ active = "", home = false }: SiteNavProps) {
 export function SiteHeader({ currentMember, active = "", renderMobileNav = true }: { currentMember: SessionMemberSummary; active?: SiteNavProps["active"]; renderMobileNav?: boolean }) {
   return <>
     <header className="site-header">
-      <div className="site-mobile-tools" aria-label="预留导航工具"><Menu size={25} /><span className="site-mobile-tools-divider" /><Search size={24} /></div>
+      <div className="site-mobile-tools" aria-label="导航工具"><KnowledgeDrawer /></div>
       <WorkspaceNavLink className="site-brand" href="/" aria-label="Trip Bossxie 首页"><b>Trip.Bossxie</b></WorkspaceNavLink>
       <nav className="site-desktop-nav" aria-label="网站主导航">
         {links.map(({ href, label, icon: Icon }) => <WorkspaceNavLink key={label} href={href} className={(active === "home" && href === "/") || (active === "trips" && href === "/trips") || (active === "map" && href === "/map") || (active === "albums" && href === "/albums") || (active === "messages" && href === "/messages") ? "active" : ""}><Icon size={17} aria-hidden="true" /><span>{label}</span></WorkspaceNavLink>)}

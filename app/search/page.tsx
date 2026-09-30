@@ -5,7 +5,7 @@ import { WorkspaceNavLink as Link } from "@/components/trip/WorkspaceNavLink";
 import { getCurrentMember } from "@/services/auth.server";
 import { searchMemberWorkspace } from "@/services/global-search.server";
 
-const labels = { trip: "行程", city: "目的地", recommendation: "攻略素材", place: "地点" };
+const labels = { trip: "行程", city: "目的地", recommendation: "攻略素材", place: "地点", knowledge: "知识库" };
 
 export const dynamic = "force-dynamic";
 

@@ -71,7 +71,7 @@ class TestD1Database {
 const DB = new TestD1Database();
 globalThis.__TRIP_TEST_D1__ = DB;
 globalThis.__TRIP_TEST_ENV__ = { TRIP_SPACE_INVITE_CODE: "test-invite", TRIP_SPACE_SESSION_SECRET: "test-session-secret-at-least-32-characters", AMAP_JS_API_KEY: "test-js-key", AMAP_JS_SECURITY_CODE: "test-js-code", AMAP_WEB_SERVICE_KEY: "test-web-key" };
-for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql", "0014_v2_2_1_confirmed_facts.sql", "0015_v2_4_r1_booking_endpoint_labels.sql", "0016_recommendation_v2.sql", "0017_home_media_guestbook.sql", "0018_recommendation_member_authoring.sql", "0019_albums.sql", "0020_city_centers.sql", "0021_security_rate_limits.sql", "0022_album_photo_management.sql", "0023_member_identity.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
+for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql", "0014_v2_2_1_confirmed_facts.sql", "0015_v2_4_r1_booking_endpoint_labels.sql", "0016_recommendation_v2.sql", "0017_home_media_guestbook.sql", "0018_recommendation_member_authoring.sql", "0019_albums.sql", "0020_city_centers.sql", "0021_security_rate_limits.sql", "0022_album_photo_management.sql", "0023_member_identity.sql", "0024_knowledge_library.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
 
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
@@ -401,33 +401,25 @@ test("keeps the performance boundaries for metadata, workspace views, and client
   assert.ok(DB.prepareCount < 30, `Planning should stay below 30 D1 statements (got ${DB.prepareCount})`);
 });
 
-test("paginates and filters the full recommendation library in D1", async () => {
-  const insert = DB.database.prepare(`INSERT INTO recommendations
-    (id, trip_id, kind, category, title, area_label, area_key, is_core, created_at, updated_at)
-    VALUES (?, 'trip-shanghai-hangzhou-2026', 'place', 'cafe', ?, '桐庐', 'tonglu', 0, ?, ?)`);
+test("filters the shared knowledge library in D1", async () => {
+  const insert = DB.database.prepare(`INSERT INTO knowledge_entries
+    (id, section, title, destination, created_at, updated_at)
+    VALUES (?, 'travel_guide', ?, '桐庐', ?, ?)`);
   try {
     for (let index = 1; index <= 13; index += 1) {
       const suffix = String(index).padStart(2, "0");
       const timestamp = `2026-10-${suffix}T00:00:00.000Z`;
-      insert.run(`perf-page-${suffix}`, `分页素材 ${suffix}`, timestamp, timestamp);
+      insert.run(`perf-knowledge-${suffix}`, `知识素材 ${suffix}`, timestamp, timestamp);
     }
 
-    const firstHtml = await (await render("/trips/shanghai-hangzhou-2026/plan?view=planning&library=all&area=tonglu&category=cafe&sort=recent&page=1")).text();
-    assert.match(firstHtml, /1-12 \/ 13/);
-    assert.match(firstHtml, /分页素材 13/);
-    assert.doesNotMatch(firstHtml, /分页素材 01/);
-
-    const secondHtml = await (await render("/trips/shanghai-hangzhou-2026/plan?view=planning&library=all&area=tonglu&category=cafe&sort=recent&page=2")).text();
-    assert.match(secondHtml, /13-13 \/ 13/);
-    assert.match(secondHtml, /分页素材 01/);
-    assert.doesNotMatch(secondHtml, /分页素材 13/);
-
-    const filteredHtml = await (await render("/trips/shanghai-hangzhou-2026/plan?view=planning&library=all&area=tonglu&category=cafe&q=13")).text();
-    assert.match(filteredHtml, /1-1 \/ 1/);
-    assert.match(filteredHtml, /分页素材 13/);
-    assert.doesNotMatch(filteredHtml, /分页素材 12/);
+    const allHtml = await (await render("/knowledge?section=travel_guide&destination=桐庐")).text();
+    assert.match(allHtml, /知识素材 13/);
+    assert.match(allHtml, /知识素材 01/);
+    const filteredHtml = await (await render("/knowledge?section=travel_guide&destination=桐庐&q=13")).text();
+    assert.match(filteredHtml, /知识素材 13/);
+    assert.doesNotMatch(filteredHtml, /知识素材 12/);
   } finally {
-    DB.database.exec("DELETE FROM recommendations WHERE id LIKE 'perf-page-%'");
+    DB.database.exec("DELETE FROM knowledge_entries WHERE id LIKE 'perf-knowledge-%'");
   }
 });
 
@@ -707,7 +699,7 @@ test("hydrates Shanghai Hangzhou from D1 with stage participation after retiring
   assert.equal(plan.status, 200);
   const planHtml = await plan.text();
   assert.match(planHtml, /TRIP CONSOLE/);
-  assert.match(planHtml, /攻略素材/);
+  assert.match(planHtml, /从知识库添加/);
   assert.doesNotMatch(planHtml, /简单方位图/);
   assert.doesNotMatch(planHtml, /active-candidate/);
 });
@@ -797,7 +789,7 @@ test("renders the E1 planning workspace from Booking, Recommendation and Itinera
   assert.match(html, /TRIP CONSOLE/); assert.match(html, /2026\.09\.23 — 09\.27/); assert.match(html, /上海4人 · 杭州5人/);
   assert.match(html, /06:35–08:55/); assert.match(html, /¥480/); assert.match(html, /上海南酒店/); assert.match(html, /杭州东酒店/); assert.match(html, /深圳.?→.?上海/); assert.match(html, /开园 → 闭园/); assert.match(html, /营业时间待确认/);
   for (const label of ["09/23", "09/24", "09/25", "09/26", "09/27"]) assert.match(html, new RegExp(label));
-  assert.match(html, /攻略素材/); assert.match(html, /上海迪士尼/); assert.match(html, /已加入 09\/23/); assert.match(html, /data-timeline-edge-kind="long-distance"/); assert.doesNotMatch(html, /已确认订单/); assert.doesNotMatch(html, /Booking Anchor/); assert.match(html, /当天成员/);
+  assert.match(html, /从知识库添加/); assert.match(html, /上海迪士尼/); assert.match(html, /data-timeline-edge-kind="long-distance"/); assert.doesNotMatch(html, /已确认订单/); assert.doesNotMatch(html, /Booking Anchor/); assert.match(html, /当天成员/);
   assert.doesNotMatch(html, /SZX-SHA-HGH|开始做选择|跳进地理书的旅行/);
 
   const day2Html = await (await render(`/trips/shanghai-hangzhou-2026/plan?view=planning&day=${day2}`)).text();
@@ -898,7 +890,7 @@ test("keeps Add Itinerary types focused on place activities and ticketed transpo
 
 test("validates E1 URL state and renders map and budget views", async () => {
   const invalid = await (await render("/trips/shanghai-hangzhou-2026/plan?view=wrong&day=other-trip-day")).text();
-  assert.match(invalid, /09\/23[\s\S]{0,80}(?:Day 1|深圳[\s\S]{0,20}→[\s\S]{0,20}上海)/); assert.match(invalid, /攻略素材/);
+  assert.match(invalid, /09\/23[\s\S]{0,80}(?:Day 1|深圳[\s\S]{0,20}→[\s\S]{0,20}上海)/); assert.match(invalid, /从知识库添加/);
   const mapResponse = await render("/trips/shanghai-hangzhou-2026/plan?view=map&mode=library&day=trip-shanghai-hangzhou-2026-day-2"), map = await mapResponse.text();
   assert.match(map, /攻略地图/); assert.match(map, /高德地图/); assert.match(map, /淡色 Marker/);
   const budget = await (await render("/trips/shanghai-hangzhou-2026/plan?view=budget&day=trip-shanghai-hangzhou-2026-day-3")).text();
@@ -931,32 +923,31 @@ test("keeps production workspace navigation targets and member perspective seman
   }
 });
 
-test("keeps Recommendation region and category independent from the active Day", async () => {
-  const day1 = "trip-shanghai-hangzhou-2026-day-1", day3 = "trip-shanghai-hangzhou-2026-day-3";
-  const shanghai = await (await render(`/trips/shanghai-hangzhou-2026/plan?view=planning&day=${day1}&area=shanghai&category=attraction`)).text();
-  for (const title of ["上海迪士尼", "武康大楼", "外滩", "东方明珠"]) assert.match(shanghai, new RegExp(`<h3>${title}</h3>`));
-  assert.doesNotMatch(shanghai, /<h3>灵隐寺<\/h3>/); assert.match(shanghai, new RegExp(`day=${day3}&amp;area=shanghai&amp;category=attraction`));
-
-  const hangzhouOnShanghaiDay = await (await render(`/trips/shanghai-hangzhou-2026/plan?view=planning&day=${day1}&area=hangzhou&category=attraction`)).text();
-  for (const title of ["灵隐寺", "财神庙", "西湖"]) assert.match(hangzhouOnShanghaiDay, new RegExp(`<h3>${title}</h3>`));
-  assert.doesNotMatch(hangzhouOnShanghaiDay, /<h3>上海迪士尼<\/h3>/); assert.match(hangzhouOnShanghaiDay, new RegExp(`day=${day3}&amp;area=hangzhou&amp;category=attraction`));
-
-  const tonglu = await (await render(`/trips/shanghai-hangzhou-2026/plan?view=planning&day=${day1}&area=tonglu&category=guide`)).text();
-  assert.match(tonglu, /<h3>桐庐一日攻略<\/h3>/); assert.doesNotMatch(tonglu, /<h3>西湖<\/h3>/); assert.match(tonglu, /桐庐(?:<!-- -->)? · (?:<!-- -->)?攻略/);
-  assert.equal(DB.database.prepare("SELECT COUNT(*) count FROM cities WHERE name = '桐庐' OR name = '桐庐市'").get().count, 0);
+test("moves Recommendation material into the shared travel knowledge section", async () => {
+  const response = await render("/knowledge?section=travel_guide&q=桐庐");
+  assert.equal(response.status, 200); const html = await response.text();
+  assert.match(html, /知识库/); assert.match(html, /桐庐一日攻略/); assert.match(html, /旅游攻略/); assert.doesNotMatch(html, /上海迪士尼/);
+  assert.equal(DB.database.prepare("SELECT COUNT(*) count FROM knowledge_entries WHERE section='travel_guide' AND legacy_recommendation_id IS NOT NULL").get().count, DB.database.prepare("SELECT COUNT(*) count FROM recommendations").get().count);
 });
 
-test("opens the full Recommendation Library without coupling it to the active Day", async () => {
+test("redirects the retired Recommendation Library to the shared knowledge library", async () => {
   const response = await render("/trips/shanghai-hangzhou-2026/plan?view=planning&library=all&day=trip-shanghai-hangzhou-2026-day-1&area=hangzhou&category=food&q=杭帮菜");
-  assert.equal(response.status, 200);
-  const html = await response.text();
-  assert.match(html, /TRIP LIBRARY/);
-  assert.match(html, /攻略资料库/);
-  assert.match(html, /杭州/);
-  assert.match(html, /美食/);
-  assert.match(html, /杭帮菜/);
-  assert.match(html, /← 返回规划/);
-  assert.match(html, /library=all/);
+  assert.equal(response.status, 307);
+  const target = new URL(response.headers.get("location"), "http://localhost");
+  assert.equal(target.pathname, "/knowledge"); assert.equal(target.searchParams.get("section"), "travel_guide"); assert.equal(target.searchParams.get("q"), "杭帮菜");
+});
+
+test("creates, searches, favorites, edits and soft-deletes shared knowledge", async () => {
+  await loginAs("nini");
+  const created = await render("/api/knowledge", { method: "POST", body: { section: "photography", title: "夜景拍摄", summary: "稳定曝光", body: "使用三脚架。", destination: "上海", externalUrl: "https://example.com/photo", tags: ["夜景", "构图"] } });
+  assert.equal(created.status, 201); const entry = (await created.json()).entry; assert.equal(entry.title, "夜景拍摄");
+  const page = await render("/knowledge?section=photography&q=夜景"); assert.equal(page.status, 200); assert.match(await page.text(), /夜景拍摄/);
+  assert.equal((await render(`/api/knowledge/${entry.id}/favorite`, { method: "POST", body: { favorite: true } })).status, 200);
+  const favorites = await render("/knowledge?favorite=1"); assert.match(await favorites.text(), /夜景拍摄/);
+  const updated = await render(`/api/knowledge/${entry.id}`, { method: "PATCH", body: { section: "photography", title: "城市夜景拍摄", summary: "稳定曝光", body: "使用三脚架。", destination: "上海", tags: ["夜景"] } }); assert.equal(updated.status, 200);
+  assert.equal((await render(`/api/knowledge/${entry.id}`, { method: "DELETE" })).status, 200); assert.equal(DB.database.prepare("SELECT deleted_at IS NOT NULL deleted FROM knowledge_entries WHERE id=?").get(entry.id).deleted, 1);
+  const persona = await render("/persona"); assert.equal(persona.status, 200); assert.match(await persona.text(), /3D形象准备中/);
+  const drawer = readFileSync(new URL("../components/site/KnowledgeDrawer.tsx", import.meta.url), "utf8"); assert.match(drawer, /拍照知识/); assert.match(drawer, /转场视频/); assert.match(drawer, /我的形象/);
 });
 
 test("E1 add-to-Day writes only ItineraryItem and keeps Legacy tables frozen", async () => {
@@ -981,7 +972,7 @@ test("manages duplicate Recommendation items independently without touching Book
   const second = (await (await render("/api/trips/shanghai-hangzhou-2026/plan/items", { method: "POST", body: { recommendationId, dayId: day5 } })).json()).item;
   assert.notEqual(first.id, second.id); assert.equal(first.dayId, day5); assert.equal(second.dayId, day5);
   const duplicateHtml = await (await render(`/trips/shanghai-hangzhou-2026/plan?view=planning&day=${day5}`)).text();
-  assert.match(duplicateHtml, /已加入 09\/24 · 09\/27 ×2/); assert.match(duplicateHtml, /再次加入/);
+  assert.match(duplicateHtml, /从知识库添加/); assert.equal(DB.database.prepare("SELECT COUNT(*) count FROM itinerary_items WHERE recommendation_id=? AND day_id=?").get(recommendationId, day5).count, 2);
 
   const firstEdit = await render(`/api/trips/shanghai-hangzhou-2026/plan/items/${first.id}`, { method: "PATCH", body: { title: "武康大楼上午", note: "第一条", dayId: day5 } });
   const secondEdit = await render(`/api/trips/shanghai-hangzhou-2026/plan/items/${second.id}`, { method: "PATCH", body: { title: "武康大楼傍晚", note: "第二条", dayId: day5 } });

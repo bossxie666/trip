@@ -209,7 +209,7 @@ export const recommendationReferenceRecords = sqliteTable("recommendation_refere
 export const mediaAssetRecords = sqliteTable("media_assets", {
   id: text("id").primaryKey(),
   uploaderMemberId: text("uploader_member_id").notNull().references(() => memberRecords.id, { onDelete: "restrict" }),
-  purpose: text("purpose", { enum: ["home_featured", "guestbook", "recommendation_reference", "trip_cover", "album", "member_avatar"] }).notNull(),
+  purpose: text("purpose", { enum: ["home_featured", "guestbook", "recommendation_reference", "trip_cover", "album", "member_avatar", "knowledge_image"] }).notNull(),
   objectKey: text("object_key").notNull(),
   originalFilename: text("original_filename").notNull(),
   contentType: text("content_type").notNull(),
@@ -225,6 +225,24 @@ export const mediaAssetRecords = sqliteTable("media_assets", {
   index("idx_media_assets_owner_purpose").on(table.uploaderMemberId, table.purpose, table.createdAt),
   index("idx_media_assets_status_created").on(table.status, table.createdAt),
 ]);
+
+export const knowledgeEntryRecords = sqliteTable("knowledge_entries", {
+  id: text("id").primaryKey(),
+  section: text("section", { enum: ["photography", "transition_video", "travel_guide"] }).notNull(),
+  title: text("title").notNull(), body: text("body"), summary: text("summary"), destination: text("destination"), externalUrl: text("external_url"), sourceLabel: text("source_label"), coverImageUrl: text("cover_image_url"),
+  coverMediaAssetId: text("cover_media_asset_id").references(() => mediaAssetRecords.id, { onDelete: "set null" }),
+  legacyRecommendationId: text("legacy_recommendation_id").references(() => recommendationRecords.id, { onDelete: "set null" }),
+  createdByMemberId: text("created_by_member_id").references(() => memberRecords.id, { onDelete: "set null" }),
+  updatedByMemberId: text("updated_by_member_id").references(() => memberRecords.id, { onDelete: "set null" }),
+  createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(), deletedAt: text("deleted_at"),
+}, (table) => [index("idx_knowledge_section_updated").on(table.section, table.deletedAt, table.updatedAt), uniqueIndex("idx_knowledge_legacy_recommendation").on(table.legacyRecommendationId)]);
+export const knowledgeTagRecords = sqliteTable("knowledge_tags", { id: text("id").primaryKey(), name: text("name").notNull(), normalizedName: text("normalized_name").notNull(), createdAt: text("created_at").notNull() }, (table) => [uniqueIndex("idx_knowledge_tags_normalized").on(table.normalizedName)]);
+export const knowledgeEntryTagRecords = sqliteTable("knowledge_entry_tags", { entryId: text("entry_id").notNull().references(() => knowledgeEntryRecords.id, { onDelete: "cascade" }), tagId: text("tag_id").notNull().references(() => knowledgeTagRecords.id, { onDelete: "cascade" }) }, (table) => [primaryKey({ columns: [table.entryId, table.tagId] })]);
+export const knowledgeFavoriteRecords = sqliteTable("knowledge_favorites", { entryId: text("entry_id").notNull().references(() => knowledgeEntryRecords.id, { onDelete: "cascade" }), memberId: text("member_id").notNull().references(() => memberRecords.id, { onDelete: "cascade" }), createdAt: text("created_at").notNull() }, (table) => [primaryKey({ columns: [table.entryId, table.memberId] }), index("idx_knowledge_favorites_member").on(table.memberId, table.createdAt)]);
+export const knowledgeMediaRecords = sqliteTable("knowledge_entry_media", { entryId: text("entry_id").notNull().references(() => knowledgeEntryRecords.id, { onDelete: "cascade" }), mediaAssetId: text("media_asset_id").notNull().references(() => mediaAssetRecords.id, { onDelete: "cascade" }), sortOrder: integer("sort_order").notNull().default(0) }, (table) => [primaryKey({ columns: [table.entryId, table.mediaAssetId] })]);
+export const knowledgeTripLinkRecords = sqliteTable("knowledge_trip_links", { entryId: text("entry_id").notNull().references(() => knowledgeEntryRecords.id, { onDelete: "cascade" }), tripId: text("trip_id").notNull().references(() => tripRecords.id, { onDelete: "cascade" }), createdByMemberId: text("created_by_member_id").references(() => memberRecords.id, { onDelete: "set null" }), createdAt: text("created_at").notNull() }, (table) => [primaryKey({ columns: [table.entryId, table.tripId] })]);
+export const knowledgePlaceLinkRecords = sqliteTable("knowledge_place_links", { entryId: text("entry_id").notNull().references(() => knowledgeEntryRecords.id, { onDelete: "cascade" }), placeId: text("place_id").notNull().references(() => placeRecords.id, { onDelete: "restrict" }), relationType: text("relation_type").notNull().default("component"), sortOrder: integer("sort_order").notNull().default(0) }, (table) => [primaryKey({ columns: [table.entryId, table.placeId, table.relationType] })]);
+export const memberPersonaRecords = sqliteTable("member_personas", { memberId: text("member_id").primaryKey().references(() => memberRecords.id, { onDelete: "cascade" }), modelUrl: text("model_url"), previewMediaAssetId: text("preview_media_asset_id").references(() => mediaAssetRecords.id, { onDelete: "set null" }), resourceVersion: text("resource_version"), displayConfigJson: text("display_config_json"), updatedAt: text("updated_at").notNull() });
 
 export const recommendationReferenceMediaRecords = sqliteTable("recommendation_reference_media", {
   referenceId: text("reference_id").notNull().references(() => recommendationReferenceRecords.id, { onDelete: "cascade" }),
@@ -490,6 +508,7 @@ export const itineraryItemRecords = sqliteTable("itinerary_items", {
   dayId: text("day_id").notNull().references(() => dayRecords.id, { onDelete: "restrict" }),
   stageId: text("stage_id").references(() => tripStageRecords.id, { onDelete: "restrict" }),
   recommendationId: text("recommendation_id").references(() => recommendationRecords.id, { onDelete: "set null" }),
+  knowledgeEntryId: text("knowledge_entry_id").references(() => knowledgeEntryRecords.id, { onDelete: "set null" }),
   placeId: text("place_id").references(() => placeRecords.id, { onDelete: "restrict" }),
   originPlaceId: text("origin_place_id").references(() => placeRecords.id, { onDelete: "restrict" }),
   destinationPlaceId: text("destination_place_id").references(() => placeRecords.id, { onDelete: "restrict" }),

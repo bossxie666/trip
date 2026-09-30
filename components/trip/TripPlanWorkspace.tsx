@@ -25,6 +25,7 @@ import { filterTimelineForMember, numberTimelineNodes, type TimelineEdge, type T
 import { isTransportBooking, transportDisplayLabel } from "@/services/booking-semantics";
 import { summarizeAccommodation } from "@/services/accommodation-summary";
 import { TripBookShell } from "./TripBookShell";
+import { KnowledgeTripPicker } from "./KnowledgeTripPicker";
 
 const PlanMap = dynamic(() => import("./PlanMap").then((module) => module.PlanMap));
 const BudgetWorkspace = dynamic(() => import("./BudgetWorkspace").then((module) => module.BudgetWorkspace));
@@ -260,7 +261,7 @@ export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query
     </header>
     <DayNavigation items={days.map((day) => ({ id: day.id, href: link(view, day.id), dateLabel: shortDate(day.date), areaLabel: dayArea(day, bookings, trip.cities), active: day.id === activeDayId }))} />
     <nav className="plan-view-tabs" aria-label="工作台视图"><WorkspaceNavLink className={view === "planning" ? "active" : ""} href={link("planning")}>规划</WorkspaceNavLink><WorkspaceNavLink className={view === "map" ? "active" : ""} href={link("map")}>地图</WorkspaceNavLink><WorkspaceNavLink className={view === "budget" ? "active" : ""} href={link("budget")}>费用</WorkspaceNavLink></nav>
-    {view === "planning" && <><div className="empty-trip-actions"><PlaceDiscoveryControl slug={trip.slug} days={dayLabels} existingPlaces={existingPlaceChoices} /></div><PlanningPanels library={library} itinerary={itinerary} map={<PlanningDesktopMap slug={trip.slug} workspace={mapWorkspace} activeDayId={activeDayId} mapMode="day" fullHref={link("map", activeDayId, "day")} />} /></>}
+    {view === "planning" && <><div className="empty-trip-actions"><PlaceDiscoveryControl slug={trip.slug} days={dayLabels} existingPlaces={existingPlaceChoices} /></div><PlanningPanels library={<KnowledgeTripPicker slug={trip.slug} days={dayLabels} defaultDayId={activeDayId} />} itinerary={itinerary} map={<PlanningDesktopMap slug={trip.slug} workspace={mapWorkspace} activeDayId={activeDayId} mapMode="day" fullHref={link("map", activeDayId, "day")} />} /></>}
     {view === "map" && <section className="map-view"><header className="workspace-view-heading"><div><span>MAP</span><h2>{mapMode === "day" ? "行程路线" : "攻略地图"}</h2></div><nav><Link className={mapMode === "day" ? "active" : ""} href={link("map", activeDayId, "day")}>行程路线</Link><Link className={mapMode === "library" ? "active" : ""} href={link("map", activeDayId, "library")}>攻略地图</Link></nav></header><PlanMap slug={trip.slug} places={[]} workspace={mapWorkspace} activeDayId={activeDayId} mapMode={mapMode} /></section>}
     {view === "budget" && <BudgetWorkspace slug={trip.slug} budget={workspace.budget} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} days={dayLabels} cities={trip.cities.map((city) => ({ id: city.id, name: city.name }))} routeSegmentsByDay={workspace.routeSegmentsByDay} routePreferences={workspace.routePreferences} costMode={costMode} />}
   </main></TripBookShell>;

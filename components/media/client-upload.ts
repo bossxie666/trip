@@ -1,4 +1,4 @@
-export type UploadPurpose = "home_featured" | "guestbook" | "recommendation_reference" | "trip_cover" | "album" | "member_avatar";
+export type UploadPurpose = "home_featured" | "guestbook" | "recommendation_reference" | "trip_cover" | "album" | "member_avatar" | "knowledge_image";
 
 function normalizedType(file: File) {
   if (file.type) return file.type;

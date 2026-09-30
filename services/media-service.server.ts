@@ -3,7 +3,7 @@ import { AwsV4Signer } from "aws4fetch";
 import { getDb, getRuntimeEnv } from "@/db";
 import { albumMediaRecords, albumRecords, homeFeaturedPhotoRecords, mediaAssetRecords, recommendationRecords, recommendationReferenceMediaRecords, recommendationReferenceRecords, tripMemberRecords, tripRecords } from "@/db/schema";
 
-export const mediaPurposes = ["home_featured", "guestbook", "recommendation_reference", "trip_cover", "album", "member_avatar"] as const;
+export const mediaPurposes = ["home_featured", "guestbook", "recommendation_reference", "trip_cover", "album", "member_avatar", "knowledge_image"] as const;
 export type MediaPurpose = (typeof mediaPurposes)[number];
 const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
 const maxImageBytes = 10 * 1024 * 1024;
@@ -113,7 +113,7 @@ export async function getReadyMediaAsset(assetId: string) {
 export async function getAuthorizedReadyMediaAsset(assetId: string, memberId: string) {
   const asset = await getReadyMediaAsset(assetId);
   if (!asset) return null;
-  if (asset.purpose === "home_featured" || asset.purpose === "guestbook" || asset.purpose === "member_avatar") return asset;
+  if (asset.purpose === "home_featured" || asset.purpose === "guestbook" || asset.purpose === "member_avatar" || asset.purpose === "knowledge_image") return asset;
   const db = getDb();
   if (asset.purpose === "album") {
     const album = (await db.select({ tripId: albumRecords.tripId }).from(albumMediaRecords)

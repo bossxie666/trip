@@ -1,0 +1,40 @@
+CREATE TABLE `knowledge_entries` (
+  `id` text PRIMARY KEY NOT NULL,
+  `section` text NOT NULL,
+  `title` text NOT NULL,
+  `body` text,
+  `summary` text,
+  `destination` text,
+  `external_url` text,
+  `source_label` text,
+  `cover_image_url` text,
+  `cover_media_asset_id` text REFERENCES `media_assets`(`id`) ON DELETE SET NULL,
+  `legacy_recommendation_id` text REFERENCES `recommendations`(`id`) ON DELETE SET NULL,
+  `created_by_member_id` text REFERENCES `members`(`id`) ON DELETE SET NULL,
+  `updated_by_member_id` text REFERENCES `members`(`id`) ON DELETE SET NULL,
+  `created_at` text NOT NULL,
+  `updated_at` text NOT NULL,
+  `deleted_at` text
+);
+CREATE INDEX `idx_knowledge_section_updated` ON `knowledge_entries` (`section`,`deleted_at`,`updated_at`);
+CREATE UNIQUE INDEX `idx_knowledge_legacy_recommendation` ON `knowledge_entries` (`legacy_recommendation_id`);
+CREATE TABLE `knowledge_tags` (`id` text PRIMARY KEY NOT NULL, `name` text NOT NULL, `normalized_name` text NOT NULL, `created_at` text NOT NULL);
+CREATE UNIQUE INDEX `idx_knowledge_tags_normalized` ON `knowledge_tags` (`normalized_name`);
+CREATE TABLE `knowledge_entry_tags` (`entry_id` text NOT NULL REFERENCES `knowledge_entries`(`id`) ON DELETE CASCADE, `tag_id` text NOT NULL REFERENCES `knowledge_tags`(`id`) ON DELETE CASCADE, PRIMARY KEY (`entry_id`,`tag_id`));
+CREATE TABLE `knowledge_favorites` (`entry_id` text NOT NULL REFERENCES `knowledge_entries`(`id`) ON DELETE CASCADE, `member_id` text NOT NULL REFERENCES `members`(`id`) ON DELETE CASCADE, `created_at` text NOT NULL, PRIMARY KEY (`entry_id`,`member_id`));
+CREATE INDEX `idx_knowledge_favorites_member` ON `knowledge_favorites` (`member_id`,`created_at`);
+CREATE TABLE `knowledge_entry_media` (`entry_id` text NOT NULL REFERENCES `knowledge_entries`(`id`) ON DELETE CASCADE, `media_asset_id` text NOT NULL REFERENCES `media_assets`(`id`) ON DELETE CASCADE, `sort_order` integer NOT NULL DEFAULT 0, PRIMARY KEY (`entry_id`,`media_asset_id`));
+CREATE TABLE `knowledge_trip_links` (`entry_id` text NOT NULL REFERENCES `knowledge_entries`(`id`) ON DELETE CASCADE, `trip_id` text NOT NULL REFERENCES `trips`(`id`) ON DELETE CASCADE, `created_by_member_id` text REFERENCES `members`(`id`) ON DELETE SET NULL, `created_at` text NOT NULL, PRIMARY KEY (`entry_id`,`trip_id`));
+CREATE TABLE `knowledge_place_links` (`entry_id` text NOT NULL REFERENCES `knowledge_entries`(`id`) ON DELETE CASCADE, `place_id` text NOT NULL REFERENCES `places`(`id`) ON DELETE RESTRICT, `relation_type` text NOT NULL DEFAULT 'component', `sort_order` integer NOT NULL DEFAULT 0, PRIMARY KEY (`entry_id`,`place_id`,`relation_type`));
+CREATE TABLE `member_personas` (`member_id` text PRIMARY KEY NOT NULL REFERENCES `members`(`id`) ON DELETE CASCADE, `model_url` text, `preview_media_asset_id` text REFERENCES `media_assets`(`id`) ON DELETE SET NULL, `resource_version` text, `display_config_json` text, `updated_at` text NOT NULL);
+ALTER TABLE `itinerary_items` ADD COLUMN `knowledge_entry_id` text REFERENCES `knowledge_entries`(`id`) ON DELETE SET NULL;
+CREATE INDEX `idx_itinerary_items_knowledge` ON `itinerary_items` (`knowledge_entry_id`);
+INSERT INTO `knowledge_entries` (`id`,`section`,`title`,`body`,`summary`,`destination`,`external_url`,`source_label`,`cover_image_url`,`legacy_recommendation_id`,`created_by_member_id`,`updated_by_member_id`,`created_at`,`updated_at`,`deleted_at`)
+SELECT 'knowledge-' || id,'travel_guide',title,summary,summary,area_label,COALESCE(source_url,(SELECT source_url FROM recommendation_references rr WHERE rr.recommendation_id=recommendations.id ORDER BY rr.sort_order LIMIT 1)),source_label,cover_image_url,id,created_by_member_id,updated_by_member_id,created_at,updated_at,deleted_at FROM `recommendations`;
+INSERT OR IGNORE INTO `knowledge_entry_media` (`entry_id`,`media_asset_id`,`sort_order`)
+SELECT 'knowledge-' || rr.recommendation_id,rrm.media_asset_id,(rr.sort_order * 100) + rrm.sort_order FROM `recommendation_reference_media` rrm INNER JOIN `recommendation_references` rr ON rr.id=rrm.reference_id;
+INSERT OR IGNORE INTO `knowledge_trip_links` (`entry_id`,`trip_id`,`created_by_member_id`,`created_at`)
+SELECT 'knowledge-' || id,trip_id,created_by_member_id,created_at FROM `recommendations`;
+INSERT OR IGNORE INTO `knowledge_place_links` (`entry_id`,`place_id`,`relation_type`,`sort_order`)
+SELECT 'knowledge-' || recommendation_id,place_id,relation_type,sort_order FROM `recommendation_place_options`;
+UPDATE `itinerary_items` SET `knowledge_entry_id`='knowledge-' || `recommendation_id` WHERE `recommendation_id` IS NOT NULL;
