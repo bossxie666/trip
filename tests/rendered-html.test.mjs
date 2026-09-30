@@ -204,6 +204,33 @@ test("activates an individual password and revokes server-side sessions", async 
   }
 });
 
+test("changes a personal password and revokes every previous session", async () => {
+  const savedSession = sessionCookie;
+  const memberId = "member-password-change-test";
+  try {
+    DB.database.prepare("INSERT INTO members (id,name,display_name,active,created_at,role,credential_status) VALUES (?,?,?,1,?,'member','legacy')").run(memberId, "password-change-test", "改密测试", new Date().toISOString());
+    const activated = await render("/api/session", { method: "POST", body: { memberName: "password-change-test", code: "test-invite", newPassword: "initial-pass-2026" } });
+    assert.equal(activated.status, 200);
+    sessionCookie = activated.headers.get("set-cookie").split(";")[0];
+    const secondDevice = await render("/api/session", { method: "POST", body: { memberName: "password-change-test", password: "initial-pass-2026" } });
+    assert.equal(secondDevice.status, 200);
+    assert.equal(DB.database.prepare("SELECT count(*) count FROM member_sessions WHERE member_id=? AND revoked_at IS NULL").get(memberId).count, 2);
+    const wrong = await render("/api/member/password", { method: "PATCH", body: { currentPassword: "wrong-password", newPassword: "updated-pass-2026" } });
+    assert.equal(wrong.status, 401);
+    const changed = await render("/api/member/password", { method: "PATCH", body: { currentPassword: "initial-pass-2026", newPassword: "updated-pass-2026" } });
+    assert.equal(changed.status, 200);
+    sessionCookie = changed.headers.get("set-cookie").split(";")[0];
+    assert.equal(DB.database.prepare("SELECT count(*) count FROM member_sessions WHERE member_id=? AND revoked_at IS NULL").get(memberId).count, 1);
+    assert.equal((await render("/api/session", { method: "POST", body: { memberName: "password-change-test", password: "initial-pass-2026" } })).status, 401);
+    assert.equal((await render("/api/session", { method: "POST", body: { memberName: "password-change-test", password: "updated-pass-2026" } })).status, 200);
+  } finally {
+    sessionCookie = savedSession;
+    DB.database.prepare("DELETE FROM member_sessions WHERE member_id=?").run(memberId);
+    DB.database.prepare("DELETE FROM member_credentials WHERE member_id=?").run(memberId);
+    DB.database.prepare("DELETE FROM members WHERE id=?").run(memberId);
+  }
+});
+
 test("keeps identity control in the global header and out of the workspace masthead", async () => {
   await loginAs("nini");
   const tripsHtml = await (await render("/trips")).text();
@@ -227,6 +254,15 @@ test("lets an administrator disable a member and revoke every active session", a
     assert.equal(disabled.status, 200);
     assert.deepEqual({ ...DB.database.prepare("SELECT active,credential_status FROM members WHERE id=?").get(memberId) }, { active: 0, credential_status: "disabled" });
     assert.ok(DB.database.prepare("SELECT revoked_at FROM member_sessions WHERE member_id=?").get(memberId).revoked_at);
+    assert.equal((await render("/api/admin/members", { method: "PATCH", body: { memberId, action: "enable" } })).status, 200);
+    DB.database.prepare("UPDATE members SET credential_status='active' WHERE id=?").run(memberId);
+    DB.database.prepare("INSERT INTO member_credentials(member_id,algorithm,algorithm_version,salt,password_digest,updated_at) VALUES (?,'pbkdf2-sha256-6x100k',2,'salt','digest',?)").run(memberId, new Date().toISOString());
+    DB.database.prepare("INSERT INTO member_sessions (id,token_digest,member_id,created_at,last_used_at,expires_at) VALUES (?,?,?,?,?,?)").run("session-admin-reset-test", "digest-admin-reset-test", memberId, new Date().toISOString(), new Date().toISOString(), new Date(Date.now() + 86_400_000).toISOString());
+    const reset = await render("/api/admin/members", { method: "PATCH", body: { memberId, action: "reset-password" } });
+    assert.equal(reset.status, 200);
+    assert.equal(DB.database.prepare("SELECT credential_status FROM members WHERE id=?").get(memberId).credential_status, "legacy");
+    assert.equal(DB.database.prepare("SELECT count(*) count FROM member_credentials WHERE member_id=?").get(memberId).count, 0);
+    assert.equal(DB.database.prepare("SELECT count(*) count FROM member_sessions WHERE member_id=? AND revoked_at IS NULL").get(memberId).count, 0);
   } finally {
     DB.database.prepare("DELETE FROM member_sessions WHERE member_id=?").run(memberId);
     DB.database.prepare("DELETE FROM member_credentials WHERE member_id=?").run(memberId);

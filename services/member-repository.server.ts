@@ -34,5 +34,5 @@ export async function updateMemberAvatar(memberId: string, assetId: string) {
     const old = (await db.select().from(mediaAssetRecords).where(and(eq(mediaAssetRecords.id, decodeURIComponent(oldMatch[1])), eq(mediaAssetRecords.uploaderMemberId, memberId), eq(mediaAssetRecords.purpose, "member_avatar"))).limit(1))[0];
     if (old) { await getRuntimeEnv().MEDIA?.delete(old.objectKey); await db.delete(mediaAssetRecords).where(eq(mediaAssetRecords.id, old.id)); }
   }
-  return { id: member.id, displayName: member.displayName, avatar };
+  return { id: member.id, displayName: member.displayName, avatar, role: member.role };
 }

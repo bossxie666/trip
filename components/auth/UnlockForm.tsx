@@ -9,6 +9,7 @@ export function UnlockForm({ returnTo = "/" }: { returnTo?: string }) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
   async function submit(event: FormEvent) {
     event.preventDefault(); setLoading(true); setError("");
     try {
@@ -27,5 +28,7 @@ export function UnlockForm({ returnTo = "/" }: { returnTo?: string }) {
     {activationRequired && <><p>首次激活，请设置以后登录使用的个人密码。</p><label><span>个人密码</span><input type="password" autoComplete="new-password" minLength={10} maxLength={128} required value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label><label><span>确认个人密码</span><input type="password" autoComplete="new-password" minLength={10} maxLength={128} required value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label></>}
     {error && <p role="alert">{error}</p>}
     <button disabled={loading}>{loading ? "正在处理…" : activationRequired ? "设置密码并进入" : "进入旅行空间"}</button>
+    {!activationRequired && <button className="unlock-forgot" type="button" onClick={() => setRecoveryOpen((value) => !value)}>忘记密码</button>}
+    {recoveryOpen && <p className="unlock-recovery" role="status">请联系网站管理员。管理员在右上角头像的“管理成员”中重置后，你可以用原旅行空间暗号重新设置个人密码。</p>}
   </form>;
 }

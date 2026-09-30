@@ -20,25 +20,32 @@ export async function GET(request: Request) {
 export async function PATCH(request: Request) {
   const auth = await requireAdmin(request);
   if (auth.error) return auth.error;
-  const body = await request.json().catch(() => null) as { memberId?: string; active?: boolean } | null;
-  if (!body?.memberId || typeof body.active !== "boolean") return apiError(request, 400, "INVALID_MEMBER_UPDATE", "成员状态无效。");
-  if (body.memberId === auth.member.id && !body.active) return apiError(request, 409, "CANNOT_DISABLE_SELF", "不能停用当前登录的管理员。");
+  const body = await request.json().catch(() => null) as { memberId?: string; active?: boolean; action?: "enable" | "disable" | "reset-password" } | null;
+  const action = body?.action || (body && typeof body.active === "boolean" ? body.active ? "enable" : "disable" : null);
+  if (!body?.memberId || !action) return apiError(request, 400, "INVALID_MEMBER_UPDATE", "成员操作无效。");
+  if (body.memberId === auth.member.id && action !== "enable") return apiError(request, 409, "CANNOT_CHANGE_SELF", action === "reset-password" ? "请使用个人资料里的修改密码功能。" : "不能停用当前登录的管理员。");
   const db = getRuntimeEnv().DB;
   const target = await db.prepare("SELECT id FROM members WHERE id = ? LIMIT 1").bind(body.memberId).first<{ id: string }>();
   if (!target) return apiError(request, 404, "MEMBER_NOT_FOUND", "成员不存在。");
   const now = new Date().toISOString();
-  if (body.active) {
+  if (action === "enable") {
     await db.batch([
       db.prepare("UPDATE members SET active = 1, credential_status = 'legacy' WHERE id = ?").bind(body.memberId),
       db.prepare("DELETE FROM member_credentials WHERE member_id = ?").bind(body.memberId),
       db.prepare("UPDATE member_sessions SET revoked_at = ? WHERE member_id = ? AND revoked_at IS NULL").bind(now, body.memberId),
     ]);
-  } else {
+  } else if (action === "disable") {
     await db.batch([
       db.prepare("UPDATE members SET active = 0, credential_status = 'disabled' WHERE id = ?").bind(body.memberId),
       db.prepare("UPDATE member_sessions SET revoked_at = ? WHERE member_id = ? AND revoked_at IS NULL").bind(now, body.memberId),
     ]);
+  } else {
+    await db.batch([
+      db.prepare("UPDATE members SET credential_status = 'legacy' WHERE id = ? AND active = 1").bind(body.memberId),
+      db.prepare("DELETE FROM member_credentials WHERE member_id = ?").bind(body.memberId),
+      db.prepare("UPDATE member_sessions SET revoked_at = ? WHERE member_id = ? AND revoked_at IS NULL").bind(now, body.memberId),
+    ]);
   }
-  await recordAuditEvent({ memberId: auth.member.id, action: body.active ? "member.enable" : "member.disable", resourceType: "member", resourceId: body.memberId, requestId: requestIdFrom(request) });
+  await recordAuditEvent({ memberId: auth.member.id, action: action === "enable" ? "member.enable" : action === "disable" ? "member.disable" : "credential.reset", resourceType: "member", resourceId: body.memberId, requestId: requestIdFrom(request) });
   return Response.json({ ok: true });
 }
