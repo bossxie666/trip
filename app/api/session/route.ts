@@ -19,11 +19,16 @@ export async function POST(request: Request) {
   }
   let body: { memberName?: string; code?: string; password?: string; newPassword?: string };
   try {
-    body = await request.json() as { memberName?: string; code?: string; password?: string; newPassword?: string };
+    const input: unknown = await request.json();
+    if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("INVALID_SESSION_INPUT");
+    const fields = input as Record<string, unknown>;
+    if (typeof fields.memberName !== "string" || !fields.memberName.trim() || fields.memberName.trim().length > 80
+      || ["code", "password", "newPassword"].some((key) => fields[key] !== undefined && (typeof fields[key] !== "string" || (fields[key] as string).length > 128))) throw new Error("INVALID_SESSION_INPUT");
+    body = fields as typeof body;
   } catch {
     return Response.json({ error: "请求格式无效。" }, { status: 400 });
   }
-  const memberName = body.memberName?.trim().slice(0, 80) || "";
+  const memberName = body.memberName!.trim();
   const env = getRuntimeEnv();
   if (!env.TRIP_SPACE_SESSION_SECRET) return Response.json({ error: "旅行空间尚未完成安全配置。" }, { status: 503 });
   try {

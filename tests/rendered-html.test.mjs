@@ -532,6 +532,16 @@ test("keeps the login form inert until client hydration rather than submitting a
   assert.match(html, /<button disabled="">正在准备登录…<\/button>/);
 });
 
+test("rejects malformed session input before database or password work", async () => {
+  const before = DB.database.prepare("SELECT total_changes() AS count").get().count;
+  for (const body of ["null", "[]", {}, { memberName: 42 }, { memberName: "nini", code: {} }, { memberName: "nini", newPassword: ["invalid"] }, { memberName: "nini", password: "x".repeat(129) }, { memberName: "x".repeat(81), code: "invalid" }]) {
+    const response = await render("/api/session", { method: "POST", body });
+    assert.equal(response.status, 400);
+    assert.equal(response.headers.get("set-cookie"), null);
+  }
+  assert.equal(DB.database.prepare("SELECT total_changes() AS count").get().count, before);
+});
+
 test("creates and fully manages shared albums without leaking album media into other surfaces", async () => {
   const savedSession = sessionCookie;
   let albumId = "";
