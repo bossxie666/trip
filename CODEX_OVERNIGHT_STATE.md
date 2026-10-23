@@ -1,10 +1,43 @@
 # Codex Overnight Finalization State
 
-Last updated: 2026-09-17 (Asia/Shanghai)
+Last updated: 2026-10-24 (Asia/Shanghai)
 
 ## Current phase
 
-Phase D release verification: the reference-locked Homepage V3 and shared scrapbook surfaces are live through the GitHub → Cloudflare Workers Builds chain. Both `homepage-v3` Preview and `v2.4-r1` Production have passed the current read-only smoke gates.
+Active goal: make the whole site usable end-to-end, allowing runtime-driven visual adjustments. The previous turn made progress (static V4 artifacts and My Trips correction). This turn implemented authenticated `/home-v4`, real AMap expansion, canonical photo selection, isolated wall/Atlas relations, and fixes for failed SDK retries, rate-limit off-by-one, malformed cookies and cross-origin writes. Tests reached 86/86 and full TypeScript checking passed before the latest small follow-ups. Production dependency audit is clear; full build-tool audit still reports 24 findings requiring compatibility review.
+
+CRITICAL BASELINE UPDATE: a read-only GitHub fetch found Production at `649660191c2e72b256350813532af7e1c0fbb616` while local/remote `homepage-v3` is `ba58d3cbc02829a06bbcd3071be2f7372eb4b490`. Production contains 131 changed files, new password/revocable-session/auth-admin/knowledge/monitoring code and an already data-driven `ReferenceHome`. Do not deploy the stale local branch or revert those additions. Preserve this turn as a local checkpoint, merge the current Production baseline, then reapply only compatible improvements. Authentication, media and dashboard changes must be adapted to the new baseline and re-tested. No migration/secret/binding/domain/traffic change is authorized or needed for this reconciliation.
+
+Homepage V4: independent, data-free static visual laboratory at `/visual-lab/home-v4`. The user's REFERENCE-LOCKED REBUILD request supersedes the prior V3 release plan below. Following the six-round handoff, the user explicitly reversed the Desktop My Trips removal requirement; keep My Trips in the lower-left reference position. Visual equivalence is NOT declared, real data is NOT connected, and Production replacement is NOT authorized at this stage.
+
+## Current V4 handoff
+
+- Source: `app/visual-lab/home-v4/page.tsx` and its CSS module. Official `app/page.tsx` and `app/home-journal.css` remain untouched by V4 work.
+- Uses supplied blank book shells, title and decoration assets; illustrative photo placeholders and empty note cards are confined to the visual lab. No business-data loader, writes, session fixture or remote media requests.
+- Worker rejects `/visual-lab` paths on non-loopback domains with 404. The lab works locally without authentication. A regression test verifies the 404 boundary, local render and absence of D1 queries.
+- Desktop geometry: 60px header, three-part book hero ending near y=422, nine-photo wall, lower-left My Trips and lower-right guestbook. My Trips contains four clearly static title/cover placeholders with no invented dates or business records. This implements the user's latest requirement to retain the module.
+- Mobile geometry: wood desk, physical page edges/binding/shadows, faded printed atlas, art title, stats, overlaid polaroid, stamp/compass, four-item bottom nav; no center fold.
+- Latest screenshots after the user's My Trips correction: `/Users/bossxie/Desktop/codex/旅行/visual-evidence/home-v4-my-trips/current-desktop.png` (1440×810) and `current-mobile.png` (375×667). The previous six-round artifacts remain intact.
+- Same directory contains `reference-desktop.png`, `reference-mobile.png`, `overlay-desktop.png`, `overlay-mobile.png`, additional 320/390/430 screenshots and `metrics.json`.
+- Overlay correction: old compositor used an unsupported opacity option. New evidence explicitly sets the reference alpha to 128/255 before blending; both images now contribute.
+- Checks: 81/81 tests, lint, final `build:self-hosted`, diff whitespace check passed. `npm audit --omit=dev`: 0 vulnerabilities. No ordinary production build command used.
+- Browser checks: 1440/375/320/390/430 all have scrollWidth === clientWidth and zero broken images.
+- My Trips correction: lint, `build:self-hosted` and `git diff --check` passed again. Browser evidence confirms four visible Trip placeholders on Desktop and zero visible Trip cards at all Mobile widths; Mobile retains its four-item navigation. No business-data tests were changed for this presentation-only correction.
+- Generated bindings: exactly one DB → trip-archive-production, one MEDIA → trip-archive-media; IMAGES and ASSETS retained.
+- No push, deployment, migration, secret/domain/binding change or Production data write occurred in V4 work.
+
+## V4 remaining visual differences
+
+1. Photo slots repeat the existing illustrative placeholder rather than the reference's varied travel photographs; guestbook notes are intentionally empty.
+2. Supplied title artwork, map projection/crop and city density differ from the reference. This is not a claim of pixel equality.
+3. Desktop paper edges and botanical decoration differ. The former lower-left whitespace is now occupied by My Trips, as explicitly requested by the user after the six-round handoff.
+4. Mobile book thickness, stamp shape and compass placement still differ slightly from the reference.
+
+## V4 interruptions / next action
+
+The retained preview server was no longer running on resume, while source and prior evidence were intact. It was restarted successfully with HTTP 200. Chrome connector profile contention was bypassed using a separate temporary headless profile, without closing the user's browser. The original `/Users/bossxie/Desktop/网站资产` directory was unavailable; checked-in assets and saved reference PNGs were used. No current external network failure was established.
+
+Static review artifacts are ready. Stop after this six-round handoff; do not connect real data or replace Production before the static visual threshold has been met. Older V3 release history follows for provenance only.
 
 ## Completed
 
@@ -59,4 +92,4 @@ Phase D release verification: the reference-locked Homepage V3 and shared scrapb
 
 ## Next step
 
-Keep the evidence under `/Users/bossxie/Desktop/codex/旅行/visual-evidence`, preserve `origin` and the D1/R2 identities, and only open a new task for later visual refinements or additional user-acceptance coverage. No further deployment or migration is required for this pass.
+Review the V4 round-6 static screenshots and overlays listed above. Keep the existing Production Homepage frozen. Do not resume the older V3 publication plan from this historical section.

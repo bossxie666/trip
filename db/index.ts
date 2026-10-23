@@ -2,21 +2,30 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./schema.ts";
 
 const testGlobal = globalThis as typeof globalThis & { __TRIP_TEST_D1__?: D1Database; __TRIP_TEST_ENV__?: Record<string, string> };
-const runtimeEnv = testGlobal.__TRIP_TEST_D1__ ? { DB: testGlobal.__TRIP_TEST_D1__, ...testGlobal.__TRIP_TEST_ENV__ } : (await import("cloudflare:workers")).env;
+type RuntimeEnv = {
+  DB: D1Database;
+  IMAGES: {
+    input(stream: ReadableStream): {
+      transform(options: Record<string, unknown>): {
+        output(options: { format: string; quality: number }): Promise<{ response(): Response }>;
+      };
+    };
+  };
+  MEDIA?: R2Bucket;
+  TRIP_SPACE_INVITE_CODE?: string;
+  TRIP_SPACE_SESSION_SECRET?: string;
+  AMAP_JS_API_KEY?: string;
+  AMAP_JS_SECURITY_CODE?: string;
+  AMAP_WEB_SERVICE_KEY?: string;
+  R2_ACCOUNT_ID?: string;
+  R2_ACCESS_KEY_ID?: string;
+  R2_SECRET_ACCESS_KEY?: string;
+  R2_BUCKET_NAME?: string;
+};
+const runtimeEnv = (testGlobal.__TRIP_TEST_D1__ ? { DB: testGlobal.__TRIP_TEST_D1__, ...testGlobal.__TRIP_TEST_ENV__ } : (await import("cloudflare:workers")).env) as RuntimeEnv;
 
 export function getRuntimeEnv() {
-  return runtimeEnv as typeof runtimeEnv & {
-    TRIP_SPACE_INVITE_CODE?: string;
-    TRIP_SPACE_SESSION_SECRET?: string;
-    AMAP_JS_API_KEY?: string;
-    AMAP_JS_SECURITY_CODE?: string;
-    AMAP_WEB_SERVICE_KEY?: string;
-    MEDIA?: R2Bucket;
-    R2_ACCOUNT_ID?: string;
-    R2_ACCESS_KEY_ID?: string;
-    R2_SECRET_ACCESS_KEY?: string;
-    R2_BUCKET_NAME?: string;
-  };
+  return runtimeEnv;
 }
 
 export function getDb() {

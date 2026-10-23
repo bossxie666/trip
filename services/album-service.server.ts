@@ -98,8 +98,8 @@ export async function attachAlbumMedia(id: string, memberId: string, assetIds: s
   if (!unique.length) throw new Error("INVALID_ALBUM_MEDIA");
   const assets = await getDb().select().from(mediaAssetRecords).where(inArray(mediaAssetRecords.id, unique));
   if (assets.length !== unique.length || assets.some((asset) => asset.purpose !== "album" || asset.status !== "ready" || asset.uploaderMemberId !== memberId)) throw new Error("INVALID_ALBUM_MEDIA");
-  const reused = await getDb().select({ id: albumMediaRecords.mediaAssetId }).from(albumMediaRecords).where(inArray(albumMediaRecords.mediaAssetId, unique));
-  if (reused.length) throw new Error("INVALID_ALBUM_MEDIA");
+  // One canonical media row may be referenced by several albums; owner and
+  // destination membership are checked above. Never upload or copy it again.
   const existing = await getDb().select().from(albumMediaRecords).where(eq(albumMediaRecords.albumId, id));
   const existingIds = new Set(existing.map((row) => row.mediaAssetId));
   const additions = unique.filter((assetId) => !existingIds.has(assetId));
@@ -126,10 +126,21 @@ export async function deleteAlbumMedia(id: string, memberId: string, assetId: st
   const asset = (await getDb().select().from(mediaAssetRecords).innerJoin(albumMediaRecords, eq(albumMediaRecords.mediaAssetId, mediaAssetRecords.id)).where(and(eq(albumMediaRecords.albumId, id), eq(mediaAssetRecords.id, assetId))).limit(1))[0];
   if (!asset || asset.media_assets.purpose !== "album") throw new Error("ALBUM_MEDIA_NOT_FOUND");
   const db = getDb();
-  if (album.coverMediaAssetId === assetId) await db.update(albumRecords).set({ coverMediaAssetId: null }).where(eq(albumRecords.id, id));
-  await db.delete(albumMediaRecords).where(and(eq(albumMediaRecords.albumId, id), eq(albumMediaRecords.mediaAssetId, assetId)));
-  await db.delete(mediaAssetRecords).where(eq(mediaAssetRecords.id, assetId));
-  await getRuntimeEnv().MEDIA?.delete(asset.media_assets.objectKey);
+  const env = getRuntimeEnv();
+  const links = await db.select({ albumId: albumMediaRecords.albumId }).from(albumMediaRecords).where(eq(albumMediaRecords.mediaAssetId, assetId));
+  const shared = links.some((link) => link.albumId !== id);
+  await env.DB.batch([
+    env.DB.prepare("UPDATE albums SET cover_media_asset_id = NULL WHERE id = ? AND cover_media_asset_id = ?").bind(id, assetId),
+    env.DB.prepare("DELETE FROM album_media WHERE album_id = ? AND media_asset_id = ?").bind(id, assetId),
+    ...(!shared ? [
+      env.DB.prepare("DELETE FROM home_featured_photos WHERE media_asset_id = ?").bind(assetId),
+      env.DB.prepare("DELETE FROM media_assets WHERE id = ?").bind(assetId),
+    ] : []),
+  ]);
+  if (!shared) {
+    try { await env.MEDIA?.delete(asset.media_assets.objectKey); }
+    catch { console.warn("Unreferenced media object cleanup pending", { assetId }); }
+  }
   const remaining = await db.select({ id: albumMediaRecords.mediaAssetId }).from(albumMediaRecords).where(eq(albumMediaRecords.albumId, id)).orderBy(asc(albumMediaRecords.sortOrder)).limit(1);
   if (album.coverMediaAssetId === assetId && remaining[0]) await db.update(albumRecords).set({ coverMediaAssetId: remaining[0].id, updatedAt: new Date().toISOString() }).where(eq(albumRecords.id, id));
   return getAlbum(id, memberId);

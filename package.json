@@ -11,8 +11,9 @@
     "build:self-hosted": "TRIP_SELF_HOSTED_BUILD=1 WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
     "deploy": "npm run build:self-hosted && wrangler deploy --keep-vars",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
-    "test": "npm run build:self-hosted && node --experimental-strip-types --test tests/rendered-html.test.mjs tests/e0b-data-foundation.test.ts tests/e0c-real-trip-migration.test.mjs",
+    "test": "npm run build:self-hosted && node --experimental-strip-types --test tests/rendered-html.test.mjs tests/e0b-data-foundation.test.ts tests/e0c-real-trip-migration.test.mjs tests/amap-loader.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "typecheck": "tsc --noEmit --incremental false",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
+    "@cloudflare/workers-types": "4.20260702.1",
     "@eslint/js": "9.39.4",
     "@next/eslint-plugin-next": "16.2.6",
     "@openai/sites-vite-plugin": "0.1.0",

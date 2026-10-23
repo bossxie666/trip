@@ -37,6 +37,8 @@ const publicAssetFiles = new Set(["/favicon.svg", "/file.svg", "/globe.svg", "/w
 function isPublicPath(pathname: string) {
   return pathname === "/unlock"
     || pathname === "/api/session"
+    // The data-free laboratory is restricted to loopback below.
+    || pathname === "/visual-lab/home-v4"
     || publicAssetFiles.has(pathname)
     || publicAssetPrefixes.some((prefix) => pathname.startsWith(prefix));
 }
@@ -61,6 +63,22 @@ function withSecurityHeaders(response: Response, url: URL) {
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+
+    if (url.pathname.startsWith("/api/") && !["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+      const origin = request.headers.get("origin");
+      if (origin) {
+        try {
+          if (new URL(origin).origin !== url.origin) return withSecurityHeaders(Response.json({ error: "请求来源无效。" }, { status: 403 }), url);
+        } catch {
+          return withSecurityHeaders(Response.json({ error: "请求来源无效。" }, { status: 403 }), url);
+        }
+      }
+    }
+
+    if ((url.pathname === "/visual-lab" || url.pathname.startsWith("/visual-lab/"))
+      && !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) {
+      return withSecurityHeaders(new Response("Not found", { status: 404 }), url);
+    }
 
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];

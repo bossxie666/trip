@@ -2,6 +2,7 @@ import { and, eq, isNull, like } from "drizzle-orm";
 import { AwsClient } from "aws4fetch";
 import { getDb, getRuntimeEnv } from "@/db";
 import { albumMediaRecords, albumRecords, homeFeaturedPhotoRecords, mediaAssetRecords, recommendationRecords, recommendationReferenceMediaRecords, recommendationReferenceRecords, tripMemberRecords, tripRecords } from "@/db/schema";
+import { wallPhotoSlots } from "./home-media";
 
 export const mediaPurposes = ["home_featured", "guestbook", "recommendation_reference", "trip_cover", "album"] as const;
 export type MediaPurpose = (typeof mediaPurposes)[number];
@@ -83,14 +84,11 @@ export async function getAuthorizedReadyMediaAsset(assetId: string, memberId: st
   if (asset.purpose === "home_featured" || asset.purpose === "guestbook") return asset;
   const db = getDb();
   if (asset.purpose === "album") {
-    const album = (await db.select({ tripId: albumRecords.tripId }).from(albumMediaRecords)
+    const albums = await db.select({ tripId: albumRecords.tripId, memberId: tripMemberRecords.memberId }).from(albumMediaRecords)
       .innerJoin(albumRecords, eq(albumRecords.id, albumMediaRecords.albumId))
-      .where(and(eq(albumMediaRecords.mediaAssetId, assetId), isNull(albumRecords.deletedAt))).limit(1))[0];
-    if (!album) return null;
-    if (!album.tripId) return asset;
-    const member = (await db.select({ memberId: tripMemberRecords.memberId }).from(tripMemberRecords)
-      .where(and(eq(tripMemberRecords.tripId, album.tripId), eq(tripMemberRecords.memberId, memberId))).limit(1))[0];
-    return member ? asset : null;
+      .leftJoin(tripMemberRecords, and(eq(tripMemberRecords.tripId, albumRecords.tripId), eq(tripMemberRecords.memberId, memberId)))
+      .where(and(eq(albumMediaRecords.mediaAssetId, assetId), isNull(albumRecords.deletedAt)));
+    return albums.some((album) => !album.tripId || album.memberId) ? asset : null;
   }
   if (asset.purpose === "recommendation_reference") {
     const member = (await db.select({ memberId: tripMemberRecords.memberId }).from(recommendationReferenceMediaRecords)
@@ -115,8 +113,7 @@ export async function getAuthorizedReadyMediaAsset(assetId: string, memberId: st
 }
 
 export async function setHomeFeaturedPhoto(actorMemberId: string, slotKey: "map_primary" | "map_secondary", assetId: string) {
-  const asset = await getReadyMediaAsset(assetId);
-  if (!asset || asset.purpose !== "home_featured" || asset.uploaderMemberId !== actorMemberId) throw new Error("INVALID_HOME_MEDIA");
+  await requireHomeLibraryPhoto(actorMemberId, assetId);
   const now = new Date().toISOString();
   await getDb().insert(homeFeaturedPhotoRecords).values({ slotKey, mediaAssetId: assetId, updatedByMemberId: actorMemberId, updatedAt: now }).onConflictDoUpdate({
     target: homeFeaturedPhotoRecords.slotKey,
@@ -125,9 +122,36 @@ export async function setHomeFeaturedPhoto(actorMemberId: string, slotKey: "map_
   return { slotKey, assetId };
 }
 
-export async function listHomeFeaturedPhotos() {
-  return getDb().select({ slotKey: homeFeaturedPhotoRecords.slotKey, assetId: mediaAssetRecords.id, width: mediaAssetRecords.width, height: mediaAssetRecords.height })
+async function requireHomeLibraryPhoto(memberId: string, assetId: string) {
+  const asset = await getAuthorizedReadyMediaAsset(assetId, memberId);
+  if (!asset || !["album", "trip_cover", "home_featured"].includes(asset.purpose)) throw new Error("INVALID_HOME_MEDIA");
+  return asset;
+}
+
+export async function setHomeWallPhotos(actorMemberId: string, assetIds: string[]) {
+  if (assetIds.length > wallPhotoSlots.length || new Set(assetIds).size !== assetIds.length || assetIds.some((id) => typeof id !== "string" || !id)) throw new Error("INVALID_HOME_MEDIA");
+  await Promise.all(assetIds.map((id) => requireHomeLibraryPhoto(actorMemberId, id)));
+  const env = getRuntimeEnv();
+  const now = new Date().toISOString();
+  // Replace only the wall relation, atomically; Atlas slots and R2 objects are untouched.
+  await env.DB.batch([
+    env.DB.prepare(`DELETE FROM home_featured_photos WHERE slot_key IN (${wallPhotoSlots.map(() => "?").join(",")})`).bind(...wallPhotoSlots),
+    ...assetIds.map((assetId, index) => env.DB.prepare("INSERT INTO home_featured_photos (slot_key, media_asset_id, updated_by_member_id, updated_at) VALUES (?, ?, ?, ?)").bind(wallPhotoSlots[index], assetId, actorMemberId, now)),
+  ]);
+  return { assetIds };
+}
+
+export async function clearHomeAtlasPhoto(memberId: string, slotKey: "map_primary" | "map_secondary") {
+  const row = (await getDb().select().from(homeFeaturedPhotoRecords).where(eq(homeFeaturedPhotoRecords.slotKey, slotKey)).limit(1))[0];
+  if (row && !await getAuthorizedReadyMediaAsset(row.mediaAssetId, memberId)) throw new Error("INVALID_HOME_MEDIA");
+  await getDb().delete(homeFeaturedPhotoRecords).where(eq(homeFeaturedPhotoRecords.slotKey, slotKey));
+}
+
+export async function listHomeFeaturedPhotos(memberId: string) {
+  const rows = await getDb().select({ slotKey: homeFeaturedPhotoRecords.slotKey, assetId: mediaAssetRecords.id, width: mediaAssetRecords.width, height: mediaAssetRecords.height })
     .from(homeFeaturedPhotoRecords)
     .innerJoin(mediaAssetRecords, eq(homeFeaturedPhotoRecords.mediaAssetId, mediaAssetRecords.id))
     .where(eq(mediaAssetRecords.status, "ready"));
+  const visible = await Promise.all(rows.map(async (row) => await getAuthorizedReadyMediaAsset(row.assetId, memberId) ? row : null));
+  return visible.filter((row): row is typeof rows[number] => row !== null).sort((a, b) => a.slotKey.localeCompare(b.slotKey));
 }
