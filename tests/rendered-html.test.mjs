@@ -524,6 +524,14 @@ test("returns JSON 401 for expired API sessions instead of a successful login HT
   } finally { sessionCookie = saved; }
 });
 
+test("keeps the login form inert until client hydration rather than submitting a native GET", async () => {
+  const response = await render("/unlock?returnTo=%2Fmap");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /<input[^>]*disabled=""[^>]*autoComplete="username"/);
+  assert.match(html, /<button disabled="">正在准备登录…<\/button>/);
+});
+
 test("creates and fully manages shared albums without leaking album media into other surfaces", async () => {
   const savedSession = sessionCookie;
   let albumId = "";
