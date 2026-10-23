@@ -1,10 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Camera } from "lucide-react";
 import { uploadMediaFile } from "@/components/media/client-upload";
 
-export function HomeFeaturedPhotoEditor({ slotKey }: { slotKey: "map_primary" | "map_secondary" }) {
+export function HomeFeaturedPhotoEditor({ slotKey, hasPhoto }: { slotKey: "map_primary" | "map_secondary"; hasPhoto: boolean }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -22,7 +21,12 @@ export function HomeFeaturedPhotoEditor({ slotKey }: { slotKey: "map_primary" | 
   }
   return <div className="home-photo-editor">
     <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" onChange={(event) => { const file = event.target.files?.[0]; if (file) void replace(file); event.currentTarget.value = ""; }} />
-    <button type="button" disabled={busy} onClick={() => inputRef.current?.click()} aria-label="替换地图照片"><Camera size={14} />{busy ? "上传中" : "替换"}</button>
+    <button
+      type="button"
+      disabled={busy}
+      onClick={() => inputRef.current?.click()}
+      aria-label={busy ? "照片上传中" : hasPhoto ? "替换首页地图照片" : "添加首页地图照片"}
+    />
     {error && <small role="alert">{error}</small>}
   </div>;
 }

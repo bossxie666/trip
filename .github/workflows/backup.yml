@@ -1,0 +1,37 @@
+name: Weekly D1 backup
+on:
+  schedule:
+    - cron: "41 18 * * 0"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Export and copy the encrypted-account backup to isolated R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          stamp="$(date -u +%Y%m%d-%H%M%S)"
+          mkdir -p backups
+          pnpm exec wrangler d1 export DB --remote --output "backups/trip-${stamp}.sql"
+          pnpm exec wrangler r2 object put "trip-archive-backups/d1/trip-${stamp}.sql" --remote --file "backups/trip-${stamp}.sql"
+          pnpm exec wrangler d1 execute DB --remote --command "PRAGMA foreign_key_check;"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: d1-backup-${{ github.run_id }}
+          path: backups/*.sql
+          retention-days: 30

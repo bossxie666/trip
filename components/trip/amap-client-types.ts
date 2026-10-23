@@ -8,6 +8,7 @@ export type AMapObject = {
   remove(value: unknown): void;
   setFitView(value?: unknown[]): void;
   setCenter?(value: [number, number]): void;
+  resize?(): void;
   getBounds?(): { getSouthWest?: () => { lng: number; lat: number }; getNorthEast?: () => { lng: number; lat: number } };
   on(event: string, handler: (event?: unknown) => void): void;
   off(event: string, handler: (event?: unknown) => void): void;

@@ -1,0 +1,10 @@
+/* eslint-disable @next/next/no-img-element, @next/next/no-html-link-for-pages */
+import { notFound, redirect } from "next/navigation";
+import { ExternalLink, Heart } from "lucide-react";
+import { SiteHeader } from "@/components/site/SiteHeader";
+import { getCurrentMember } from "@/services/auth.server";
+import { getKnowledgeEntry } from "@/services/knowledge-service.server";
+import "../knowledge.css";
+const labels = { photography: "拍照知识", transition_video: "转场视频", travel_guide: "旅游攻略" };
+export const dynamic = "force-dynamic";
+export default async function KnowledgeDetail({ params }: { params: Promise<{ id: string }> }) { const actor = await getCurrentMember(); if (!actor) redirect("/unlock"); const entry = await getKnowledgeEntry(actor.id, (await params).id); if (!entry) notFound(); return <><SiteHeader currentMember={{ id: actor.id, displayName: actor.displayName, avatar: actor.avatar, role: actor.role }} /><main className="knowledge-detail"><a href="/knowledge">← 返回知识库</a><article><header><small>{labels[entry.section]}</small><h1>{entry.title}</h1><div>{entry.destination && <span>{entry.destination}</span>}{entry.tags.map((tag) => <span key={tag}>#{tag}</span>)}{entry.favorite && <span><Heart size={14} fill="currentColor" /> 已收藏</span>}</div></header>{entry.mediaAssetIds.length ? <div className="knowledge-detail-gallery">{entry.mediaAssetIds.map((id) => <img src={`/api/media/${id}?variant=detail`} alt="" key={id} />)}</div> : entry.coverImageUrl ? <div className="knowledge-detail-gallery single"><img src={entry.coverImageUrl} alt="" /></div> : null}{entry.summary && <p className="knowledge-lead">{entry.summary}</p>}<div className="knowledge-body">{(entry.body || "").split(/\n+/).filter(Boolean).map((line, index) => <p key={index}>{line}</p>)}</div>{entry.externalUrl && <a className="knowledge-source" href={entry.externalUrl} target="_blank" rel="noopener noreferrer">查看{entry.sourceLabel ? ` ${entry.sourceLabel}` : "来源"} <ExternalLink size={16} /></a>}<footer>由 {entry.authorName || "旅行成员"} 整理 · {new Date(entry.updatedAt).toLocaleDateString("zh-CN")}</footer></article></main></>; }

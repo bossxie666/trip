@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element, @next/next/no-html-link-for-pages -- Full-document links preserve the selected workspace when returning. */
 
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Camera, Plus, X } from "lucide-react";
 import type { AtlasPhotoSlot } from "@/services/home-media";
 import styles from "./home-live.module.css";
@@ -9,10 +9,11 @@ import styles from "./home-live.module.css";
 type Album = { id: string; title: string };
 type Photo = { assetId: string; filename: string };
 
-export function HomePhotoPicker({ slot, selectedIds = [] }: { slot: AtlasPhotoSlot | "wall"; selectedIds?: string[] }) {
+export function HomePhotoPicker({ slot, selectedIds = [], className = "" }: { slot: AtlasPhotoSlot | "wall"; selectedIds?: string[]; className?: string }) {
   const titleId = useId();
   const dialog = useRef<HTMLDialogElement>(null);
   const requestNumber = useRef(0);
+  const ownsHistory = useRef(false);
   const [albums, setAlbums] = useState<Album[]>([]);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [albumId, setAlbumId] = useState("");
@@ -21,6 +22,18 @@ export function HomePhotoPicker({ slot, selectedIds = [] }: { slot: AtlasPhotoSl
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const isWall = slot === "wall";
+  useEffect(() => {
+    const invalidateRequest = () => { requestNumber.current++; };
+    const onBack = () => {
+      if (ownsHistory.current && history.state?.tripPhotoSlot !== slot) {
+        ownsHistory.current = false;
+        requestNumber.current++;
+        dialog.current?.close();
+      }
+    };
+    window.addEventListener("popstate", onBack);
+    return () => { invalidateRequest(); window.removeEventListener("popstate", onBack); };
+  }, [slot]);
 
   async function readJson(response: Response) {
     if (response.status === 401) throw new Error("登录已过期，请重新登录后选择照片。");
@@ -39,8 +52,13 @@ export function HomePhotoPicker({ slot, selectedIds = [] }: { slot: AtlasPhotoSl
     } finally { if (number === requestNumber.current) setLoading(false); }
   }
   async function show() {
+    if (saving) return;
     setSelection(selectedIds); setError(""); setLoading(true); setPhotos([]); setAlbumId("");
-    if (!dialog.current?.open) dialog.current?.showModal();
+    if (!dialog.current?.open) {
+      history.pushState({ ...history.state, tripPhotoSlot: slot }, "", `${location.pathname}${location.search}#photos-${slot}`);
+      ownsHistory.current = true;
+      dialog.current?.showModal();
+    }
     const number = ++requestNumber.current;
     try {
       const payload = await readJson(await fetch("/api/albums", { signal: AbortSignal.timeout(10_000) }));
@@ -51,13 +69,19 @@ export function HomePhotoPicker({ slot, selectedIds = [] }: { slot: AtlasPhotoSl
       else setLoading(false);
     } catch (caught) { if (number === requestNumber.current) { setError(caught instanceof Error ? caught.message : "相册加载失败。"); setLoading(false); } }
   }
-  function close() { requestNumber.current++; dialog.current?.close(); }
+  function close() {
+    if (saving) return;
+    requestNumber.current++;
+    if (ownsHistory.current && history.state?.tripPhotoSlot === slot) history.back();
+    else dialog.current?.close();
+  }
   function choose(id: string) {
     setError("");
     if (!isWall) { setSelection([id]); return; }
     setSelection((current) => current.includes(id) ? current.filter((value) => value !== id) : current.length < 9 ? [...current, id] : current);
   }
   async function save(clear = false) {
+    if (saving) return;
     setSaving(true); setError("");
     try {
       await readJson(await fetch("/api/home/featured-photos", {
@@ -65,13 +89,19 @@ export function HomePhotoPicker({ slot, selectedIds = [] }: { slot: AtlasPhotoSl
         body: JSON.stringify(clear ? { slotKey: slot } : isWall ? { slotKey: "wall", assetIds: selection } : { slotKey: slot, assetId: selection[0] }),
         signal: AbortSignal.timeout(12_000),
       }));
-      window.location.reload();
+      if (dialog.current?.open) {
+        const state = { ...history.state };
+        delete state.tripPhotoSlot;
+        ownsHistory.current = false;
+        history.replaceState(state, "", `${location.pathname}${location.search}`);
+        window.location.reload();
+      } else setSaving(false);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "照片保存失败，请重试。"); setSaving(false); }
   }
 
   return <>
-    <button type="button" className={styles.photoTrigger} onClick={() => void show()} aria-label={isWall ? "选择精选照片" : "从相册选择地图照片"}>{isWall ? <Plus size={18} /> : <><Camera size={13} />换照片</>}</button>
-    <dialog ref={dialog} className={styles.dialog} aria-labelledby={titleId} onCancel={(event) => { if (saving) event.preventDefault(); else requestNumber.current++; }}>
+    <button type="button" className={`${isWall ? styles.wallTrigger : styles.photoTrigger} ${className}`} onClick={() => void show()} aria-label={isWall ? "选择精选照片" : "从相册选择地图照片"}>{isWall ? <Plus size={25} /> : <><Camera size={13} />换照片</>}</button>
+    <dialog ref={dialog} className={styles.dialog} aria-labelledby={titleId} onCancel={(event) => { event.preventDefault(); close(); }}>
       <header className={styles.dialogHeader}><h2 id={titleId}>{isWall ? "选择精选照片" : "选择地图照片"}</h2><button type="button" disabled={saving} onClick={close} aria-label="关闭照片选择"><X size={22} /></button></header>
       <div className={styles.photoBody}>
         {!!albums.length && <label>相册 <select disabled={saving} value={albumId} onChange={(event) => void loadAlbum(event.target.value)}>{albums.map((album) => <option key={album.id} value={album.id}>{album.title}</option>)}</select></label>}

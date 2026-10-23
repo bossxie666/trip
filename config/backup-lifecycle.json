@@ -1,0 +1,12 @@
+{
+  "rules": [
+    {
+      "id": "delete-d1-backups-after-90-days",
+      "enabled": true,
+      "conditions": { "prefix": "d1/" },
+      "deleteObjectsTransition": {
+        "condition": { "type": "Age", "maxAge": 7776000 }
+      }
+    }
+  ]
+}

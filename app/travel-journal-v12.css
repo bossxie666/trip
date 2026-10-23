@@ -388,7 +388,53 @@ body::before {
 }
 
 .trip-journal-workspace .planning-map-panel {
-  display: none;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  background: rgba(239, 235, 220, .34);
+}
+
+.trip-journal-workspace .planning-map-panel > header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.trip-journal-workspace .planning-map-panel > header span {
+  color: var(--journal-red);
+  font: 800 8px var(--font-geist-mono);
+  letter-spacing: .15em;
+}
+
+.trip-journal-workspace .planning-map-panel > header h2 {
+  margin: 4px 0 0;
+  color: var(--journal-ink);
+  font-family: "Songti SC", "STSong", serif;
+  font-size: 26px;
+}
+
+.trip-journal-workspace .planning-map-panel > header a {
+  color: var(--journal-ink);
+  font-size: 9px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.trip-journal-workspace .planning-map-panel .plan-map-canvas-wrap,
+.trip-journal-workspace .planning-map-placeholder {
+  min-height: 420px;
+}
+
+.trip-journal-workspace .planning-map-placeholder {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--journal-rule);
+  background: rgba(255, 253, 247, .58);
+  color: #6e7c7a;
+  font-size: 10px;
 }
 
 .trip-journal-workspace .recommendation-panel {
@@ -918,6 +964,12 @@ body::before {
 
   .trip-journal-workspace .recommendation-library-full .recommendation-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1439px) {
+  .trip-journal-workspace .planning-map-panel {
+    grid-column: 1 / -1;
   }
 }
 
@@ -1455,6 +1507,17 @@ body::before {
   .trip-journal-workspace .plan-map-canvas-wrap {
     min-height: 52vh;
     border-width: 4px;
+  }
+
+  .trip-journal-workspace .planning-map-panel {
+    gap: 10px;
+    padding: 14px 12px;
+  }
+
+  .trip-journal-workspace .planning-map-panel .plan-map-canvas-wrap,
+  .trip-journal-workspace .planning-map-placeholder {
+    height: clamp(360px, 52dvh, 620px);
+    min-height: 360px;
   }
 
   .trip-journal-workspace .recommendation-library-full .recommendation-grid {

@@ -1,10 +1,10 @@
 import { and, eq, isNull, like } from "drizzle-orm";
-import { AwsClient } from "aws4fetch";
+import { AwsV4Signer } from "aws4fetch";
 import { getDb, getRuntimeEnv } from "@/db";
 import { albumMediaRecords, albumRecords, homeFeaturedPhotoRecords, mediaAssetRecords, recommendationRecords, recommendationReferenceMediaRecords, recommendationReferenceRecords, tripMemberRecords, tripRecords } from "@/db/schema";
 import { wallPhotoSlots } from "./home-media";
 
-export const mediaPurposes = ["home_featured", "guestbook", "recommendation_reference", "trip_cover", "album"] as const;
+export const mediaPurposes = ["home_featured", "guestbook", "recommendation_reference", "trip_cover", "album", "member_avatar", "knowledge_image"] as const;
 export type MediaPurpose = (typeof mediaPurposes)[number];
 const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
 const maxImageBytes = 10 * 1024 * 1024;
@@ -25,20 +25,11 @@ export function validateMediaInput(input: { purpose?: string; filename?: string;
 export async function createDirectUpload(actorMemberId: string, raw: { purpose?: string; filename?: string; contentType?: string; byteSize?: number }) {
   const input = validateMediaInput(raw);
   const env = getRuntimeEnv();
-  const accountId = env.R2_ACCOUNT_ID?.trim();
-  const accessKeyId = env.R2_ACCESS_KEY_ID?.trim();
-  const secretAccessKey = env.R2_SECRET_ACCESS_KEY?.trim();
-  const bucket = env.R2_BUCKET_NAME?.trim() || "trip-archive-media";
-  if (!accountId || !accessKeyId || !secretAccessKey || !env.MEDIA) throw new Error("MEDIA_UPLOAD_NOT_CONFIGURED");
+  if (!env.MEDIA) throw new Error("MEDIA_UPLOAD_NOT_CONFIGURED");
 
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const objectKey = `${input.purpose}/${now.slice(0, 7)}/${id}.${safeExtension(input.filename, input.contentType)}`;
-  const endpoint = new URL(`https://${accountId}.r2.cloudflarestorage.com/${bucket}/${objectKey.split("/").map(encodeURIComponent).join("/")}`);
-  endpoint.searchParams.set("X-Amz-Expires", "600");
-  const aws = new AwsClient({ accessKeyId, secretAccessKey, service: "s3", region: "auto", retries: 0 });
-  const signed = await aws.sign(endpoint, { method: "PUT", headers: { "content-type": input.contentType }, aws: { signQuery: true, service: "s3", region: "auto" } });
-
   await getDb().insert(mediaAssetRecords).values({
     id,
     uploaderMemberId: actorMemberId,
@@ -51,7 +42,49 @@ export async function createDirectUpload(actorMemberId: string, raw: { purpose?:
     createdAt: now,
     updatedAt: now,
   });
-  return { assetId: id, uploadUrl: signed.url, method: "PUT" as const, headers: { "content-type": input.contentType }, expiresInSeconds: 600 };
+  const direct = await createR2PresignedPut(objectKey, input.contentType);
+  return {
+    assetId: id,
+    uploadUrl: direct?.url || `/api/media/uploads/${encodeURIComponent(id)}/content`,
+    method: "PUT" as const,
+    headers: direct?.headers || { "content-type": input.contentType },
+    expiresInSeconds: 600,
+    uploadMode: direct ? "r2" as const : "worker" as const,
+  };
+}
+
+async function createR2PresignedPut(objectKey: string, contentType: string) {
+  const env = getRuntimeEnv();
+  const accountId = env.R2_ACCOUNT_ID?.trim();
+  const accessKeyId = env.R2_ACCESS_KEY_ID?.trim();
+  const secretAccessKey = env.R2_SECRET_ACCESS_KEY?.trim();
+  const bucket = (env.R2_BUCKET_NAME || "trip-archive-media").trim();
+  if (!accountId || !accessKeyId || !secretAccessKey || !bucket) return null;
+  const encodedKey = objectKey.split("/").map(encodeURIComponent).join("/");
+  const url = new URL(`https://${accountId}.r2.cloudflarestorage.com/${encodeURIComponent(bucket)}/${encodedKey}`);
+  url.searchParams.set("X-Amz-Expires", "600");
+  const signed = await new AwsV4Signer({
+    accessKeyId,
+    secretAccessKey,
+    method: "PUT",
+    url: url.toString(),
+    headers: { "content-type": contentType },
+    service: "s3",
+    region: "auto",
+    signQuery: true,
+  }).sign();
+  return { url: signed.url.toString(), headers: { "content-type": contentType } };
+}
+
+export async function uploadMediaContent(actorMemberId: string, assetId: string, contentType: string | null, bytes: ArrayBuffer) {
+  const env = getRuntimeEnv();
+  if (!env.MEDIA) throw new Error("MEDIA_UPLOAD_NOT_CONFIGURED");
+  const asset = (await getDb().select().from(mediaAssetRecords).where(and(eq(mediaAssetRecords.id, assetId), eq(mediaAssetRecords.uploaderMemberId, actorMemberId))).limit(1))[0];
+  if (!asset) throw new Error("MEDIA_NOT_FOUND");
+  if (asset.status !== "pending") throw new Error("MEDIA_UPLOAD_ALREADY_COMPLETE");
+  if (contentType !== asset.contentType || bytes.byteLength !== asset.byteSize) throw new Error("MEDIA_UPLOAD_MISMATCH");
+  await env.MEDIA.put(asset.objectKey, bytes, { httpMetadata: { contentType: asset.contentType } });
+  return { ok: true };
 }
 
 export async function completeDirectUpload(actorMemberId: string, assetId: string, dimensions?: { width?: number | null; height?: number | null }) {
@@ -81,7 +114,7 @@ export async function getReadyMediaAsset(assetId: string) {
 export async function getAuthorizedReadyMediaAsset(assetId: string, memberId: string) {
   const asset = await getReadyMediaAsset(assetId);
   if (!asset) return null;
-  if (asset.purpose === "home_featured" || asset.purpose === "guestbook") return asset;
+  if (asset.purpose === "home_featured" || asset.purpose === "guestbook" || asset.purpose === "member_avatar" || asset.purpose === "knowledge_image") return asset;
   const db = getDb();
   if (asset.purpose === "album") {
     const albums = await db.select({ tripId: albumRecords.tripId, memberId: tripMemberRecords.memberId }).from(albumMediaRecords)

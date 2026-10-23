@@ -5,7 +5,8 @@ import { uploadMediaFile } from "@/components/media/client-upload";
 import type { Trip, TripStatus } from "@/models/travel";
 
 type MemberOption = { id: string; displayName: string };
-export function EditTripForm({ trip, members }: { trip: Trip; members: MemberOption[] }) {
+type EditableTrip = Pick<Trip, "slug" | "title" | "status" | "startDate" | "endDate" | "cover"> & { cities: { name: string }[]; members?: { id: string }[] };
+export function EditTripForm({ trip, members, onSaved }: { trip: EditableTrip; members: MemberOption[]; onSaved?: () => void }) {
   const router = useRouter();
   const [title, setTitle] = useState(trip.title), [status, setStatus] = useState<TripStatus>(trip.status);
   const [undated, setUndated] = useState(!trip.startDate || !trip.endDate), [startDate, setStartDate] = useState(trip.startDate || ""), [endDate, setEndDate] = useState(trip.endDate || "");
@@ -19,12 +20,11 @@ export function EditTripForm({ trip, members }: { trip: Trip; members: MemberOpt
       const response = await fetch(`/api/trips/${trip.slug}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ title, status, cities: trip.cities.map((city) => city.name), undated, startDate, endDate, people: memberIds.length || 1, cover, memberIds }) });
       const payload = await response.json() as { error?: string };
       if (!response.ok) throw new Error(payload.error || "保存失败。");
-      router.refresh();
+      router.refresh(); onSaved?.();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "保存失败。"); }
     finally { setSaving(false); }
   }
   return <form className="edit-trip-form" onSubmit={save}>
-    <h2>编辑基础信息</h2>
     <label>名称<input value={title} onChange={(event) => setTitle(event.target.value)} required /></label>
     <label>状态<select value={status} onChange={(event) => setStatus(event.target.value as TripStatus)}><option value="inspiration">灵感</option><option value="planning">待出行</option><option value="completed">已出行</option></select></label>
     <label className="inline-check"><input type="checkbox" checked={undated} onChange={(event) => setUndated(event.target.checked)} />日期未定</label>

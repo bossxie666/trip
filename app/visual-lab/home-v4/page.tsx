@@ -114,7 +114,7 @@ export default function HomepageV4() {
             <img className={styles.titleTape} src={`${ASSET}/tape-blue.webp`} alt="" aria-hidden="true" />
             <img
               className={styles.desktopTitle}
-              src={`${ASSET}/title-mobile.png`}
+              src={`${ASSET}/title-mobile.webp`}
               alt="跳进地理书的旅行"
               width={1448}
               height={1086}
@@ -228,7 +228,7 @@ export default function HomepageV4() {
           <span className={styles.mobileNote}>在地图上，<br />遇见更大的自己。</span>
           <img
             className={styles.mobileTitle}
-            src={`${ASSET}/title-mobile.png`}
+            src={`${ASSET}/title-mobile.webp`}
             alt="跳进地理书的旅行"
             width={1448}
             height={1086}

@@ -1,0 +1,227 @@
+/* One centered dialog language shared by profile, trip, album and workspace editors. */
+.workspace-overlay,
+.workspace-overlay-modal,
+.workspace-overlay-drawer,
+.budget-expense-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(18, 41, 57, .35);
+  backdrop-filter: blur(3px);
+  overscroll-behavior: contain;
+}
+
+.workspace-surface,
+.workspace-surface.workspace-modal,
+.workspace-surface.workspace-drawer,
+.workspace-surface.plan-add-sheet,
+.workspace-surface.booking-edit-dialog,
+.workspace-surface.day-presence-panel,
+.budget-expense-sheet {
+  position: relative;
+  inset: auto;
+  width: min(620px, calc(100vw - 36px));
+  height: auto;
+  max-width: calc(100vw - 36px);
+  max-height: calc(100dvh - 36px);
+  margin: 0;
+  overflow: auto;
+  border: 1px solid rgba(16, 67, 106, .2);
+  border-radius: 18px;
+  background: var(--paper2);
+  background-image: none !important;
+  box-shadow: 0 24px 70px rgba(22, 45, 55, .28);
+}
+
+.workspace-surface.recommendation-detail-drawer {
+  width: min(760px, calc(100vw - 36px));
+}
+
+.workspace-surface.workspace-modal.accommodation-edit-dialog {
+  width: min(480px, calc(100vw - 36px));
+}
+
+.workspace-surface.accommodation-create-dialog > .accommodation-date-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 14px 22px 0;
+}
+
+.workspace-surface .accommodation-date-fields label,
+.workspace-surface .accommodation-date-fields input {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.workspace-surface > header,
+.budget-expense-sheet > header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 22px 14px;
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper2);
+  background-image: none !important;
+}
+
+.workspace-close,
+.budget-close {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.workspace-close:hover,
+.budget-close:hover {
+  background: rgba(16, 67, 106, .08);
+  color: var(--ink);
+}
+
+.budget-expense-sheet { padding: 0; }
+.budget-expense-sheet > form { padding: 18px 22px 22px; }
+
+/* Dialog content stays quiet and solid: no scrapbook paper, tape or tilted-photo effects. */
+.workspace-surface::before,
+.workspace-surface::after,
+.budget-expense-sheet::before,
+.budget-expense-sheet::after {
+  content: none !important;
+  display: none !important;
+}
+
+.workspace-surface .tape-accent {
+  display: none !important;
+}
+
+.workspace-surface .album-form,
+.workspace-surface .guestbook-composer,
+.workspace-surface .edit-trip-form,
+.workspace-surface .booking-edit-sheet,
+.workspace-surface .recommendation-entry-grid,
+.workspace-surface .recommendation-create-form,
+.workspace-surface .recommendation-detail-body,
+.workspace-surface .recommendation-detail-hero,
+.budget-expense-sheet form {
+  background-color: var(--paper2) !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+/* These two forms have high-specificity scrapbook backgrounds in the page theme. */
+.workspace-surface.workspace-modal.compact-editor-dialog .album-form,
+.workspace-surface.workspace-modal.compact-editor-dialog .guestbook-composer,
+.workspace-surface.workspace-modal.book-edit-dialog .album-form {
+  border: 0 !important;
+  background: var(--paper2) !important;
+  box-shadow: none !important;
+}
+
+.workspace-surface.workspace-modal.compact-editor-dialog .album-form input,
+.workspace-surface.workspace-modal.compact-editor-dialog .album-form select,
+.workspace-surface.workspace-modal.compact-editor-dialog .album-form textarea,
+.workspace-surface.workspace-modal.compact-editor-dialog .guestbook-composer textarea {
+  background: var(--paper) !important;
+  background-image: none !important;
+}
+
+.workspace-surface .recommendation-detail-hero {
+  border-color: var(--line);
+}
+
+.workspace-surface .recommendation-detail-body ul img {
+  transform: none;
+  border: 0;
+  box-shadow: none;
+}
+
+/* Legacy details editors use the same clean card geometry. */
+.trip-settings[open],
+.accommodation-details[open],
+.item-control[open],
+.item-place-control[open],
+.booking-place-control[open],
+.budget-booking-edit[open],
+.expense-edit[open] {
+  inset: 50% auto auto 50%;
+  width: min(620px, calc(100vw - 36px));
+  max-height: calc(100dvh - 36px);
+  transform: translate(-50%, -50%);
+  border-radius: 18px;
+  background: var(--paper2);
+  background-image: none !important;
+  box-shadow: 0 24px 70px rgba(22, 45, 55, .28);
+}
+
+@media (max-width: 680px) {
+  .workspace-overlay,
+  .workspace-overlay-modal,
+  .workspace-overlay-drawer,
+  .budget-expense-modal {
+    place-items: center;
+    padding: 14px;
+  }
+
+  .workspace-surface,
+  .workspace-surface.workspace-modal,
+  .workspace-surface.workspace-drawer,
+  .workspace-surface.plan-add-sheet,
+  .workspace-surface.booking-edit-dialog,
+  .workspace-surface.day-presence-panel,
+  .workspace-surface.recommendation-detail-drawer,
+  .budget-expense-sheet {
+    width: calc(100vw - 28px);
+    height: auto;
+    max-width: calc(100vw - 28px);
+    max-height: calc(100dvh - 28px);
+    border-width: 1px;
+    border-radius: 18px;
+    box-shadow: 0 24px 70px rgba(22, 45, 55, .28);
+  }
+
+  .workspace-surface > header,
+  .budget-expense-sheet > header { padding: 16px 16px 13px; }
+  .budget-expense-sheet > form { padding: 16px; }
+
+  .workspace-surface.accommodation-create-dialog > .accommodation-date-fields {
+    grid-template-columns: minmax(0, 1fr);
+    margin-right: 16px;
+    margin-left: 16px;
+  }
+}
+.member-admin-panel{display:grid;gap:8px;padding-top:12px;border-top:1px solid rgba(16,58,99,.14)}
+.member-admin-panel>button{justify-self:start}
+.member-admin-panel>div{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:9px 0;border-top:1px solid rgba(16,58,99,.1)}
+.member-admin-panel>div span{display:grid;min-width:0;gap:2px}
+.member-admin-panel>div b,.member-admin-panel>div small{overflow-wrap:anywhere}
+.member-admin-panel>div small{color:#6d7780;font-size:12px}
+.member-admin-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}
+.member-profile-dialog footer{flex-wrap:wrap}
+.member-password-panel{display:grid;gap:10px;padding-top:12px;border-top:1px solid rgba(16,58,99,.14)}
+.member-password-panel>button{display:inline-flex;align-items:center;justify-content:center;gap:7px;justify-self:start}
+.member-password-panel form{display:grid;gap:10px;padding:14px;border-radius:12px;background:#f6f2e9}
+.member-password-panel label{display:grid;gap:5px}
+.member-password-panel label span{font-size:12px;font-weight:700;color:#26425d}
+.member-password-panel input{min-width:0;width:100%;min-height:40px;padding:8px 10px;border:1px solid rgba(16,58,99,.22);border-radius:8px;background:#fff}
+.member-password-panel form>button{justify-self:end}
+.member-identity-notice{margin:0;color:#23704a;font-size:13px}
+.unlock-form .unlock-forgot{border:0;background:transparent;color:#315d83;text-decoration:underline;text-underline-offset:3px}
+.unlock-recovery{margin:0;padding:12px;border-radius:10px;background:#f4efe5;color:#405368;font-size:13px;line-height:1.6}

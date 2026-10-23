@@ -1,7 +1,7 @@
 /** Cloudflare Worker entry point for the vinext-starter template. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
-import { readCookie, sessionCookieName, verifySessionToken } from "../services/session";
+import { readCookie, sessionCookieName, verifySessionMemberId } from "../services/session";
 import { safeInternalReturnTo } from "../services/return-to";
 
 interface Env {
@@ -43,8 +43,9 @@ function isPublicPath(pathname: string) {
     || publicAssetPrefixes.some((prefix) => pathname.startsWith(prefix));
 }
 
-function withSecurityHeaders(response: Response, url: URL) {
+function withSecurityHeaders(response: Response, url: URL, requestId: string) {
   const headers = new Headers(response.headers);
+  headers.set("x-request-id", requestId);
   headers.set("x-content-type-options", "nosniff");
   headers.set("x-frame-options", "DENY");
   headers.set("referrer-policy", "strict-origin-when-cross-origin");
@@ -63,24 +64,30 @@ function withSecurityHeaders(response: Response, url: URL) {
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    const requestId = crypto.randomUUID();
+    const startedAt = Date.now();
+
+    const finish = (response: Response, failureCategory?: string) => {
+      const secured = withSecurityHeaders(response, url, requestId);
+      console.log(JSON.stringify({ type: "request", requestId, method: request.method, route: url.pathname, status: secured.status, durationMs: Date.now() - startedAt, failureCategory: failureCategory || null }));
+      return secured;
+    };
 
     if (url.pathname.startsWith("/api/") && !["GET", "HEAD", "OPTIONS"].includes(request.method)) {
       const origin = request.headers.get("origin");
       if (origin) {
         try {
-          if (new URL(origin).origin !== url.origin) return withSecurityHeaders(Response.json({ error: "请求来源无效。" }, { status: 403 }), url);
+          if (new URL(origin).origin !== url.origin) return finish(Response.json({ error: "请求来源无效。" }, { status: 403 }), "origin");
         } catch {
-          return withSecurityHeaders(Response.json({ error: "请求来源无效。" }, { status: 403 }), url);
+          return finish(Response.json({ error: "请求来源无效。" }, { status: 403 }), "origin");
         }
       }
     }
-
     if ((url.pathname === "/visual-lab" || url.pathname.startsWith("/visual-lab/"))
-      && !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) {
-      return withSecurityHeaders(new Response("Not found", { status: 404 }), url);
-    }
+      && !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) return finish(new Response("Not found", { status: 404 }));
 
-    if (url.pathname === "/_vinext/image") {
+    try {
+      if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
       const response = await handleImageOptimization(request, {
         fetchAsset: (path) => env.ASSETS.fetch(new Request(new URL(path, request.url))),
@@ -89,21 +96,49 @@ const worker = {
           return result.response();
         },
       }, allowedWidths);
-      return withSecurityHeaders(response, url);
-    }
-
-    if (!isPublicPath(url.pathname)) {
-      const memberId = await verifySessionToken(readCookie(request, sessionCookieName), env.TRIP_SPACE_SESSION_SECRET);
-      const member = memberId ? await env.DB.prepare("SELECT active FROM members WHERE id = ? LIMIT 1").bind(memberId).first<{ active: number }>() : null;
-      if (!member?.active) {
-        const unlock = new URL("/unlock", request.url);
-        unlock.searchParams.set("returnTo", safeInternalReturnTo(`${url.pathname}${url.search}`));
-        return withSecurityHeaders(Response.redirect(unlock, 302), url);
+        return finish(response);
       }
-    }
 
-    return withSecurityHeaders(await handler.fetch(request, env, ctx), url);
+      if (!isPublicPath(url.pathname)) {
+        const memberId = await verifySessionMemberId(readCookie(request, sessionCookieName), env.TRIP_SPACE_SESSION_SECRET, env.DB);
+        const member = memberId ? await env.DB.prepare("SELECT active FROM members WHERE id = ? LIMIT 1").bind(memberId).first<{ active: number }>() : null;
+        if (!member?.active) {
+          if (url.pathname.startsWith("/api/")) return finish(Response.json({ code: "UNAUTHORIZED", error: "登录已过期，请重新登录。" }, { status: 401, headers: { "cache-control": "no-store" } }), "authentication");
+          const unlock = new URL("/unlock", request.url);
+          unlock.searchParams.set("returnTo", safeInternalReturnTo(`${url.pathname}${url.search}`));
+          return finish(Response.redirect(unlock, 302), "authentication");
+        }
+      }
+
+      const appHeaders = new Headers(request.headers); appHeaders.set("x-request-id", requestId);
+      return finish(await handler.fetch(new Request(request, { headers: appHeaders }), env, ctx));
+    } catch (caught) {
+      console.error(JSON.stringify({ type: "request_error", requestId, method: request.method, route: url.pathname, durationMs: Date.now() - startedAt, error: caught instanceof Error ? caught.name : "UnknownError" }));
+      return finish(Response.json({ code: "INTERNAL_ERROR", message: "服务暂时不可用，请稍后重试。", requestId }, { status: 500, headers: { "cache-control": "no-store" } }), "internal");
+    }
+  },
+  async scheduled(_controller: unknown, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(cleanExpiredOperationalData(env));
   },
 };
+
+async function cleanExpiredOperationalData(env: Env) {
+  const pendingBefore = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const rateLimitBefore = Date.now() - 48 * 60 * 60 * 1000;
+  const now = new Date().toISOString();
+  const revokedSessionBefore = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+  const pending = await env.DB.prepare("SELECT id, object_key FROM media_assets WHERE status = 'pending' AND created_at < ? LIMIT 500").bind(pendingBefore).all<{ id: string; object_key: string }>();
+  if (pending.results?.length) await env.MEDIA.delete(pending.results.map((asset) => asset.object_key));
+  const statements = [
+    env.DB.prepare("DELETE FROM rate_limits WHERE window_started_at < ?").bind(rateLimitBefore),
+    env.DB.prepare("DELETE FROM member_sessions WHERE expires_at < ? OR (revoked_at IS NOT NULL AND revoked_at < ?)").bind(now, revokedSessionBefore),
+  ];
+  if (pending.results?.length) {
+    const placeholders = pending.results.map(() => "?").join(",");
+    statements.push(env.DB.prepare(`DELETE FROM media_assets WHERE status = 'pending' AND id IN (${placeholders})`).bind(...pending.results.map((asset) => asset.id)));
+  }
+  const results = await env.DB.batch(statements);
+  console.log(JSON.stringify({ type: "scheduled_cleanup", pendingMediaDeleted: pending.results?.length || 0, operations: results.length }));
+}
 
 export default worker;

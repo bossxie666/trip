@@ -186,12 +186,114 @@ export async function listTrips(status: TripStatus | "all" = "all", memberId?: s
   return [...storedTrips, ...seeds.filter((trip) => !storedSlugs.has(trip.slug))];
 }
 
+/** Lightweight query for the bookshelf. It deliberately skips days, stages and
+ * place relations because the index only renders the cover and member summary. */
+export async function listTripSummaries(status: TripStatus | "all" = "all", memberId?: string) {
+  if (!memberId) return [];
+  const db = getDb();
+  const conditions = [eq(tripMemberRecords.memberId, memberId)];
+  if (status !== "all") conditions.push(eq(tripRecords.status, status));
+  const rows = await db.select({ trip: tripRecords })
+    .from(tripRecords)
+    .innerJoin(tripMemberRecords, eq(tripMemberRecords.tripId, tripRecords.id))
+    .where(and(...conditions))
+    .orderBy(desc(tripRecords.createdAt));
+  if (!rows.length) return [];
+  const tripIds = rows.map(({ trip }) => trip.id);
+  const [cityLinks, memberLinks] = await Promise.all([
+    db.select({ tripId: tripCityRecords.tripId, cityId: cityRecords.id, name: cityRecords.name, slug: cityRecords.slug, centerLat: cityRecords.centerLat, centerLng: cityRecords.centerLng })
+      .from(tripCityRecords)
+      .innerJoin(cityRecords, eq(tripCityRecords.cityId, cityRecords.id))
+      .where(inArray(tripCityRecords.tripId, tripIds))
+      .orderBy(asc(tripCityRecords.position)),
+    db.select({ tripId: tripMemberRecords.tripId, id: memberRecords.id, displayName: memberRecords.displayName })
+      .from(tripMemberRecords)
+      .innerJoin(memberRecords, eq(tripMemberRecords.memberId, memberRecords.id))
+      .where(inArray(tripMemberRecords.tripId, tripIds)),
+  ]);
+  return rows.map(({ trip }) => ({
+    ...trip,
+    status: trip.status as TripStatus,
+    cities: cityLinks.filter((city) => city.tripId === trip.id).map((city) => ({ cityId: city.cityId, name: city.name, slug: city.slug, centerLat: city.centerLat, centerLng: city.centerLng })),
+    members: memberLinks.filter((member) => member.tripId === trip.id).map(({ id, displayName }) => ({ id, displayName })),
+  }));
+}
+
 export async function findTripBySlug(slug: string) {
   const db = getDb();
   const rows = await db.select().from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1);
   const stored = (await hydrateTrips(rows))[0];
   if (stored) return stored;
   return seedFallbackAllowed() ? getSeedTripBySlug(slug) : undefined;
+}
+
+/**
+ * Read the shared trip shell used by authenticated workspace routes.
+ *
+ * The full repository hydrator also loads stages, stage members and legacy
+ * day-place links. Those relations are useful to editing APIs, but the plan
+ * workspace immediately performs its own chapter-specific reads and never
+ * consumes them. Keeping this query small removes several D1 round trips from
+ * every trip open while preserving the existing Trip shape for callers.
+ */
+export async function findWorkspaceTripBySlug(slug: string) {
+  const db = getDb();
+  const row = (await db.select().from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1))[0];
+  if (!row) return seedFallbackAllowed() ? getSeedTripBySlug(slug) : undefined;
+  const [cityLinks, storedDays, memberLinks, stageLinks] = await Promise.all([
+    db.select({ id: cityRecords.id, slug: cityRecords.slug, name: cityRecords.name })
+      .from(tripCityRecords)
+      .innerJoin(cityRecords, eq(tripCityRecords.cityId, cityRecords.id))
+      .where(eq(tripCityRecords.tripId, row.id))
+      .orderBy(asc(tripCityRecords.position)),
+    db.select().from(dayRecords).where(eq(dayRecords.tripId, row.id)).orderBy(asc(dayRecords.dayNumber)),
+    db.select({ id: memberRecords.id, name: memberRecords.name, displayName: memberRecords.displayName, avatar: memberRecords.avatar, active: memberRecords.active, createdAt: memberRecords.createdAt })
+      .from(tripMemberRecords)
+      .innerJoin(memberRecords, eq(tripMemberRecords.memberId, memberRecords.id))
+      .where(eq(tripMemberRecords.tripId, row.id)),
+    db.select({
+      id: tripStageRecords.id,
+      cityId: tripStageRecords.cityId,
+      title: tripStageRecords.title,
+      sortOrder: tripStageRecords.sortOrder,
+      createdAt: tripStageRecords.createdAt,
+      updatedAt: tripStageRecords.updatedAt,
+      citySlug: cityRecords.slug,
+      cityName: cityRecords.name,
+      memberId: memberRecords.id,
+      memberName: memberRecords.name,
+      memberDisplayName: memberRecords.displayName,
+      memberAvatar: memberRecords.avatar,
+      memberActive: memberRecords.active,
+      memberCreatedAt: memberRecords.createdAt,
+    }).from(tripStageRecords)
+      .innerJoin(cityRecords, eq(tripStageRecords.cityId, cityRecords.id))
+      .leftJoin(tripStageMemberRecords, eq(tripStageMemberRecords.stageId, tripStageRecords.id))
+      .leftJoin(memberRecords, eq(tripStageMemberRecords.memberId, memberRecords.id))
+      .where(eq(tripStageRecords.tripId, row.id))
+      .orderBy(asc(tripStageRecords.sortOrder)),
+  ]);
+  const stages = [...new Map(stageLinks.map((stage) => [stage.id, stage])).values()].map((stage) => ({
+    id: stage.id,
+    tripId: row.id,
+    cityId: stage.cityId,
+    title: stage.title,
+    sortOrder: stage.sortOrder,
+    createdAt: stage.createdAt,
+    updatedAt: stage.updatedAt,
+    city: { id: stage.cityId, slug: stage.citySlug, name: stage.cityName },
+    members: stageLinks.filter((member) => member.id === stage.id && member.memberId).map((member) => ({ id: member.memberId!, name: member.memberName!, displayName: member.memberDisplayName!, avatar: member.memberAvatar, active: Boolean(member.memberActive), createdAt: member.memberCreatedAt! })),
+  }));
+  return {
+    ...row,
+    status: row.status as TripStatus,
+    cities: cityLinks,
+    stages,
+    days: storedDays.map((day) => ({ id: day.id, tripId: day.tripId, date: day.date, title: day.title, updatedAt: day.updatedAt, placeIds: [] })),
+    expenses: [],
+    photos: [],
+    members: memberLinks.map((member) => ({ ...member, active: Boolean(member.active) })),
+  } satisfies Trip;
 }
 
 /** Minimal read used by route metadata; deliberately avoids hydrating Trip relations. */

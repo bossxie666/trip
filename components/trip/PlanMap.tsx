@@ -75,6 +75,7 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
         category: null,
         areaKey: null,
         recommendationTitle: null,
+        recommendations: undefined,
         timelineId: stop.id,
         nodeNumber: timelineNumbers.get(stop.id) || index + 1,
       }));
@@ -105,7 +106,29 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
   // provider search region.
   const searchCity = workspace?.cities.find((item) => (area === "hangzhou" || area === "tonglu") && item.name.includes("杭州")) || workspace?.cities.find((item) => area === "shanghai" && item.name.includes("上海")) || workspace?.cities.find((item) => item.name.includes("上海")) || workspace?.cities[0];
   const searchRegion = mapMode === "library" ? (area === "tonglu" ? "桐庐" : searchCity?.name || "") : "";
-  useEffect(() => { let cancelled = false; loadAMap().then((AMap) => { if (cancelled || !container.current) return; mapRef.current = new AMap.Map(container.current, { zoom: 11, center: [121.47, 31.23], viewMode: "2D" }); setReady(true); }).catch((caught) => { if (!cancelled) setError(caught instanceof Error ? caught.message : "地图加载失败。"); }); return () => { cancelled = true; mapRef.current?.destroy(); mapRef.current = null; overlays.current = []; markerObjects.current = []; lastFitSignature.current = ""; }; }, [mapAttempt]);
+  useEffect(() => {
+    let cancelled = false, frame = 0, attempts = 0;
+    let observer: ResizeObserver | null = null;
+    loadAMap().then((AMap) => {
+      const mount = () => {
+        const target = container.current;
+        if (cancelled || !target) return;
+        if ((target.clientWidth < 2 || target.clientHeight < 2) && attempts < 30) {
+          attempts += 1;
+          frame = window.requestAnimationFrame(mount);
+          return;
+        }
+        mapRef.current = new AMap.Map(target, { zoom: 11, center: [121.47, 31.23], viewMode: "2D" });
+        if (typeof ResizeObserver !== "undefined") {
+          observer = new ResizeObserver(() => mapRef.current?.resize?.());
+          observer.observe(target);
+        }
+        setReady(true);
+      };
+      frame = window.requestAnimationFrame(mount);
+    }).catch((caught) => { if (!cancelled) setError(caught instanceof Error ? caught.message : "地图加载失败。"); });
+    return () => { cancelled = true; window.cancelAnimationFrame(frame); observer?.disconnect(); mapRef.current?.destroy(); mapRef.current = null; overlays.current = []; markerObjects.current = []; lastFitSignature.current = ""; };
+  }, [mapAttempt]);
   useEffect(() => { setMemberFilter(workspace?.memberFilter || workspace?.currentMemberId || "all"); }, [workspace?.memberFilter, workspace?.currentMemberId]);
   useEffect(() => { if (mapMode === "library") setFocusedRecommendationId(new URLSearchParams(window.location.search).get("focusRecommendation")); }, [mapMode]);
   useEffect(() => { if (!ready || !mapRef.current?.on) return; const map = mapRef.current; const updateViewport = () => { const bounds = map.getBounds?.(), sw = bounds?.getSouthWest?.(), ne = bounds?.getNorthEast?.(); if (sw && ne) setViewport({ south: sw.lat, west: sw.lng, north: ne.lat, east: ne.lng }); }; const markInteraction = () => { userHasInteractedWithMap.current = true; }; map.on("moveend", updateViewport); map.on("zoomend", updateViewport); map.on("dragstart", markInteraction); map.on("zoomstart", markInteraction); map.on("movestart", markInteraction); updateViewport(); return () => { map.off?.("moveend", updateViewport); map.off?.("zoomend", updateViewport); map.off?.("dragstart", markInteraction); map.off?.("zoomstart", markInteraction); map.off?.("movestart", markInteraction); }; }, [ready]);

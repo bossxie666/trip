@@ -1,65 +1,25 @@
 "use client";
-
 /* eslint-disable @next/next/no-img-element */
-
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { Camera, KeyRound, X } from "lucide-react";
 import { buildIdentitySwitchReturnTo } from "@/services/identity-navigation";
-
-export type SessionMemberSummary = { id: string; displayName: string; avatar?: string | null };
-
-function currentPath() {
-  if (typeof window === "undefined") return "/";
-  return `${window.location.pathname}${window.location.search}${window.location.hash}`;
-}
-
+import { uploadMediaFile } from "@/components/media/client-upload";
+export type SessionMemberSummary = { id: string; displayName: string; avatar?: string | null; role?: "admin" | "member" };
+type ManagedMember = { id: string; displayName: string; active: boolean; role: string; credentialStatus: string; lastLoginAt: string | null };
+function currentPath() { return typeof window === "undefined" ? "/" : `${window.location.pathname}${window.location.search}${window.location.hash}`; }
 export function MemberIdentityControl({ currentMember, compact = false }: { currentMember?: SessionMemberSummary | null; compact?: boolean }) {
-  const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState<"switch" | "logout" | null>(null);
-  const [error, setError] = useState("");
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", closeOnOutsidePointer);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeOnOutsidePointer);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [open]);
-
-  if (!currentMember) return null;
-
-  async function clearSession(destination: "switch" | "logout") {
-    setBusy(destination);
-    setError("");
-    try {
-      const response = await fetch("/api/session", { method: "DELETE", credentials: "same-origin", headers: { accept: "application/json" } });
-      if (!response.ok) throw new Error("旅行空间退出失败，请重试。");
-      const returnTo = destination === "switch" ? buildIdentitySwitchReturnTo(currentPath()) : "/";
-      window.location.assign(`/unlock?returnTo=${encodeURIComponent(returnTo)}`);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "旅行空间退出失败，请重试。");
-      setBusy(null);
-    }
-  }
-
-  return <div className={`member-identity-control${compact ? " member-identity-compact" : ""}`} ref={rootRef}>
-    <button type="button" className="member-identity-trigger" aria-haspopup="menu" aria-expanded={open} onClick={() => { setOpen((value) => !value); setError(""); }}>
-      {compact && (currentMember.avatar ? <img src={currentMember.avatar} alt="" width={34} height={34} /> : <i aria-hidden="true">{currentMember.displayName.slice(0, 1).toUpperCase()}</i>)}<span>{compact ? "成员" : "当前身份"}</span><strong>{currentMember.displayName}</strong><span aria-hidden="true">⌄</span>
-    </button>
-    {open && <div className="member-identity-menu" role="menu" aria-label="成员身份操作">
-      <div className="member-identity-current"><div><span>当前身份</span><strong>{currentMember.displayName}</strong></div><button type="button" className="member-identity-close" aria-label="关闭身份菜单" onClick={() => setOpen(false)}>×</button></div>
-      <button type="button" role="menuitem" onClick={() => void clearSession("switch")} disabled={busy !== null}>切换身份</button>
-      <button type="button" role="menuitem" className="member-identity-logout" onClick={() => void clearSession("logout")} disabled={busy !== null}>退出旅行空间</button>
-      {busy && <small className="member-identity-status">{busy === "switch" ? "正在准备切换…" : "正在退出…"}</small>}
-      {error && <small className="member-identity-error" role="alert">{error}</small>}
-    </div>}
+  const [member, setMember] = useState(currentMember), [open, setOpen] = useState(false), [busy, setBusy] = useState<"avatar" | "password" | "switch" | "logout" | "logout-all" | "members" | null>(null), [error, setError] = useState(""), [notice, setNotice] = useState(""), [passwordOpen, setPasswordOpen] = useState(false), [currentPassword, setCurrentPassword] = useState(""), [newPassword, setNewPassword] = useState(""), [confirmPassword, setConfirmPassword] = useState(""), [managedMembers, setManagedMembers] = useState<ManagedMember[] | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null), inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (!open) return; const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); }; document.addEventListener("keydown", escape); const old = document.body.style.overflow; document.body.style.overflow = "hidden"; return () => { document.removeEventListener("keydown", escape); document.body.style.overflow = old; }; }, [open]);
+  if (!member) return null;
+  function close() { setOpen(false); setError(""); setNotice(""); setPasswordOpen(false); setCurrentPassword(""); setNewPassword(""); setConfirmPassword(""); window.setTimeout(() => triggerRef.current?.focus(), 0); }
+  async function uploadAvatar(event: ChangeEvent<HTMLInputElement>) { const file = event.target.files?.[0]; event.target.value = ""; if (!file) return; setBusy("avatar"); setError(""); try { const assetId = await uploadMediaFile(file, "member_avatar"); const response = await fetch("/api/member", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ assetId }) }); const payload = await response.json() as { member?: SessionMemberSummary; error?: string }; if (!response.ok || !payload.member) throw new Error(payload.error || "头像更新失败。"); setMember(payload.member); window.dispatchEvent(new CustomEvent("member-avatar-updated", { detail: payload.member })); } catch (caught) { setError(caught instanceof Error ? caught.message : "头像更新失败。"); } finally { setBusy(null); } }
+  async function clearSession(destination: "switch" | "logout" | "logout-all") { setBusy(destination); setError(""); try { const response = await fetch(`/api/session${destination === "logout-all" ? "?all=true" : ""}`, { method: "DELETE", credentials: "same-origin" }); if (!response.ok) throw new Error("操作失败，请重试。"); const returnTo = destination === "switch" ? buildIdentitySwitchReturnTo(currentPath()) : "/"; window.location.assign(`/unlock?returnTo=${encodeURIComponent(returnTo)}`); } catch (caught) { setError(caught instanceof Error ? caught.message : "操作失败，请重试。"); setBusy(null); } }
+  async function loadMembers() { setBusy("members"); setError(""); try { const response = await fetch("/api/admin/members", { cache: "no-store" }); const payload = await response.json() as { members?: ManagedMember[]; message?: string }; if (!response.ok || !payload.members) throw new Error(payload.message || "成员读取失败。"); setManagedMembers(payload.members); } catch (caught) { setError(caught instanceof Error ? caught.message : "成员读取失败。"); } finally { setBusy(null); } }
+  async function setMemberActive(target: ManagedMember) { setBusy("members"); setError(""); try { const response = await fetch("/api/admin/members", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ memberId: target.id, active: !target.active }) }); const payload = await response.json() as { message?: string }; if (!response.ok) throw new Error(payload.message || "成员状态更新失败。"); await loadMembers(); } catch (caught) { setError(caught instanceof Error ? caught.message : "成员状态更新失败。"); setBusy(null); } }
+  async function resetMemberPassword(target: ManagedMember) { if (!window.confirm(`确认重置 ${target.displayName} 的密码？该成员的所有设备会立即退出。`)) return; setBusy("members"); setError(""); try { const response = await fetch("/api/admin/members", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ memberId: target.id, action: "reset-password" }) }); const payload = await response.json() as { message?: string }; if (!response.ok) throw new Error(payload.message || "密码重置失败。"); setNotice(`已重置 ${target.displayName}，请让对方用原暗号重新激活。`); await loadMembers(); } catch (caught) { setError(caught instanceof Error ? caught.message : "密码重置失败。"); setBusy(null); } }
+  async function changePassword(event: FormEvent) { event.preventDefault(); setError(""); setNotice(""); if (newPassword !== confirmPassword) { setError("两次输入的新密码不一致。"); return; } setBusy("password"); try { const response = await fetch("/api/member/password", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ currentPassword, newPassword }) }); const payload = await response.json() as { message?: string }; if (!response.ok) throw new Error(payload.message || "密码修改失败。"); setCurrentPassword(""); setNewPassword(""); setConfirmPassword(""); setPasswordOpen(false); setNotice("密码已更新，其他设备已退出。"); } catch (caught) { setError(caught instanceof Error ? caught.message : "密码修改失败。"); } finally { setBusy(null); } }
+  return <div className={`member-identity-control${compact ? " member-identity-compact" : ""}`}><button ref={triggerRef} type="button" className="member-identity-trigger" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>{member.avatar ? <img src={member.avatar} alt="" width={36} height={36} /> : <i aria-hidden="true">{member.displayName.slice(0, 1).toUpperCase()}</i>}<strong>{member.displayName}</strong><span aria-hidden="true">⌄</span></button>
+    {open && <div className="member-profile-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) close(); }}><section className="member-profile-dialog" role="dialog" aria-modal="true" aria-label="个人资料"><header><h2>个人资料</h2><button type="button" aria-label="关闭" onClick={close} disabled={!!busy}><X size={20} /></button></header><div className="member-profile-avatar">{member.avatar ? <img src={member.avatar} alt={`${member.displayName}的头像`} /> : <i>{member.displayName.slice(0, 1).toUpperCase()}</i>}<button type="button" onClick={() => inputRef.current?.click()} disabled={!!busy}><Camera size={17} />{busy === "avatar" ? "上传中…" : "更换头像"}</button><input ref={inputRef} type="file" hidden accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" onChange={uploadAvatar} /></div><label className="member-profile-name"><span>名字</span><input readOnly value={member.displayName} /></label><section className="member-password-panel"><button type="button" onClick={() => { setPasswordOpen((value) => !value); setError(""); setNotice(""); }} disabled={!!busy}><KeyRound size={16} />修改密码</button>{passwordOpen && <form onSubmit={changePassword}><label><span>当前密码</span><input type="password" autoComplete="current-password" required value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label><label><span>新密码</span><input type="password" autoComplete="new-password" minLength={10} maxLength={128} required value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label><label><span>确认新密码</span><input type="password" autoComplete="new-password" minLength={10} maxLength={128} required value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label><button type="submit" disabled={!!busy}>{busy === "password" ? "保存中…" : "保存新密码"}</button></form>}</section>{member.role === "admin" && <section className="member-admin-panel"><button type="button" onClick={() => void loadMembers()} disabled={!!busy}>{managedMembers ? "刷新成员" : "管理成员"}</button>{managedMembers?.map((target) => <div key={target.id}><span><b>{target.displayName}</b><small>{target.credentialStatus === "active" ? "个人密码已启用" : target.active ? "待激活" : "已停用"}</small></span><span className="member-admin-actions">{target.active && target.credentialStatus === "active" && <button type="button" disabled={!!busy || target.id === member.id} onClick={() => void resetMemberPassword(target)}>重置密码</button>}<button type="button" disabled={!!busy || target.id === member.id} onClick={() => void setMemberActive(target)}>{target.active ? "停用" : "重新启用"}</button></span></div>)}</section>}{notice && <p className="member-identity-notice" role="status">{notice}</p>}{error && <p className="member-identity-error" role="alert">{error}</p>}<footer><button type="button" onClick={() => void clearSession("switch")} disabled={!!busy}>切换身份</button><button type="button" onClick={() => void clearSession("logout-all")} disabled={!!busy}>退出全部设备</button><button type="button" className="member-identity-logout" onClick={() => void clearSession("logout")} disabled={!!busy}>退出</button></footer></section></div>}
   </div>;
 }

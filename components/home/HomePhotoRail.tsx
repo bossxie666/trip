@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
-import { useRef, useState, type PointerEvent as ReactPointerEvent, type KeyboardEvent } from "react";
+import { useRef, useState, type PointerEvent as ReactPointerEvent, type KeyboardEvent, type ReactNode } from "react";
 import { WorkspaceNavLink as Link } from "@/components/trip/WorkspaceNavLink";
 
 export type HomePhotoRailItem = {
@@ -20,7 +20,7 @@ type DragState = { pointerId: number; startX: number; scrollLeft: number };
  * receives already-authorized media URLs from the server and never creates or
  * reorders a Photo Library record.
  */
-export function HomePhotoRail({ items }: { items: HomePhotoRailItem[] }) {
+export function HomePhotoRail({ items, management }: { items: HomePhotoRailItem[]; management?: ReactNode }) {
   const railRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -31,13 +31,14 @@ export function HomePhotoRail({ items }: { items: HomePhotoRailItem[] }) {
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (!hasRail) return;
+    if (!hasRail || event.target !== event.currentTarget) return;
     if (event.key === "ArrowLeft") { event.preventDefault(); scrollBy(-1); }
     if (event.key === "ArrowRight") { event.preventDefault(); scrollBy(1); }
   }
 
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     if (!hasRail || event.pointerType === "mouse" && event.button !== 0 || !railRef.current) return;
+    if ((event.target as Element).closest("button, a, input, select, dialog")) return;
     dragRef.current = { pointerId: event.pointerId, startX: event.clientX, scrollLeft: railRef.current.scrollLeft };
     railRef.current.setPointerCapture(event.pointerId);
     setDragging(true);
@@ -77,8 +78,7 @@ export function HomePhotoRail({ items }: { items: HomePhotoRailItem[] }) {
         </div>
         <figcaption><b>{item.label}</b></figcaption>
       </figure>)}
-      {items.length <= 2 ? <Link className="home-photo-manage-card" href="/albums" aria-label="打开相册添加精选照片"><span className="home-photo-manage-icon" aria-hidden="true"><Plus size={25} /></span></Link> : null}
-      {!items.length ? <div className="home-photo-wall-empty">为行程添加照片后，影像会在这里排成一面旅行墙。</div> : null}
+      {management || (items.length <= 2 ? <Link className="home-photo-manage-card" href="/albums" aria-label="打开相册添加精选照片"><span className="home-photo-manage-icon" aria-hidden="true"><Plus size={25} /></span></Link> : null)}
     </div>
     {hasRail ? <button className="home-photo-rail-control home-photo-rail-control-next" type="button" aria-label="查看下一组精选照片" onClick={() => scrollBy(1)}><ChevronRight size={22} /></button> : null}
   </div>;

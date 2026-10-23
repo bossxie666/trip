@@ -48,7 +48,7 @@ export function HomepageV4Live({ dashboard, member, homeHref = "/home-v4" }: { d
       </header>
       <section className={styles.desktopHero} aria-label="旅行手帐">
         <article className={styles.desktopManifesto}>
-          <h1 className={styles.liveTitleHeading}><img className={styles.desktopTitle} src={`${assets}/title-mobile.png`} alt="跳进地理书的旅行" width={1448} height={1086} /></h1>
+          <h1 className={styles.liveTitleHeading}><img className={styles.desktopTitle} src={`${assets}/title-mobile.webp`} alt="跳进地理书的旅行" width={1448} height={1086} /></h1>
           <div className={styles.desktopStats}><span>已点亮城市 <b>{dashboard.stats.cityCount}</b></span><span>已完成旅行 <b>{dashboard.stats.completed}</b></span></div>
           <div className={styles.desktopActions}><a className={styles.primaryAction} href={nextHref}>规划下一段旅程<ArrowRight size={16} /></a><a className={styles.secondaryAction} href="/trips"><BookOpen size={17} />我的旅行</a></div>
         </article>
@@ -63,7 +63,7 @@ export function HomepageV4Live({ dashboard, member, homeHref = "/home-v4" }: { d
           <h2 title={next?.title}>{next ? next.cities.map((city) => city.name).join(" · ") || next.title : "下一站待定"}</h2>
           <time>{next ? dates(next.startDate, next.endDate) : ""}</time>
           <a className={styles.nextPhoto} href={nextHref} aria-label={next ? `打开${next.title}` : "新建行程"}>{next && image(next.cover) ? <img src={image(next.cover)!} alt={`${next.title}封面`} /> : <span className={styles.livePhotoEmpty}>{next ? "尚未选择封面" : "新建一条旅行"}</span>}</a>
-          <div className={styles.nextMeta}><span><MapPin size={15} />{next?.cities.length || 0} 城市</span>{next && <><span>{next.days.length || "—"} 天</span><span>{next.members?.length || next.people} 人</span></>}<a href={nextHref} aria-label={next ? `规划${next.title}` : "新建行程"}><ArrowRight size={18} /></a></div>
+          <div className={styles.nextMeta}><span><MapPin size={15} />{next?.cities.length || 0} 城市</span>{next && <><span>{next.startDate && next.endDate ? Math.max(1, Math.round((Date.parse(next.endDate) - Date.parse(next.startDate)) / 86400000) + 1) : "—"} 天</span><span>{next.members?.length || next.people} 人</span></>}<a href={nextHref} aria-label={next ? `规划${next.title}` : "新建行程"}><ArrowRight size={18} /></a></div>
         </article>
         <img className={styles.desktopCamera} src="/assets/homepage-v4/camera-v4.png" alt="" aria-hidden="true" />
       </section>
@@ -90,7 +90,7 @@ export function HomepageV4Live({ dashboard, member, homeHref = "/home-v4" }: { d
       <header className={styles.mobileTopbar}><div className={styles.mobileTools}><span className={styles.menuIcon} aria-hidden="true"><Menu size={20} /></span><span className={styles.mobileDivider} /><a href="/search" aria-label="搜索旅行内容"><Search size={20} /></a></div><MemberIdentityControl compact currentMember={member} /></header>
       <section className={styles.mobileBookContent} aria-label="旅行手帐">
         <span className={styles.mobileNote}>在地图上，<br />遇见更大的自己。</span>
-        <img className={styles.mobileTitle} src={`${assets}/title-mobile.png`} alt="跳进地理书的旅行" width={1448} height={1086} />
+        <img className={styles.mobileTitle} src={`${assets}/title-mobile.webp`} alt="跳进地理书的旅行" width={1448} height={1086} />
         <div className={styles.mobileStats}><span>已点亮城市 <b>{dashboard.stats.cityCount}</b></span><i /><span>已完成旅行 <b>{dashboard.stats.completed}</b></span></div>
         <div className={styles.mobileAtlasFrame}><img className={styles.mobileAtlasImage} src={`${assets}/atlas-mobile.webp`} alt="" aria-hidden="true" />{cityMarkers()}{atlasPhoto("map_primary", true)}</div>
         <img className={styles.mobileStamp} src={`${assets}/sticker-airmail.webp`} alt="" aria-hidden="true" /><img className={styles.mobileCompass} src={`${assets}/sticker-compass.webp`} alt="" aria-hidden="true" />

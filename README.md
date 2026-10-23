@@ -1,100 +1,42 @@
-# vinext-starter
+# 跳进地理书的旅行
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+固定亲友团使用的私密旅行协作网站，运行于 Cloudflare Workers，使用 D1 保存旅行数据、R2 保存媒体，并通过高德地图提供地点和路线能力。
 
-## Prerequisites
+## 本地开发
 
-- Node.js `>=22.13.0`
-
-## Quick Start
+需要 Node.js 22.13+ 与 pnpm。复制 `.dev.vars.example` 为 `.dev.vars`，填写本地开发所需的会话、高德与 R2 配置；不要提交 `.dev.vars`。
 
 ```bash
-npm install
-npm run dev
-npm run build
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
-This starter does not use `wrangler.jsonc`.
+提交前运行 `pnpm lint`、`pnpm typecheck`、`pnpm test` 和 `pnpm build:self-hosted`。
 
-## Included Shape
+## Cloudflare 绑定与环境变量
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
+- `DB`：D1 数据库绑定
+- `MEDIA`：R2 媒体桶绑定
+- `IMAGES`：Cloudflare Images binding
+- `TRIP_SPACE_SESSION_SECRET`：至少 32 字符的会话密钥
+- `TRIP_SPACE_INVITE_CODE`：旧成员首次激活期间使用的共享暗号
+- `AMAP_JS_API_KEY`、`AMAP_JS_SECURITY_CODE`、`AMAP_WEB_SERVICE_KEY`：高德地图配置
+- R2 S3 凭据只用于生成浏览器直传的短期授权，不得进入客户端代码
 
-## Workspace Auth Headers
+## 数据库迁移
 
-Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
+迁移文件按编号保存在 `drizzle/`。先在 Preview 数据库执行并完成迁移与权限测试；正式执行前记录 D1 Time Travel 书签并导出备份。迁移必须保持向前兼容：先加表或字段，再切换读取，最后在后续版本停用旧字段。
 
-The user ID is stable for the same user on the same Site and different across Sites. Email and name are intended for display or contact purposes.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const userId = requestHeaders.get("oai-authenticated-user-id");
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```bash
+pnpm wrangler d1 migrations apply <database> --remote
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+## 预览、发布与回滚
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+Pull Request 必须通过 lint、typecheck、回归测试和生产构建，并在 Cloudflare Preview 检查手机与桌面关键路径。正式分支由 Cloudflare 自动发布。发布后检查首页、旅行书架、规划、地图、费用、相册、留言和上传授权。
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+应用回滚使用 Cloudflare Workers Versions 恢复到上一稳定版本。数据回滚使用发布前记录的 D1 书签；媒体恢复依赖 R2 备份与数据库对象清单。应用版本和数据库恢复必须分开判断，避免旧代码写入不兼容的数据。
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+## 隐私与运维
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Useful Commands
-
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+网站不面向公开注册，`robots.txt` 禁止抓取。私密 HTML、RSC、会话和权限响应使用 `no-store`。日志不得记录密码、共享暗号、照片内容或完整地点搜索词。每周数据库备份保留 90 天，并按月验证一次恢复流程。
