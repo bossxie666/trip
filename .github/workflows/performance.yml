@@ -4,20 +4,25 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   lighthouse:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22.13.0
-          cache: pnpm
       - uses: pnpm/action-setup@v4
         with:
           version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Install the pinned Chromium used by browser tests
+        run: pnpm exec playwright install --with-deps chromium
       - name: Configure local-only test credentials
         run: |
           printf '%s\n' 'TRIP_SPACE_INVITE_CODE=test-invite' 'TRIP_SPACE_SESSION_SECRET=test-session-secret-at-least-32-characters' 'AMAP_JS_API_KEY=test-js-key' 'AMAP_JS_SECURITY_CODE=test-js-code' 'AMAP_WEB_SERVICE_KEY=test-web-key' > .dev.vars
@@ -27,7 +32,9 @@ jobs:
           pnpm exec wrangler d1 execute DB --local --file scripts/e2e-seed.sql
       - run: pnpm build:self-hosted
       - name: Lighthouse production-like routes
-        run: pnpm dlx @lhci/cli@0.15.1 autorun
+        run: |
+          export CHROME_PATH="$(pnpm exec node -p 'require("@playwright/test").chromium.executablePath()')"
+          pnpm dlx @lhci/cli@0.15.1 autorun
       - uses: actions/upload-artifact@v4
         if: always()
         with:

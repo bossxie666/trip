@@ -7,7 +7,7 @@ function todayInShanghai() {
 }
 
 export async function getHomeDashboard(memberId: string) {
-  const featuredPhotosPromise = listHomeFeaturedPhotos();
+  const featuredPhotosPromise = listHomeFeaturedPhotos(memberId);
   const messagesPromise = listGuestbookMessages(3);
   const trips = await listTripSummaries("all", memberId);
   const cityRows = trips.flatMap((trip) => trip.cities.map((city) => ({ ...city, tripStatus: trip.status })));
@@ -23,6 +23,7 @@ export async function getHomeDashboard(memberId: string) {
     trips: trips.slice(0, 4),
     upcoming,
     cities,
+    cityTrips: trips.map((trip) => ({ id: trip.id, title: trip.title, slug: trip.slug, cityIds: trip.cities.map((city) => city.cityId) })),
     featuredPhotos,
     messages,
   };

@@ -1,0 +1,5 @@
+# Backport the image parser fix without changing the framework API.
+packages:
+  - "."
+overrides:
+  "vinext>image-size": "2.0.4"

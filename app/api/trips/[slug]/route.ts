@@ -31,4 +31,3 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ s
     return Response.json({ ok: true });
   } catch (error) { return error instanceof Error && error.message === "TRIP_MEMBER_FORBIDDEN" ? Response.json({ error: "你不是这条行程的成员。" }, { status: 403 }) : Response.json({ error: "删除失败，请重试。" }, { status: 500 }); }
 }
-

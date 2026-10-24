@@ -11,7 +11,11 @@ module.exports = {
       ],
       numberOfRuns: 2,
       puppeteerScript: "./scripts/lighthouse-login.cjs",
+      // Only the ephemeral, credential-free CI browser. Matches Playwright's
+      // existing CI launch behavior on Ubuntu's restricted user namespaces.
+      puppeteerLaunchOptions: { args: ["--no-sandbox"] },
       settings: {
+        chromeFlags: "--no-sandbox",
         throttlingMethod: "simulate",
         formFactor: "mobile",
         screenEmulation: { mobile: true, width: 390, height: 844, deviceScaleFactor: 2, disabled: false },

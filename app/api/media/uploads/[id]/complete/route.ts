@@ -12,6 +12,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return Response.json({ asset: await completeDirectUpload(actor.id, (await params).id, body) });
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
-    return Response.json({ error: code === "MEDIA_NOT_FOUND" ? "没有找到这次上传。" : code === "MEDIA_UPLOAD_INCOMPLETE" ? "图片尚未完整上传，请重试。" : "图片校验失败，请重试。" }, { status: code === "MEDIA_NOT_FOUND" ? 404 : code === "MEDIA_UPLOAD_INCOMPLETE" ? 409 : 500 });
+    const invalid = code === "MEDIA_UPLOAD_INVALID_TYPE" || code === "MEDIA_UPLOAD_TOO_LARGE";
+    return Response.json({ error: code === "MEDIA_NOT_FOUND" ? "没有找到这次上传。" : code === "MEDIA_UPLOAD_INCOMPLETE" ? "图片尚未完整上传，请重试。" : invalid ? "请选择 10MB 以内、格式正确的图片。" : "图片校验失败，请重试。" }, { status: code === "MEDIA_NOT_FOUND" ? 404 : code === "MEDIA_UPLOAD_INCOMPLETE" ? 409 : invalid ? 400 : code === "MEDIA_UPLOAD_NOT_CONFIGURED" ? 503 : 500 });
   }
 }

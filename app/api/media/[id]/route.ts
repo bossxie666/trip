@@ -11,7 +11,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!asset) return Response.json({ error: "图片不存在。" }, { status: 404 });
   const env = getRuntimeEnv();
   if (!env.MEDIA) return Response.json({ error: "图片存储暂时不可用。" }, { status: 503 });
-  const object = await env.MEDIA.get(asset.objectKey);
+  let object;
+  try { object = await env.MEDIA.get(asset.objectKey); }
+  catch { return Response.json({ error: "图片存储暂时无法连接，请重试。" }, { status: 503 }); }
   if (!object?.body) return Response.json({ error: "图片不存在。" }, { status: 404 });
   const requested = new URL(request.url).searchParams.get("variant") || "display";
   const variant = variants[requested as keyof typeof variants] || variants.display;
@@ -24,6 +26,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     headers.set("x-content-type-options", "nosniff");
     return new Response(response.body, { status: response.status, headers });
   } catch {
+    // The transform may already have consumed its stream. Re-read the original
+    // instead of returning a locked body and turning an image failure into 500.
+    try { object = await env.MEDIA.get(asset.objectKey); }
+    catch { return Response.json({ error: "图片暂时无法读取，请重试。" }, { status: 503 }); }
+    if (!object?.body) return Response.json({ error: "图片不存在。" }, { status: 404 });
     const headers = new Headers();
     object.writeHttpMetadata(headers);
     headers.set("cache-control", "private, max-age=3600");

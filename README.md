@@ -4,7 +4,7 @@
 
 ## 本地开发
 
-需要 Node.js 22.13+ 与 pnpm。复制 `.dev.vars.example` 为 `.dev.vars`，填写本地开发所需的会话、高德与 R2 配置；不要提交 `.dev.vars`。
+需要 Node.js 22.16+ 与 pnpm。复制 `.dev.vars.example` 为 `.dev.vars`，填写本地开发所需的会话、高德与 R2 配置；不要提交 `.dev.vars`。
 
 ```bash
 pnpm install --frozen-lockfile

@@ -2,26 +2,29 @@ import { and, eq, isNull, like } from "drizzle-orm";
 import { AwsV4Signer } from "aws4fetch";
 import { getDb, getRuntimeEnv } from "@/db";
 import { albumMediaRecords, albumRecords, homeFeaturedPhotoRecords, mediaAssetRecords, recommendationRecords, recommendationReferenceMediaRecords, recommendationReferenceRecords, tripMemberRecords, tripRecords } from "@/db/schema";
+import { wallPhotoSlots } from "./home-media";
+import { assertImageSignature, maxImageBytes } from "./media-upload-validation";
 
 export const mediaPurposes = ["home_featured", "guestbook", "recommendation_reference", "trip_cover", "album", "member_avatar", "knowledge_image"] as const;
 export type MediaPurpose = (typeof mediaPurposes)[number];
 const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
-const maxImageBytes = 10 * 1024 * 1024;
 
 function safeExtension(filename: string, contentType: string) {
   const mapped: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/heic": "heic", "image/heif": "heif" };
   return mapped[contentType] || filename.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 8) || "bin";
 }
 
-export function validateMediaInput(input: { purpose?: string; filename?: string; contentType?: string; byteSize?: number }) {
+export function validateMediaInput(raw: unknown) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("INVALID_MEDIA_INPUT");
+  const input = raw as Record<string, unknown>;
   if (!mediaPurposes.includes(input.purpose as MediaPurpose)) throw new Error("INVALID_MEDIA_PURPOSE");
-  if (!input.filename?.trim() || input.filename.length > 180) throw new Error("INVALID_MEDIA_FILENAME");
-  if (!input.contentType || !allowedTypes.has(input.contentType)) throw new Error("INVALID_MEDIA_TYPE");
+  if (typeof input.filename !== "string" || !input.filename.trim() || input.filename.length > 180) throw new Error("INVALID_MEDIA_FILENAME");
+  if (typeof input.contentType !== "string" || !allowedTypes.has(input.contentType)) throw new Error("INVALID_MEDIA_TYPE");
   if (!Number.isSafeInteger(input.byteSize) || Number(input.byteSize) <= 0 || Number(input.byteSize) > maxImageBytes) throw new Error("INVALID_MEDIA_SIZE");
   return { purpose: input.purpose as MediaPurpose, filename: input.filename.trim(), contentType: input.contentType, byteSize: Number(input.byteSize) };
 }
 
-export async function createDirectUpload(actorMemberId: string, raw: { purpose?: string; filename?: string; contentType?: string; byteSize?: number }) {
+export async function createDirectUpload(actorMemberId: string, raw: unknown) {
   const input = validateMediaInput(raw);
   const env = getRuntimeEnv();
   if (!env.MEDIA) throw new Error("MEDIA_UPLOAD_NOT_CONFIGURED");
@@ -82,6 +85,8 @@ export async function uploadMediaContent(actorMemberId: string, assetId: string,
   if (!asset) throw new Error("MEDIA_NOT_FOUND");
   if (asset.status !== "pending") throw new Error("MEDIA_UPLOAD_ALREADY_COMPLETE");
   if (contentType !== asset.contentType || bytes.byteLength !== asset.byteSize) throw new Error("MEDIA_UPLOAD_MISMATCH");
+  if (bytes.byteLength > maxImageBytes) throw new Error("MEDIA_UPLOAD_TOO_LARGE");
+  assertImageSignature(asset.contentType, bytes);
   await env.MEDIA.put(asset.objectKey, bytes, { httpMetadata: { contentType: asset.contentType } });
   return { ok: true };
 }
@@ -94,6 +99,12 @@ export async function completeDirectUpload(actorMemberId: string, assetId: strin
   if (asset.status === "ready") return asset;
   const object = await env.MEDIA.head(asset.objectKey);
   if (!object || object.size !== asset.byteSize) throw new Error("MEDIA_UPLOAD_INCOMPLETE");
+  if (object.size > maxImageBytes) throw new Error("MEDIA_UPLOAD_TOO_LARGE");
+  // The presigned R2 path bypasses Worker PUT, so validate it here too. Read
+  // only a prefix and require the same ETag as HEAD to avoid checking another object.
+  const prefix = await env.MEDIA.get(asset.objectKey, { range: { offset: 0, length: Math.min(64, object.size) }, onlyIf: { etagMatches: object.etag } });
+  if (!prefix || !("body" in prefix) || prefix.size !== object.size) throw new Error("MEDIA_UPLOAD_INCOMPLETE");
+  assertImageSignature(asset.contentType, await prefix.arrayBuffer());
   const now = new Date().toISOString();
   const width = dimensions?.width && Number.isSafeInteger(dimensions.width) && dimensions.width > 0 ? dimensions.width : null;
   const height = dimensions?.height && Number.isSafeInteger(dimensions.height) && dimensions.height > 0 ? dimensions.height : null;
@@ -116,14 +127,11 @@ export async function getAuthorizedReadyMediaAsset(assetId: string, memberId: st
   if (asset.purpose === "home_featured" || asset.purpose === "guestbook" || asset.purpose === "member_avatar" || asset.purpose === "knowledge_image") return asset;
   const db = getDb();
   if (asset.purpose === "album") {
-    const album = (await db.select({ tripId: albumRecords.tripId }).from(albumMediaRecords)
+    const albums = await db.select({ tripId: albumRecords.tripId, memberId: tripMemberRecords.memberId }).from(albumMediaRecords)
       .innerJoin(albumRecords, eq(albumRecords.id, albumMediaRecords.albumId))
-      .where(and(eq(albumMediaRecords.mediaAssetId, assetId), isNull(albumRecords.deletedAt))).limit(1))[0];
-    if (!album) return null;
-    if (!album.tripId) return asset;
-    const member = (await db.select({ memberId: tripMemberRecords.memberId }).from(tripMemberRecords)
-      .where(and(eq(tripMemberRecords.tripId, album.tripId), eq(tripMemberRecords.memberId, memberId))).limit(1))[0];
-    return member ? asset : null;
+      .leftJoin(tripMemberRecords, and(eq(tripMemberRecords.tripId, albumRecords.tripId), eq(tripMemberRecords.memberId, memberId)))
+      .where(and(eq(albumMediaRecords.mediaAssetId, assetId), isNull(albumRecords.deletedAt)));
+    return albums.some((album) => !album.tripId || album.memberId) ? asset : null;
   }
   if (asset.purpose === "recommendation_reference") {
     const member = (await db.select({ memberId: tripMemberRecords.memberId }).from(recommendationReferenceMediaRecords)
@@ -148,8 +156,7 @@ export async function getAuthorizedReadyMediaAsset(assetId: string, memberId: st
 }
 
 export async function setHomeFeaturedPhoto(actorMemberId: string, slotKey: "map_primary" | "map_secondary", assetId: string) {
-  const asset = await getReadyMediaAsset(assetId);
-  if (!asset || asset.purpose !== "home_featured" || asset.uploaderMemberId !== actorMemberId) throw new Error("INVALID_HOME_MEDIA");
+  await requireHomeLibraryPhoto(actorMemberId, assetId);
   const now = new Date().toISOString();
   await getDb().insert(homeFeaturedPhotoRecords).values({ slotKey, mediaAssetId: assetId, updatedByMemberId: actorMemberId, updatedAt: now }).onConflictDoUpdate({
     target: homeFeaturedPhotoRecords.slotKey,
@@ -158,9 +165,36 @@ export async function setHomeFeaturedPhoto(actorMemberId: string, slotKey: "map_
   return { slotKey, assetId };
 }
 
-export async function listHomeFeaturedPhotos() {
-  return getDb().select({ slotKey: homeFeaturedPhotoRecords.slotKey, assetId: mediaAssetRecords.id, width: mediaAssetRecords.width, height: mediaAssetRecords.height })
+async function requireHomeLibraryPhoto(memberId: string, assetId: string) {
+  const asset = await getAuthorizedReadyMediaAsset(assetId, memberId);
+  if (!asset || !["album", "trip_cover", "home_featured"].includes(asset.purpose)) throw new Error("INVALID_HOME_MEDIA");
+  return asset;
+}
+
+export async function setHomeWallPhotos(actorMemberId: string, assetIds: string[]) {
+  if (assetIds.length > wallPhotoSlots.length || new Set(assetIds).size !== assetIds.length || assetIds.some((id) => typeof id !== "string" || !id)) throw new Error("INVALID_HOME_MEDIA");
+  await Promise.all(assetIds.map((id) => requireHomeLibraryPhoto(actorMemberId, id)));
+  const env = getRuntimeEnv();
+  const now = new Date().toISOString();
+  // Replace only the wall relation, atomically; Atlas slots and R2 objects are untouched.
+  await env.DB.batch([
+    env.DB.prepare(`DELETE FROM home_featured_photos WHERE slot_key IN (${wallPhotoSlots.map(() => "?").join(",")})`).bind(...wallPhotoSlots),
+    ...assetIds.map((assetId, index) => env.DB.prepare("INSERT INTO home_featured_photos (slot_key, media_asset_id, updated_by_member_id, updated_at) VALUES (?, ?, ?, ?)").bind(wallPhotoSlots[index], assetId, actorMemberId, now)),
+  ]);
+  return { assetIds };
+}
+
+export async function clearHomeAtlasPhoto(memberId: string, slotKey: "map_primary" | "map_secondary") {
+  const row = (await getDb().select().from(homeFeaturedPhotoRecords).where(eq(homeFeaturedPhotoRecords.slotKey, slotKey)).limit(1))[0];
+  if (row && !await getAuthorizedReadyMediaAsset(row.mediaAssetId, memberId)) throw new Error("INVALID_HOME_MEDIA");
+  await getDb().delete(homeFeaturedPhotoRecords).where(eq(homeFeaturedPhotoRecords.slotKey, slotKey));
+}
+
+export async function listHomeFeaturedPhotos(memberId: string) {
+  const rows = await getDb().select({ slotKey: homeFeaturedPhotoRecords.slotKey, assetId: mediaAssetRecords.id, width: mediaAssetRecords.width, height: mediaAssetRecords.height })
     .from(homeFeaturedPhotoRecords)
     .innerJoin(mediaAssetRecords, eq(homeFeaturedPhotoRecords.mediaAssetId, mediaAssetRecords.id))
     .where(eq(mediaAssetRecords.status, "ready"));
+  const visible = await Promise.all(rows.map(async (row) => await getAuthorizedReadyMediaAsset(row.assetId, memberId) ? row : null));
+  return visible.filter((row): row is typeof rows[number] => row !== null).sort((a, b) => a.slotKey.localeCompare(b.slotKey));
 }

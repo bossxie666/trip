@@ -73,5 +73,7 @@ export async function verifySessionMemberId(token: string | undefined, secret: s
 
 export function readCookie(request: Request, name: string) {
   const match = request.headers.get("cookie")?.split(";").map((item) => item.trim()).find((item) => item.startsWith(`${name}=`));
-  return match ? decodeURIComponent(match.slice(name.length + 1)) : undefined;
+  if (!match) return undefined;
+  try { return decodeURIComponent(match.slice(name.length + 1)); }
+  catch { return undefined; }
 }

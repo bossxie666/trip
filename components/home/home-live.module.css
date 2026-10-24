@@ -1,0 +1,50 @@
+.mapTrigger { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #176bb1; border-radius: 5px; background: #fff9e9; color: #0a3d78; padding: 7px 10px; cursor: pointer; font-size: 12px; }
+.cityMapRoot { position: relative; width: 100%; height: 100%; min-height: 260px; overflow: hidden; background: #eee9da; }
+.compactMap { min-height: 0; background: transparent; }
+.compactMap[data-map-state='error'] .mapCanvas { visibility: hidden; }
+.expandMap { position: absolute; right: 8px; bottom: 30px; z-index: 3; min-height: 32px; box-shadow: 0 2px 8px #193b5622; }
+.cityLabel { font-size: 13px; font-weight: 700; color: #0a3d78; white-space: nowrap; }
+.compactMap .mapStatus { top: 50%; left: 50%; transform: translate(-50%, -50%); max-width: 48%; padding: 8px; font-size: 12px; }
+.compactMap .mapCanvas { min-height: 0; }
+.dialog { position: fixed; inset: 0; width: min(1100px, 94vw); max-width: 94vw; height: min(730px, 92dvh); max-height: 92dvh; margin: auto; padding: 0; border: 1px solid #d7c4a1; border-radius: 10px; background: #fffaf0; color: #103c66; box-shadow: 0 20px 80px #15253655; overscroll-behavior: contain; }
+.dialog[open] { display: block; }
+:global(body):has(.dialog[open]) { overflow: hidden; }
+.dialog::backdrop { background: #15253688; }
+.dialogHeader { display: flex; align-items: center; justify-content: space-between; height: 60px; padding: 10px 18px; border-bottom: 1px solid #d9cfba; }
+.dialogHeader h2 { margin: 0; padding: 0; border: 0; font-size: 19px; }
+.dialogHeader button { display: grid; place-items: center; min-width: 40px; min-height: 40px; border: 0; background: transparent; color: inherit; cursor: pointer; }
+.mapLayout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; height: calc(100% - 60px); }
+.mapArea { position: relative; min-height: 260px; }
+.mapCanvas { width: 100%; height: 100%; min-height: 260px; }
+.mapStatus { position: absolute; top: 25px; left: 5%; max-width: 90%; padding: 16px; border-radius: 6px; background: #fffdf4; box-shadow: 0 4px 18px #15334c26; font-size: 14px; }
+.mapStatus a { display: block; margin-top: 10px; text-decoration: underline; }
+.mapStatus button { padding: 8px 12px; border: 1px solid #176bb1; border-radius: 5px; color: #103c66; background: #fff; cursor: pointer; }
+.mapSidebar { overflow: auto; padding: 15px; background: #fffaf0; }
+.mapSidebar h3 { margin: 20px 0 10px; font-size: 16px; }
+.cityFilters { display: flex; flex-wrap: wrap; gap: 6px; }
+.cityFilters button { padding: 6px 9px; border: 1px solid #cfbfa0; border-radius: 4px; color: #143e65; background: #fff; font-size: 12px; cursor: pointer; }
+.cityFilters button[aria-pressed='true'] { background: #176bb1; border-color: #176bb1; color: white; }
+.tripLink { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 4px; border-bottom: 1px solid #ded2b8; color: inherit; text-decoration: none; }
+.photoTrigger { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #a69575; border-radius: 4px; background: #fff9ed; padding: 5px 8px; color: #143e65; font-size: 11px; cursor: pointer; }
+.wallTrigger { display: grid; place-items: center; width: 100%; height: 100%; min-height: 100px; padding: 0; border: 0; background: transparent; color: #0785ff; cursor: pointer; }
+.photoBody { height: calc(100% - 60px); overflow: auto; padding: 18px; }
+.photoBody select { max-width: 100%; padding: 8px; border: 1px solid #b2bdc7; border-radius: 4px; background: white; color: #143e65; }
+.photoGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(125px, 1fr)); gap: 10px; margin: 15px 0; }
+.photoGrid button { position: relative; aspect-ratio: 1.2; padding: 0; overflow: hidden; border: 3px solid transparent; border-radius: 5px; background: #f2ead9; cursor: pointer; }
+.photoGrid button[aria-pressed='true'] { border-color: #1687ed; }
+.photoGrid img { width: 100%; height: 100%; object-fit: cover; }
+.photoLoadError { display: grid; align-content: center; height: 100%; padding: 12px; color: #745448; font-size: 12px; font-style: normal; line-height: 1.6; }
+.photoGrid button span { position: absolute; right: 6px; bottom: 6px; padding: 2px 6px; border-radius: 20px; color: white; background: #1463ae; }
+.photoFooter { position: sticky; bottom: -18px; display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 12px 0; background: #fffaf0; }
+.photoFooter button { padding: 9px 18px; border: 1px solid #176bb1; border-radius: 4px; color: white; background: #176bb1; cursor: pointer; }
+.photoFooter button:disabled { opacity: .5; cursor: default; }
+.error { color: #a03421; font-size: 14px; }
+@media(max-width:680px) {
+  .dialog { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; }
+  .mapLayout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(260px, 58%) minmax(0, 1fr); }
+  .mapSidebar { border-top: 1px solid #ded2b8; }
+  .mapTrigger { font-size: 10px; padding: 6px; }
+  .compactMap .mapStatus { top: auto; bottom: 76px; left: auto; right: 8px; max-width: 42%; transform: none; }
+  .compactMap .mapStatus button { min-height: 44px; }
+  .photoTrigger { font-size: 10px; padding: 5px; }
+}

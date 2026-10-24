@@ -37,6 +37,8 @@ const publicAssetFiles = new Set(["/favicon.svg", "/file.svg", "/globe.svg", "/w
 function isPublicPath(pathname: string) {
   return pathname === "/unlock"
     || pathname === "/api/session"
+    // The data-free laboratory is restricted to loopback below.
+    || pathname === "/visual-lab/home-v4"
     || publicAssetFiles.has(pathname)
     || publicAssetPrefixes.some((prefix) => pathname.startsWith(prefix));
 }
@@ -71,6 +73,19 @@ const worker = {
       return secured;
     };
 
+    if (url.pathname.startsWith("/api/") && !["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+      const origin = request.headers.get("origin");
+      if (origin) {
+        try {
+          if (new URL(origin).origin !== url.origin) return finish(Response.json({ error: "请求来源无效。" }, { status: 403 }), "origin");
+        } catch {
+          return finish(Response.json({ error: "请求来源无效。" }, { status: 403 }), "origin");
+        }
+      }
+    }
+    if ((url.pathname === "/visual-lab" || url.pathname.startsWith("/visual-lab/"))
+      && !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) return finish(new Response("Not found", { status: 404 }));
+
     try {
       if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
@@ -88,6 +103,7 @@ const worker = {
         const memberId = await verifySessionMemberId(readCookie(request, sessionCookieName), env.TRIP_SPACE_SESSION_SECRET, env.DB);
         const member = memberId ? await env.DB.prepare("SELECT active FROM members WHERE id = ? LIMIT 1").bind(memberId).first<{ active: number }>() : null;
         if (!member?.active) {
+          if (url.pathname.startsWith("/api/")) return finish(Response.json({ code: "UNAUTHORIZED", error: "登录已过期，请重新登录。" }, { status: 401, headers: { "cache-control": "no-store" } }), "authentication");
           const unlock = new URL("/unlock", request.url);
           unlock.searchParams.set("returnTo", safeInternalReturnTo(`${url.pathname}${url.search}`));
           return finish(Response.redirect(unlock, 302), "authentication");

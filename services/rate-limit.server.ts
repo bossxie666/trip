@@ -23,7 +23,7 @@ export function requestClientIdentifier(request: Request) {
 
 /**
  * Atomically consume one counter slot in D1.  The counter stops at the limit
- * so repeated blocked requests cannot grow the row indefinitely.  A missing
+ * at the first denied request so blocked requests cannot grow indefinitely. A missing
  * table is intentionally an error: authentication/quota protection must not
  * silently fail open after a deployment that forgot its migration.
  */
@@ -48,7 +48,7 @@ export async function consumeRateLimit(namespace: string, identifier: string, li
         ELSE rate_limits.count
       END
     RETURNING count, window_started_at
-  `).bind(key, now, cutoff, cutoff, limit).first<{ count: number; window_started_at: number }>();
+  `).bind(key, now, cutoff, cutoff, limit + 1).first<{ count: number; window_started_at: number }>();
   if (!row) throw new Error("RATE_LIMIT_COUNTER_FAILED");
   const retryAfterSeconds = Math.max(1, Math.ceil((Number(row.window_started_at) + windowMs - now) / 1000));
   const count = Number(row.count);

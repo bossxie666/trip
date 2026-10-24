@@ -1,0 +1,1281 @@
+.canvas {
+  --ink: #0a3d78;
+  --blue: #1687ed;
+  --warm-paper: #fffaf0;
+  --v4-title-x: 6%;
+  --v4-title-y: 52px;
+  --v4-title-w: 24.3%;
+  --v4-title-h: 350px;
+  --v4-photo-x: -1%;
+  --v4-photo-y: 162px;
+  --v4-photo-w: 165px;
+  --v4-photo-h: 178px;
+  --v4-stats-x: 4%;
+  --v4-stats-y: 230px;
+  --v4-decor-x: -1%;
+  --v4-decor-y: 2.5%;
+  --v4-decor-scale: 1;
+  --v4-atlas-x: 30.8%;
+  --v4-atlas-y: 64px;
+  --v4-atlas-w: 38.6%;
+  --v4-atlas-h: 350px;
+  --v4-next-x: 71.1%;
+  --v4-next-y: 9.1%;
+  --v4-next-w: 26.2%;
+  --v4-next-h: 43.5%;
+  position: relative;
+  width: 100vw;
+  max-width: none;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  color: var(--ink);
+  background: #d7b785;
+  font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+.desktopComposition {
+  position: relative;
+  width: 100%;
+  height: 810px;
+  min-height: 810px;
+  overflow: hidden;
+  isolation: isolate;
+  background: url('/assets/homepage-v3/desktop-shell.webp') center / 100% 100% no-repeat;
+}
+
+.desktopShell {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  right: 0;
+  left: 0;
+  width: 100%;
+  height: 510px;
+  object-fit: fill;
+  object-position: center;
+  clip-path: inset(0 0 88px 0);
+}
+
+.desktopHeader {
+  position: absolute;
+  z-index: 7;
+  top: 0;
+  left: 0;
+  display: flex;
+  width: 100%;
+  height: 60px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 6.2%;
+  background: rgba(255, 253, 248, 0.95);
+  border-bottom: 1px solid rgba(28, 67, 105, 0.1);
+  box-shadow: 0 2px 9px rgba(77, 48, 24, 0.08);
+}
+
+.desktopBrand {
+  display: flex;
+  min-width: 244px;
+  align-items: baseline;
+  gap: 14px;
+  color: var(--ink);
+}
+
+.desktopBrand > span {
+  font-family: "Trebuchet MS", "Avenir Next", sans-serif;
+  font-size: 25px;
+  font-style: italic;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+}
+
+.desktopBrand small {
+  font-family: "KaiTi", "STKaiti", cursive;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.desktopNav {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  gap: clamp(19px, 2.15vw, 33px);
+}
+
+.desktopNav > span {
+  position: relative;
+  display: inline-flex;
+  height: 100%;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.desktopNav > span svg {
+  stroke-width: 2.3;
+}
+
+.desktopNav .navActive {
+  color: var(--blue);
+}
+
+.desktopNav .navActive::after {
+  position: absolute;
+  right: 0;
+  bottom: 8px;
+  left: 0;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--blue);
+  content: "";
+}
+
+.desktopAccount {
+  display: flex;
+  min-width: 354px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 11px;
+  color: var(--ink);
+}
+
+.searchPill {
+  display: inline-flex;
+  width: 222px;
+  height: 38px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  overflow: hidden;
+  border: 1px solid rgba(35, 71, 102, 0.2);
+  border-radius: 20px;
+  color: #8b9caf;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.avatar,
+.mobileAvatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #d9e6ef;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.desktopAccount strong {
+  font-size: 12px;
+}
+
+.chevron {
+  color: #d7664f;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.desktopHero {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+}
+
+.desktopManifesto {
+  position: absolute;
+  z-index: 3;
+  top: var(--v4-title-y);
+  left: var(--v4-title-x);
+  width: var(--v4-title-w);
+  height: var(--v4-title-h);
+}
+
+.titleTape {
+  display: none;
+  position: absolute;
+  z-index: 2;
+  top: -1%;
+  right: 4%;
+  width: 78px;
+  height: 36px;
+  object-fit: cover;
+  opacity: 0.45;
+  transform: rotate(4deg);
+}
+
+.desktopTitle {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 0;
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.desktopStats {
+  position: absolute;
+  z-index: 3;
+  top: var(--v4-stats-y);
+  left: var(--v4-stats-x);
+  display: flex;
+  align-items: center;
+  gap: 21px;
+  color: var(--ink);
+  font-family: "KaiTi", "STKaiti", cursive;
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.desktopStats span + span {
+  padding-left: 20px;
+  border-left: 1px solid rgba(10, 61, 120, 0.44);
+}
+
+.desktopStats b {
+  padding-left: 5px;
+  font-family: "Trebuchet MS", sans-serif;
+  font-size: 22px;
+}
+
+.desktopActions {
+  position: absolute;
+  z-index: 3;
+  top: 268px;
+  left: 3%;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.primaryAction,
+.secondaryAction {
+  display: inline-flex;
+  height: 39px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 15px;
+  border: 1px solid var(--blue);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.primaryAction {
+  background: #1887eb;
+  color: #fff;
+  box-shadow: 0 4px 9px rgba(24, 135, 235, 0.23);
+}
+
+.primaryAction > span {
+  font-size: 17px;
+}
+
+.secondaryAction {
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--blue);
+}
+
+.manifestoCaption {
+  display: none;
+  position: absolute;
+  top: 94%;
+  left: 4%;
+  margin: 0;
+  color: #73879b;
+  font-family: "KaiTi", "STKaiti", cursive;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
+.desktopAtlas {
+  position: absolute;
+  z-index: 3;
+  top: var(--v4-atlas-y);
+  left: var(--v4-atlas-x);
+  width: var(--v4-atlas-w);
+  height: var(--v4-atlas-h);
+  overflow: visible;
+}
+
+.atlasNote {
+  position: absolute;
+  z-index: 7;
+  top: 4%;
+  left: 8%;
+  color: var(--ink);
+  font-family: "KaiTi", "STKaiti", cursive;
+  font-size: clamp(11px, 1.15vw, 16px);
+  line-height: 1.45;
+  transform: rotate(-4deg);
+}
+
+.atlasRoute,
+.mobileRoute {
+  position: absolute;
+  z-index: 6;
+  overflow: visible;
+  fill: none;
+  pointer-events: none;
+}
+
+.atlasRoute {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.atlasRoute path,
+.mobileRoute path {
+  stroke: #0a4e8e;
+  stroke-dasharray: 2 2;
+  stroke-linecap: round;
+  stroke-width: 0.5;
+}
+
+.marker {
+  position: absolute;
+  z-index: 8;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink);
+  font-family: "KaiTi", "STKaiti", cursive;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.marker i {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #1687ed;
+  box-shadow: 0 1px 3px rgba(6, 58, 114, 0.3);
+}
+
+.markerShenzhen {
+  top: 72%;
+  left: 44%;
+}
+
+.markerHangzhou {
+  top: 52%;
+  left: 57%;
+}
+
+.markerShanghai {
+  top: 42%;
+  left: 59%;
+}
+
+.atlasTape {
+  position: absolute;
+  z-index: 9;
+  top: -1%;
+  right: 11%;
+  width: 102px;
+  height: 33px;
+  object-fit: cover;
+  opacity: 0.36;
+  transform: rotate(-4deg);
+}
+
+.desktopPolaroid {
+  position: absolute;
+  z-index: 10;
+  top: var(--v4-photo-y);
+  left: var(--v4-photo-x);
+  width: var(--v4-photo-w);
+  height: var(--v4-photo-h);
+  transform: rotate(-9deg);
+}
+
+.polaroidFrame,
+.polaroidPhoto {
+  position: absolute;
+  display: block;
+}
+
+.polaroidFrame {
+  z-index: 2;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.polaroidPhoto {
+  z-index: 1;
+  top: 15%;
+  left: 13%;
+  width: 74%;
+  height: 59%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.desktopPolaroid > span {
+  position: absolute;
+  z-index: 3;
+  bottom: 4%;
+  left: 17%;
+  color: var(--ink);
+  font-family: "KaiTi", "STKaiti", cursive;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.desktopPolaroidSecondary {
+  position: absolute;
+  z-index: 10;
+  top: -9px;
+  right: 1%;
+  width: 159px;
+  height: 165px;
+  transform: rotate(8deg);
+}
+.desktopPolaroidSecondary > span {
+  position: absolute;
+  z-index: 3;
+  bottom: 8%;
+  left: 30%;
+  font: 13px "KaiTi", "STKaiti", cursive;
+}
+
+.atlasCompass {
+  display: none; /* The supplied book shell already contains this compass. */
+  position: absolute;
+  z-index: 8;
+  right: 4%;
+  bottom: 4%;
+  width: 69px;
+  height: 59px;
+  object-fit: cover;
+  object-position: left top;
+  opacity: 0.76;
+}
+
+.desktopNextTrip {
+  position: absolute;
+  z-index: 3;
+  top: var(--v4-next-y);
+  left: var(--v4-next-x);
+  width: var(--v4-next-w);
+  height: var(--v4-next-h);
+  padding: 0;
+  overflow: hidden;
+}
+
+.nextSticker {
+  position: absolute;
+  z-index: 1;
+  top: 1.5%;
+  left: 2%;
+  width: 188px;
+  height: auto;
+  object-fit: contain;
+  transform: rotate(-1deg);
+}
+
+.desktopNextTrip h2 {
+  position: absolute;
+  z-index: 2;
+  margin: 0;
+  top: 61px;
+  left: 3%;
+  color: var(--ink);
+  font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  text-decoration: none;
+}
+
+.desktopNextTrip time {
+  position: absolute;
+  top: 105px;
+  left: 3%;
+  z-index: 2;
+  color: var(--ink);
+  font-family: "Trebuchet MS", sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.nextPhoto {
+  position: absolute;
+  top: 134px;
+  left: 3%;
+  z-index: 2;
+  width: 88%;
+  height: 162px;
+  margin-top: 0;
+  padding: 7px 7px 19px;
+  background: #fffdf3;
+  overflow: hidden;
+  border: 1px solid rgba(10, 61, 120, 0.2);
+  box-shadow: 0 4px 10px rgba(68, 44, 25, 0.11);
+  transform: rotate(-1deg);
+}
+
+.nextPhoto img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.nextMeta {
+  position: absolute;
+  top: 301px;
+  left: 3%;
+  width: 88%;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: clamp(10px, 1.4vw, 22px);
+  margin-top: 0;
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.nextMeta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.nextMeta i {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  margin-left: auto;
+  place-items: center;
+  border: 1.5px solid var(--ink);
+  border-radius: 50%;
+  font-style: normal;
+}
+
+.nextStamp {
+  display: none; /* Keep the single postal stamp printed in the shell. */
+  position: absolute;
+  z-index: 4;
+  top: 9%;
+  right: -6%;
+  width: 98px;
+  height: auto;
+  opacity: 0.74;
+  transform: rotate(-9deg);
+}
+
+.desktopCamera {
+  position: absolute;
+  z-index: 6;
+  top: var(--v4-decor-y);
+  right: var(--v4-decor-x);
+  width: 115px;
+  height: auto;
+  transform: rotate(7deg) scale(var(--v4-decor-scale));
+}
+
+.desktopLower {
+  position: absolute;
+  z-index: 4;
+  top: 422px;
+  left: 0;
+  width: 100%;
+  height: 388px;
+  color: var(--ink);
+  background: transparent;
+}
+
+.galleryHeading,
+.guestbookHeading {
+  position: absolute;
+  top: 4%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.galleryHeading {
+  top: 11px;
+  left: 3.1%;
+  width: 92%;
+}
+
+.guestbookHeading {
+  top: 197px;
+  right: 3.4%;
+  width: 34%;
+}
+
+.sectionIcon {
+  display: grid;
+  width: 31px;
+  height: 31px;
+  place-items: center;
+  color: var(--ink);
+}
+
+.galleryHeading h2,
+.guestbookHeading h2 {
+  margin: 0;
+  font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 21px;
+  font-weight: 700;
+  border: 0;
+  padding: 0;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.galleryHeading p,
+.guestbookHeading p {
+  margin: 2px 0 0;
+  color: #8797a6;
+  font-family: "KaiTi", "STKaiti", cursive;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.sectionLink {
+  margin-left: auto;
+  color: var(--blue);
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.galleryRail {
+  position: absolute;
+  top: 45px;
+  left: 3%;
+  display: flex;
+  width: 92%;
+  height: 141px;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.galleryCard {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+  color: var(--ink);
+}
+
+.galleryTilt0 { transform: rotate(-3deg) translateY(4px); }
+.galleryTilt1 { transform: rotate(2deg) translateY(-3px); }
+.galleryTilt2 { transform: rotate(-1deg) translateY(3px); }
+.galleryTilt3 { transform: rotate(3deg) translateY(-5px); }
+
+.galleryFrame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.galleryFrame > img {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+
+.galleryPhoto {
+  position: absolute;
+  z-index: 1;
+  top: 10%;
+  left: 11%;
+  width: 78%;
+  height: 59%;
+  overflow: hidden;
+  background-size: cover;
+  background-repeat: no-repeat;
+  filter: saturate(0.9) contrast(0.95);
+}
+
+.galleryCard figcaption {
+  position: absolute;
+  z-index: 3;
+  bottom: 8%;
+  width: 100%;
+  margin-top: -1%;
+  text-align: center;
+  font-family: "KaiTi", "STKaiti", cursive;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.guestbookNotes {
+  position: absolute;
+  top: 233px;
+  right: 3.3%;
+  display: flex;
+  width: 34%;
+  height: 145px;
+  align-items: flex-start;
+  gap: 2.5%;
+}
+
+.noteCard {
+  position: relative;
+  width: 31.5%;
+  height: 100%;
+  padding: 20px 12px;
+  background: url('/assets/homepage-v3/paper-note-01.webp') center / 100% 100% no-repeat;
+  box-shadow: 0 5px 10px rgba(82, 57, 30, 0.14);
+}
+
+.noteTilt0 { transform: rotate(-3deg); }
+.noteTilt1 { transform: rotate(2deg) translateY(4px); }
+.noteTilt2 { transform: rotate(-1deg) translateY(-2px); }
+
+.noteDot {
+  position: absolute;
+  top: -6px;
+  left: 47%;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #e4ae50;
+  box-shadow: 0 2px 3px rgba(82, 57, 30, 0.22);
+}
+
+.noteLine,
+.noteLineShort {
+  display: block;
+  height: 1px;
+  margin: 18px 0 0;
+  background: rgba(17, 63, 112, 0.35);
+  transform: rotate(-3deg);
+}
+
+.noteLineShort {
+  width: 65%;
+}
+
+.myTripsPreview {
+  position: absolute;
+  top: 197px;
+  left: 3.3%;
+  width: 56%;
+  height: 181px;
+}
+
+.myTripsHeading {
+  display: flex;
+  height: 31px;
+  align-items: center;
+  gap: 8px;
+}
+
+.myTripsHeading h2 {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: var(--ink);
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.myTripsCards {
+  position: absolute;
+  top: 36px;
+  left: 0;
+  display: flex;
+  width: 100%;
+  height: 142px;
+  gap: 7px;
+}
+
+.myTripCard {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #fffdf6;
+  box-shadow: 0 2px 4px #62431f26;
+}
+
+.myTripCard > img {
+  display: block;
+  width: 100%;
+  height: 86px;
+  object-fit: cover;
+}
+
+.myTripCard > strong {
+  display: block;
+  margin: 8px 35px 0 9px;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.tripMetadataPlaceholder {
+  display: block;
+  width: 65%;
+  height: 4px;
+  margin: 8px 0 0 9px;
+  border-radius: 2px;
+  background: #90a0af42;
+}
+
+.tripCardArrow {
+  position: absolute;
+  right: 8px;
+  bottom: 17px;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid var(--blue);
+  border-radius: 50%;
+  color: var(--blue);
+}
+
+.mobileComposition {
+  display: none;
+}
+
+@media (max-width: 680px) {
+  .canvas {
+    --v4-title-x: 10.7%;
+    --v4-title-y: 79px;
+    --v4-title-w: 64%;
+    --v4-title-h: auto;
+    --v4-atlas-x: 5.3%;
+    --v4-atlas-y: 230px;
+    --v4-atlas-w: 91%;
+    --v4-atlas-h: 325px;
+    --v4-photo-x: 0;
+    --v4-photo-y: 73px;
+    --v4-photo-w: 145px;
+    --v4-photo-h: 163px;
+    --v4-stats-x: 13.3%;
+    --v4-stats-y: 251px;
+    --v4-decor-x: 3%;
+    --v4-decor-y: 185px;
+    width: 100vw;
+    height: 100svh;
+    min-height: 0;
+    overflow: hidden;
+    position: fixed;
+    inset: 0;
+  }
+
+  .desktopComposition {
+    display: none;
+  }
+
+  .mobileComposition {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 100svh;
+    min-height: 600px;
+    overflow: hidden;
+    isolation: isolate;
+    background: url('/assets/homepage-v3/mobile-shell.webp') center 30px / 100% 1050px no-repeat;
+  }
+
+  .mobileShell {
+    position: absolute;
+    z-index: 0;
+    top: 55px;
+    left: 0;
+    width: 100%;
+    height: 527px;
+    object-fit: fill;
+    object-position: top center;
+    clip-path: inset(37px 0 0 0);
+  }
+
+  .mobileTopbar {
+    position: absolute;
+    z-index: 10;
+    top: 0;
+    left: 0;
+    display: flex;
+    width: 100%;
+    height: 30px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 14px 0 13px;
+    background: rgba(255, 253, 249, 0.97);
+    box-shadow: 0 2px 7px rgba(81, 55, 34, 0.1);
+  }
+
+  .mobileTools {
+    display: flex;
+    height: 100%;
+    align-items: center;
+    gap: 10px;
+    color: var(--ink);
+  }
+
+  .menuIcon {
+    display: grid;
+    place-items: center;
+  }
+
+  .mobileDivider {
+    display: block;
+    width: 1px;
+    height: 23px;
+    background: rgba(10, 61, 120, 0.28);
+  }
+
+  .mobileIdentity {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--ink);
+  }
+
+  .mobileIdentity strong {
+    font-size: 12px;
+    letter-spacing: 0.02em;
+  }
+
+  .mobileAvatar {
+    width: 25px;
+    height: 25px;
+    font-size: 11px;
+  }
+
+  .mobileDown {
+    margin-left: 2px;
+    color: #dc6b51;
+    font-size: 17px;
+    font-weight: 800;
+    line-height: 1;
+    transform: translateY(-2px);
+  }
+
+  .mobileBookContent {
+    position: absolute;
+    z-index: 2;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .mobileTools svg {
+    width: 19px;
+    height: 19px;
+  }
+
+  .mobileTitle {
+    position: absolute;
+    z-index: 3;
+    top: var(--v4-title-y);
+    left: var(--v4-title-x);
+    width: var(--v4-title-w);
+    height: var(--v4-title-h);
+    object-fit: contain;
+  }
+
+  .mobileStats {
+    position: absolute;
+    z-index: 5;
+    top: var(--v4-stats-y);
+    left: var(--v4-stats-x);
+    display: flex;
+    width: 49%;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--ink);
+    font-family: "KaiTi", "STKaiti", cursive;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .mobileStats b {
+    padding-left: 3px;
+    font-family: "Trebuchet MS", sans-serif;
+    font-size: 17px;
+  }
+
+  .mobileStats i {
+    display: block;
+    width: 1px;
+    height: 18px;
+    background: rgba(10, 61, 120, 0.45);
+  }
+
+  .mobileAtlasFrame {
+    position: absolute;
+    z-index: 2;
+    top: var(--v4-atlas-y);
+    left: var(--v4-atlas-x);
+    width: var(--v4-atlas-w);
+    height: var(--v4-atlas-h);
+    overflow: visible;
+  }
+
+  .mobileAtlasImage {
+    position: absolute;
+    inset: -70px 0 auto;
+    width: 100%;
+    height: 430px;
+    object-fit: cover;
+    object-position: center 46%;
+    mask-image: radial-gradient(ellipse 67% 52% at 51% 54%, black 38%, transparent 76%);
+  }
+
+  .mobileRoute {
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .mobileAtlasFrame .marker {
+    font-size: 12px;
+  }
+
+  .mobileMarkerShenzhen {
+    top: 65%;
+    left: 49%;
+  }
+
+  .mobileMarkerHangzhou {
+    top: 42%;
+    left: 74%;
+  }
+
+  .mobileMarkerShanghai {
+    top: 29%;
+    left: 78%;
+  }
+
+  .mobilePolaroid {
+    position: absolute;
+    z-index: 8;
+    top: var(--v4-photo-y);
+    left: var(--v4-photo-x);
+    width: var(--v4-photo-w);
+    height: var(--v4-photo-h);
+    transform: rotate(-8deg);
+  }
+
+  .mobilePolaroidFrame,
+  .mobilePolaroidPhoto {
+    position: absolute;
+    display: block;
+  }
+
+  .mobilePolaroidFrame {
+    z-index: 2;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  .mobilePolaroidPhoto {
+    z-index: 1;
+    top: 15%;
+    left: 13%;
+    width: 74%;
+    height: 58%;
+    object-fit: cover;
+  }
+
+  .mobilePolaroid > span {
+    position: absolute;
+    z-index: 3;
+    bottom: 5%;
+    left: 21%;
+    color: var(--ink);
+    font-family: "KaiTi", "STKaiti", cursive;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .mobileStamp {
+    position: absolute;
+    z-index: 6;
+    top: var(--v4-decor-y);
+    right: var(--v4-decor-x);
+    width: 91px;
+    opacity: 0.58;
+    transform: rotate(-8deg) scale(var(--v4-decor-scale));
+  }
+
+  .mobileCompass {
+    position: absolute;
+    z-index: 6;
+    right: 7%;
+    top: 489px;
+    width: 60px;
+    opacity: 0.68;
+  }
+
+  .mobileCaption {
+    position: absolute;
+    z-index: 5;
+    top: 481px;
+    left: 11%;
+    margin: 0;
+    color: var(--ink);
+    font-family: "KaiTi", "STKaiti", cursive;
+    font-size: 10px;
+    line-height: 1.4;
+    transform: rotate(-3deg);
+  }
+
+  .mobileBottomNav {
+    position: absolute;
+    z-index: 12;
+    right: 0;
+    top: 582px;
+    left: 0;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    height: 85px;
+    padding: 7px 6px 27px;
+    background: rgba(255, 253, 249, 0.97);
+    box-shadow: 0 -3px 9px rgba(81, 55, 34, 0.12);
+  }
+
+  .mobileBottomNav > span {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 4px;
+    color: var(--ink);
+    flex-direction: column;
+    font-size: 10px;
+    font-weight: 800;
+  }
+
+  .mobileBottomNav > span svg {
+    width: 22px;
+    height: 22px;
+    stroke-width: 2;
+  }
+
+  .mobileBottomNav .bottomActive {
+    color: var(--blue);
+  }
+
+  .mobileBottomNav .bottomActive::after {
+    position: absolute;
+    right: 21%;
+    top: 47px;
+    left: 21%;
+    height: 3px;
+    border-radius: 3px;
+    background: var(--blue);
+    content: "";
+  }
+}
+
+@media (max-width: 380px) {
+  .mobileTopbar {
+    padding-inline: 13px;
+  }
+
+  .mobileStats {
+    top: 251px;
+    font-size: 11px;
+  }
+
+  .mobileStats b {
+    font-size: 17px;
+  }
+
+  .mobileAtlasFrame {
+    top: 230px;
+    height: 325px;
+  }
+
+  .mobileCaption {
+    font-size: 10px;
+  }
+}
+
+.mobileNote {
+  position: absolute;
+  z-index: 3;
+  top: 119px;
+  right: 6%;
+  font: 10px/1.6 "KaiTi", "STKaiti", cursive;
+  transform: rotate(-9deg);
+}
+
+/* Authenticated V4 uses the same canvas with real controls and variable text. */
+.liveCanvas a { color: inherit; text-decoration: none; }
+.liveCanvas a:focus-visible, .liveCanvas button:focus-visible { outline: 3px solid #1687ed; outline-offset: 3px; }
+.liveCanvas .desktopHero { pointer-events: auto; }
+.liveCanvas .desktopShell, .liveCanvas .desktopCamera { pointer-events: none; }
+.liveCanvas .desktopNav > a { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 100%; color: var(--ink); font-size: 13px; font-weight: 700; white-space: nowrap; }
+.liveCanvas .desktopNav > .navActive { color: var(--blue); }
+.liveCanvas .desktopAccount { min-width: 0; }
+.liveCanvas .searchPill input { width: 100%; min-width: 0; border: 0; outline: 0; padding: 0; background: none; color: var(--ink); font: inherit; }
+.liveCanvas .primaryAction { color: white; }
+.liveCanvas .secondaryAction { color: var(--blue); }
+.liveTitleHeading { margin: 0; padding: 0; border: 0; }
+.liveCityMarkers { position: absolute; inset: 0; z-index: 8; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.liveMapEntry { position: absolute; z-index: 11; right: 3%; bottom: 3%; pointer-events: auto; }
+.livePhotoEdit { position: absolute; z-index: 12; left: 17%; bottom: 4%; pointer-events: auto; }
+.livePhotoEmpty { position: absolute; z-index: 1; inset: 15% 13% 25%; display: grid; place-items: center; color: #7e7b6d; background: #ded3bb; font-size: 12px; text-align: center; }
+.liveCanvas .nextPhoto .livePhotoEmpty { inset: 7px 7px 19px; background: #ede4d2; }
+.liveCanvas .desktopNextTrip h2 { max-width: 92%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.3; }
+.liveCanvas .nextMeta > a { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--ink); border-radius: 50%; margin-left: auto; }
+.liveGalleryRail { overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; align-items: center; padding: 5px 2px; }
+.liveGalleryRail .galleryCard { flex: 0 0 calc((100% - 40px) / 9); max-width: 160px; height: 95%; }
+.liveGalleryRail .galleryCard a { display: block; width: 100%; height: 100%; }
+.liveCanvas .galleryFrame .liveWallPhoto { z-index: 1; inset: 10% 11% auto; width: 78%; height: 59%; object-fit: cover; }
+.liveCanvas .galleryFrame .liveWallFrame { z-index: 2; pointer-events: none; }
+.liveWallPicker { flex: 0 0 auto; display: grid; place-items: center; width: 80px; height: 95%; }
+.liveWallPicker > button { border-radius: 50%; padding: 12px; }
+.liveEmptyLink { display: flex; gap: 10px; align-items: center; padding: 18px; color: #176bb1 !important; font-size: 13px; }
+.liveCanvas .myTripCard { flex: 0 0 calc((100% - 21px) / 4); }
+.liveCanvas .myTripCard > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.liveTripCoverEmpty { display: grid; place-items: center; width: 100%; height: 86px; background: #e7dec9; color: #978e78; }
+.liveTripDate { display: block; margin: 5px 32px 0 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: #63798f; }
+.liveNoteCard { overflow: hidden; }
+.liveNoteCard > strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.liveNoteCard > time { display: block; margin-top: 4px; font-size: 9px; color: #7b8d9a; }
+.liveNoteCard > p { display: -webkit-box; margin: 9px 0 0; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.liveMobileMapEntry { position: absolute; z-index: 10; top: 506px; left: 10%; pointer-events: auto; }
+@media(max-width:680px) {
+  .liveCanvas { position: relative; inset: auto; height: auto; min-height: 667px; }
+  .liveCanvas .mobileComposition { height: max(667px, 100svh); min-height: 667px; }
+  .liveCanvas .mobileBottomNav { position: fixed; top: auto; bottom: 0; }
+  .liveCanvas .mobileBottomNav > a { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 10px; font-weight: 800; }
+  .liveCanvas .mobileBottomNav > a svg { width: 22px; height: 22px; }
+  .liveCanvas .mobileBottomNav > .bottomActive { color: var(--blue); }
+  .liveCanvas .livePhotoEmpty { font-size: 11px; }
+}

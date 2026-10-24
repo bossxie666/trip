@@ -7,8 +7,9 @@ import { routeStrokeColor, transitLegStrokeColor } from "@/services/amap/subway-
 import { isFerryLeg, routeFare, transitLineSummary } from "@/services/amap/route-presentation";
 import { filterTimelineForMember, numberTimelineNodes, type TimelineNode } from "@/services/timeline-assembler";
 import { TransportIcon, iconForRouteMode } from "./TransportIcon";
-import { type AMapMarker, type AMapNamespace, type AMapObject } from "./amap-client-types";
+import { type AMapMarker, type AMapObject } from "./amap-client-types";
 import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
+import { loadAMap } from "./load-amap";
 
 type Place = { id: string; name: string; cityId?: string | null; address?: string | null; latitude?: number | null; longitude?: number | null; district?: string | null; providerPlaceId?: string | null };
 type Day = { id: string; dayNumber: number; date: string | null; title: string; items: { item: { id: string; title: string; dayId: string; sortOrder: number; lockedAt: string | null; placeId: string | null; itemType?: string }; place: Place | null }[] };
@@ -17,35 +18,6 @@ type Segment = { id: string; from: Stop; to: Stop; crossCity: boolean };
 type MapEntry = { place: Place; kind: "itinerary" | "booking" | "recommendation" | "saved" | "candidate"; planStatus: "candidate" | "selected" | "locked"; category?: string | null; areaKey?: string | null; recommendationTitle?: string | null; recommendations?: { id: string; title: string; kind: "place" | "guide"; sortOrder: number }[]; timelineId?: string; nodeNumber?: number };
 type SearchPoi = { id: string; name: string; address: string | null; district: string | null; cityName?: string | null; longitude: number; latitude: number };
 type Workspace = { days: Day[]; cities: { id: string; name: string }[]; members?: { id: string; displayName: string }[]; currentMemberId?: string | null; memberFilter?: string; bookings?: { id: string; title: string; type: string; placeId?: string | null; originPlace?: Place | null; destinationPlace?: Place | null; originLabel?: string | null; destinationLabel?: string | null; memberStates?: Record<string, "present" | "absent" | "partial" | "unknown"> }[]; mapPlaces?: MapEntry[]; savedPlaces?: { id: string; place: Place; city: { id: string; name: string }; note?: string | null }[]; routeStopsByDay?: Record<string, Stop[]>; routeSegmentsByDay?: Record<string, Segment[]>; routePreferences?: { dayId: string; fromId: string; toId: string; memberId: string | null; preferredMode: AMapRouteMode }[]; timelineNodesByDay?: Record<string, TimelineNode[]> };
-
-let loader: Promise<AMapNamespace> | null = null;
-async function fetchMapConfig() {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 8_000);
-  try {
-    return await fetch("/api/amap/config", { signal: controller.signal });
-  } finally {
-    window.clearTimeout(timeout);
-  }
-}
-async function loadAMap() {
-  if (window.AMap) return window.AMap;
-  if (!loader) loader = (async () => {
-    const response = await fetchMapConfig(), config = await response.json() as { key?: string; version?: string; serviceHost?: string; error?: string };
-    if (!response.ok || !config.key || !config.serviceHost) throw new Error(config.error || "地图配置读取失败。");
-    const jsKey = config.key;
-    window._AMapSecurityConfig = { serviceHost: config.serviceHost };
-    await new Promise<void>((resolve, reject) => {
-      const existing = document.querySelector<HTMLScriptElement>("script[data-trip-amap]");
-      let timeout: number | undefined;
-      const finish = (caught?: Error) => { if (timeout != null) window.clearTimeout(timeout); if (caught) reject(caught); else resolve(); };
-      if (existing) { if (window.AMap) finish(); else { existing.addEventListener("load", () => finish(), { once: true }); existing.addEventListener("error", () => { existing.remove(); finish(new Error("高德地图加载失败。")); }, { once: true }); timeout = window.setTimeout(() => { existing.remove(); finish(new Error("高德地图加载超时，请重试。")); }, 8_000); } return; }
-      const script = document.createElement("script"); script.dataset.tripAmap = "true"; script.src = `https://webapi.amap.com/maps?v=${encodeURIComponent(config.version || "2.0")}&key=${encodeURIComponent(jsKey)}`; script.async = true; script.onload = () => finish(); script.onerror = () => finish(new Error("高德地图加载失败。")); timeout = window.setTimeout(() => finish(new Error("高德地图加载超时，请重试。")), 8_000); document.head.appendChild(script);
-    });
-    if (!window.AMap) throw new Error("高德地图加载失败。"); return window.AMap;
-  })().catch((caught) => { loader = null; throw caught; });
-  return loader;
-}
 
 const modeLabels: Record<AMapRouteMode, string> = { walking: "步行", subway: "公共交通", bus: "公共交通", mixed_transit: "公共交通", taxi: "打车", driving: "驾车", bicycling: "骑行", transit: "公共交通" };
 const categoryLabels = [{ key: "all", label: "全部" }, { key: "attraction", label: "景点" }, { key: "food", label: "美食" }, { key: "cafe", label: "咖啡" }, { key: "shopping", label: "购物" }, { key: "guide", label: "攻略" }, { key: "other", label: "其他" }];
@@ -62,6 +34,7 @@ function transitStepLabel(step: NonNullable<AMapRouteResult["steps"]>[number]) {
   return step.transfer || step.instruction || "换乘";
 }
 function shortDate(date: string | null) { return date ? date.slice(5).replace("-", "/") : "日期未定"; }
+function mapLabel(value: string) { const label = document.createElement("span"); label.textContent = value; return label; }
 function placeArea(place: Place, cities: { id: string; name: string }[]) { const city = cities.find((item) => item.id === place.cityId)?.name || ""; return (place.name.includes("桐庐") || place.district?.includes("桐庐")) ? "tonglu" : city.includes("上海") ? "shanghai" : "hangzhou"; }
 function placeCategory(entry: MapEntry) { if (entry.category === "hotel" || entry.category === "experience") return "other"; return entry.category || (entry.kind === "recommendation" ? "attraction" : "other"); }
 function segmentParticipantSummary(segment: Segment, members: { id: string }[] = []) {
@@ -73,6 +46,7 @@ function segmentParticipantSummary(segment: Segment, members: { id: string }[] =
 export type PlanMapProps = { slug: string; places?: { id: string; name: string; latitude: number | null; longitude: number | null; candidate: boolean; order: number | null }[]; workspace?: Workspace; activeDayId?: string; mapMode?: "day" | "library"; compact?: boolean };
 
 export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "day", compact = false }: PlanMapProps) {
+  const [mapAttempt, setMapAttempt] = useState(0);
   const { refreshWorkspace } = useWorkspaceNavigation();
   const container = useRef<HTMLDivElement>(null), mapRef = useRef<AMapObject | null>(null), overlays = useRef<unknown[]>([]), markerObjects = useRef<AMapMarker[]>([]), lastFitSignature = useRef(""), focusedFitSignatureRef = useRef(""), fitContextRef = useRef(""), userHasInteractedWithMap = useRef(false), searchAbortRef = useRef<AbortController | null>(null), searchRequestRef = useRef(0), routeAbortRef = useRef<AbortController | null>(null), routeRequestRef = useRef(0);
   const defaultRouteKey = useRef("");
@@ -153,8 +127,8 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
       };
       frame = window.requestAnimationFrame(mount);
     }).catch((caught) => { if (!cancelled) setError(caught instanceof Error ? caught.message : "地图加载失败。"); });
-    return () => { cancelled = true; window.cancelAnimationFrame(frame); observer?.disconnect(); mapRef.current?.destroy(); mapRef.current = null; };
-  }, []);
+    return () => { cancelled = true; window.cancelAnimationFrame(frame); observer?.disconnect(); mapRef.current?.destroy(); mapRef.current = null; overlays.current = []; markerObjects.current = []; lastFitSignature.current = ""; };
+  }, [mapAttempt]);
   useEffect(() => { setMemberFilter(workspace?.memberFilter || workspace?.currentMemberId || "all"); }, [workspace?.memberFilter, workspace?.currentMemberId]);
   useEffect(() => { if (mapMode === "library") setFocusedRecommendationId(new URLSearchParams(window.location.search).get("focusRecommendation")); }, [mapMode]);
   useEffect(() => { if (!ready || !mapRef.current?.on) return; const map = mapRef.current; const updateViewport = () => { const bounds = map.getBounds?.(), sw = bounds?.getSouthWest?.(), ne = bounds?.getNorthEast?.(); if (sw && ne) setViewport({ south: sw.lat, west: sw.lng, north: ne.lat, east: ne.lng }); }; const markInteraction = () => { userHasInteractedWithMap.current = true; }; map.on("moveend", updateViewport); map.on("zoomend", updateViewport); map.on("dragstart", markInteraction); map.on("zoomstart", markInteraction); map.on("movestart", markInteraction); updateViewport(); return () => { map.off?.("moveend", updateViewport); map.off?.("zoomend", updateViewport); map.off?.("dragstart", markInteraction); map.off?.("zoomstart", markInteraction); map.off?.("movestart", markInteraction); }; }, [ready]);
@@ -169,7 +143,7 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
       const inFocusedGroup = !focusedRecommendationId || entry.recommendations?.some(({ id }) => id === focusedRecommendationId);
       const baseOpacity = (entry.kind === "candidate" ? .28 : entry.kind === "saved" ? .58 : entry.kind === "recommendation" ? .78 : 1) * (inFocusedGroup ? 1 : .25);
       const mutedByDay = mapMode === "library" && dayFilter !== "all" && !dayHighlightIds.has(entry.place.id) ? .38 : 1;
-      const marker = new AMap.Marker({ position: [entry.place.longitude!, entry.place.latitude!], title: entry.place.name, opacity: baseOpacity * mutedByDay, label: { content: markerNumber ? `${markerNumber}. ${entry.place.name}` : entry.kind === "booking" ? `订单 · ${entry.place.name}` : entry.place.name, direction: "top" } });
+      const marker = new AMap.Marker({ position: [entry.place.longitude!, entry.place.latitude!], title: entry.place.name, opacity: baseOpacity * mutedByDay, label: { content: mapLabel(markerNumber ? `${markerNumber}. ${entry.place.name}` : entry.kind === "booking" ? `订单 · ${entry.place.name}` : entry.place.name), direction: "top" } });
       marker.on?.("click", () => { setSelectedMapEntryId(entry.place.id); setSelectedSearch(null); setFocusedRecommendationId(entry.recommendations?.[0]?.id || null); });
       return marker;
     });
@@ -183,7 +157,7 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
       return (route.polylines || []).map((path) => new AMap.Polyline({ path, strokeColor, strokeWeight: 5, strokeOpacity: .88, showDir: true }));
     });
     const resultMarkers = searchResults.map((poi) => {
-      const marker = new AMap.Marker({ position: [poi.longitude, poi.latitude], title: poi.name, opacity: selectedSearch === poi.id ? 1 : .72, label: { content: `搜索 · ${poi.name}`, direction: "top" } });
+      const marker = new AMap.Marker({ position: [poi.longitude, poi.latitude], title: poi.name, opacity: selectedSearch === poi.id ? 1 : .72, label: { content: mapLabel(`搜索 · ${poi.name}`), direction: "top" } });
       marker.on?.("click", () => { setSelectedSearch(poi.id); setSelectedMapEntryId(null); });
       return marker;
     });
@@ -438,6 +412,6 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
     {!compact && renderRouteDirectory()}
     <div className="plan-map-canvas-wrap"><div ref={container} className="plan-map-canvas" aria-label="高德地图" />{!ready && !error && <p>地图加载中…</p>}{ready && !visible.length && <p>当前视图还没有带坐标的地点。</p>}</div>
     {!compact && mapMode === "library" && <p className="map-hint">攻略地图默认展示整趟旅行的地点分布。正式行程、Booking、攻略素材、暂存地点和候选点会用不同透明度区分（候选点为淡色 Marker）；拖动后点击“搜索此区域”才会请求候选 POI。</p>}
-    {error && <p className="form-error" role="alert">{error}</p>}
+    {error && <p className="form-error" role="alert">{error}{!ready && <button type="button" onClick={() => { setError(""); setReady(false); setMapAttempt((value) => value + 1); }}>重新加载地图</button>}</p>}
   </div>;
 }

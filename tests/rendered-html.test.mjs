@@ -92,6 +92,25 @@ globalThis.fetch = async (input, init) => {
 };
 
 let sessionCookie = "";
+let testLogin = 0;
+
+test("keeps the static V4 laboratory local and never reads production bindings", async () => {
+  const { default: worker } = await import(new URL("../dist/server/index.js", import.meta.url));
+  const forbiddenBindings = new Proxy({}, {
+    get() { throw new Error("Static laboratory must not access runtime bindings"); },
+  });
+  for (const origin of ["https://trip.bossxie.win", "https://homepage-v3-trip-archive.bossxie666.workers.dev"]) {
+    for (const pathname of ["/visual-lab/home-v4", "/visual-lab/home-v4/", "/visual-lab/home-v4.rsc"]) {
+      const response = await worker.fetch(new Request(`${origin}${pathname}`), forbiddenBindings, { waitUntil() {}, passThroughOnException() {} });
+      assert.equal(response.status, 404);
+    }
+  }
+  const before = DB.prepareCount;
+  const response = await render("/visual-lab/home-v4");
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /data-visual-lab="home-v4"/);
+  assert.equal(DB.prepareCount, before, "Static lab must not query D1");
+});
 
 async function render(pathname = "/", init = {}) {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -105,13 +124,13 @@ async function render(pathname = "/", init = {}) {
 }
 
 async function login() {
-  const response = await render("/api/session", { method: "POST", body: { memberName: "nini", code: "test-invite" } });
+  const response = await render("/api/session", { method: "POST", headers: { "cf-connecting-ip": `192.0.2.${++testLogin}` }, body: { memberName: "nini", code: "test-invite" } });
   assert.equal(response.status, 200);
   sessionCookie = response.headers.get("set-cookie").split(";")[0];
 }
 
 async function loginAs(memberName) {
-  const response = await render("/api/session", { method: "POST", body: { memberName, code: "test-invite" } });
+  const response = await render("/api/session", { method: "POST", headers: { "cf-connecting-ip": `192.0.2.${++testLogin}` }, body: { memberName, code: "test-invite" } });
   assert.equal(response.status, 200);
   sessionCookie = response.headers.get("set-cookie").split(";")[0];
 }
@@ -457,6 +476,72 @@ test("keeps desktop home sections while hiding only those sections on mobile", a
   assert.match(html, /href="\/albums"[\s\S]*?>相册</);
 });
 
+test("lights Homepage cities from visible TripCity links without creating Places or requiring Days", async () => {
+  const savedSession = sessionCookie;
+  const created = [];
+  const cityName = "Atlas 城市关系测试";
+  const atlasLabel = async () => (await (await render("/")).text()).match(/class="home-atlas" aria-label="([^"]*)"/)?.[1] || "";
+  try {
+    await loginAs("nini");
+    const placesBefore = DB.database.prepare("SELECT count(*) AS count FROM places").get().count;
+    assert.equal((await atlasLabel()).includes(cityName), false);
+    created.push(await createTrip({ title: "Atlas 无景点行程 A", status: "planning", cities: [cityName], memberIds: ["member-nini"] }));
+    assert.equal(DB.database.prepare("SELECT count(*) AS count FROM days WHERE trip_id=?").get(created[0].id).count, 0);
+    assert.equal(DB.database.prepare("SELECT count(*) AS count FROM places").get().count, placesBefore);
+    assert.ok((await atlasLabel()).includes(cityName));
+    created.push(await createTrip({ title: "Atlas 无景点行程 B", status: "completed", cities: [cityName], memberIds: ["member-nini"] }));
+    assert.equal((await atlasLabel()).split(cityName).length - 1, 1, "A city shared across trips has one marker entry");
+    await loginAs("kiki");
+    assert.equal((await atlasLabel()).includes(cityName), false, "An unrelated member cannot see the city");
+    await loginAs("nini");
+    assert.equal((await render(`/api/trips/${created[0].slug}`, { method: "DELETE" })).status, 200);
+    assert.ok((await atlasLabel()).includes(cityName), "Another real trip keeps the city visible");
+    assert.equal((await render(`/api/trips/${created[1].slug}`, { method: "DELETE" })).status, 200);
+    assert.equal((await atlasLabel()).includes(cityName), false);
+    assert.equal(DB.database.prepare("SELECT count(*) AS count FROM places").get().count, placesBefore);
+  } finally {
+    await loginAs("nini");
+    for (const trip of created) if (DB.database.prepare("SELECT id FROM trips WHERE id=?").get(trip.id)) await render(`/api/trips/${trip.slug}`, { method: "DELETE" });
+    DB.database.prepare("DELETE FROM cities WHERE name=?").run(cityName);
+    sessionCookie = savedSession;
+  }
+});
+
+test("returns JSON 401 for expired API sessions instead of a successful login HTML response", async () => {
+  const saved = sessionCookie;
+  sessionCookie = "";
+  try {
+    for (const path of ["/api/amap/config", "/api/albums", "/api/trips", "/api/home/featured-photos"]) {
+      const response = await render(path);
+      assert.equal(response.status, 401);
+      assert.match(response.headers.get("content-type"), /application\/json/);
+      assert.equal((await response.json()).code, "UNAUTHORIZED");
+      assert.equal(response.headers.get("location"), null);
+    }
+    const page = await render("/map");
+    assert.equal(page.status, 302);
+    assert.equal(new URL(page.headers.get("location")).searchParams.get("returnTo"), "/map");
+  } finally { sessionCookie = saved; }
+});
+
+test("keeps the login form inert until client hydration rather than submitting a native GET", async () => {
+  const response = await render("/unlock?returnTo=%2Fmap");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /<input[^>]*disabled=""[^>]*autoComplete="username"/);
+  assert.match(html, /<button disabled="">正在准备登录…<\/button>/);
+});
+
+test("rejects malformed session input before database or password work", async () => {
+  const before = DB.database.prepare("SELECT total_changes() AS count").get().count;
+  for (const body of ["null", "[]", {}, { memberName: 42 }, { memberName: "nini", code: {} }, { memberName: "nini", newPassword: ["invalid"] }, { memberName: "nini", password: "x".repeat(129) }, { memberName: "x".repeat(81), code: "invalid" }]) {
+    const response = await render("/api/session", { method: "POST", body });
+    assert.equal(response.status, 400);
+    assert.equal(response.headers.get("set-cookie"), null);
+  }
+  assert.equal(DB.database.prepare("SELECT total_changes() AS count").get().count, before);
+});
+
 test("creates and fully manages shared albums without leaking album media into other surfaces", async () => {
   const savedSession = sessionCookie;
   let albumId = "";
@@ -555,6 +640,26 @@ test("lists the Shanghai Hangzhou trip through the shared workspace", async () =
   assert.doesNotMatch(await inspiration.text(), /上海 \+ 杭州/);
 });
 
+test("discovers the matching paper before CSS and omits permanently hidden reference decorations", async () => {
+  const savedSession = sessionCookie;
+  try {
+    await loginAs("nini");
+    const before = DB.database.prepare("SELECT total_changes() AS count").get().count;
+    const response = await render("/");
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /<link[^>]*rel="preload"[^>]*href="\/assets\/homepage-v4\/mobile-background.webp"[^>]*media="\(max-width: 767px\)"/);
+    assert.match(html, /<link[^>]*rel="preload"[^>]*href="\/assets\/homepage-v4\/desktop-background.webp"[^>]*media="\(min-width: 768px\)"/);
+    assert.doesNotMatch(html, /class="home-decor-layer"|class="atlas-polaroid-frame"|class="atlas-stamp-asset"|class="atlas-compass-asset"/);
+    assert.match(html, /home-title-asset[^>]*fetchPriority="high"/i);
+    assert.match(html, /href="\/trips"/);
+    assert.equal(DB.database.prepare("SELECT total_changes() AS count").get().count, before);
+    const tripsHtml = await (await render("/trips")).text();
+    assert.match(tripsHtml, /<link[^>]*href="\/assets\/homepage-v3\/mobile-shell.webp"[^>]*media="\(max-width: 680px\)"/);
+    assert.doesNotMatch(html, /<link[^>]*rel="preload"[^>]*as="font"/);
+  } finally { sessionCookie = savedSession; }
+});
+
 test("keeps the private homepage, global search, and media upload boundaries scoped to the signed-in member", async () => {
   const savedSession = sessionCookie;
   let privateTrip;
@@ -579,6 +684,110 @@ test("keeps the private homepage, global search, and media upload boundaries sco
     if (privateTrip) assert.equal((await render(`/api/trips/${privateTrip.slug}`, { method: "DELETE" })).status, 200);
     sessionCookie = savedSession;
   }
+});
+
+test("renders V4 from member data, keeps preview reads side-effect free and handles an empty member", async () => {
+  const savedSession = sessionCookie;
+  let privateTrip;
+  const emptyId = "test-v4-empty-member";
+  try {
+    await loginAs("nini");
+    privateTrip = await createTrip({ title: "V4 真实行程入口", status: "planning", cities: ["上海", "杭州"], memberIds: ["member-nini"] });
+    const before = DB.database.prepare("SELECT total_changes() AS count").get().count;
+    const response = await render("/home-v4");
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /data-homepage="v4-live"/);
+    assert.match(html, /V4 真实行程入口/);
+    assert.match(html, new RegExp(`href="/trips/${privateTrip.slug}/plan"`));
+    assert.match(html, /查看真实地图/);
+    assert.doesNotMatch(html, /data-static-trip-preview|行程标题|src="\/og-card.jpg"/);
+    assert.equal(DB.database.prepare("SELECT total_changes() AS count").get().count, before);
+    await loginAs("kiki");
+    assert.doesNotMatch(await (await render("/home-v4")).text(), /V4 真实行程入口/);
+    DB.database.prepare("INSERT INTO members (id,name,display_name,active,created_at) VALUES (?,?,?,1,?)").run(emptyId, "test-v4-empty", "空白成员", new Date().toISOString());
+    await loginAs("test-v4-empty");
+    const empty = await render("/home-v4");
+    assert.equal(empty.status, 200);
+    const emptyHtml = await empty.text();
+    assert.match(emptyHtml, /下一站待定/); assert.match(emptyHtml, /新建行程/);
+    assert.doesNotMatch(emptyHtml, /V4 真实行程入口/);
+    sessionCookie = "";
+    const anonymous = await render("/home-v4");
+    assert.equal(anonymous.status, 302);
+    assert.match(anonymous.headers.get("location"), /returnTo=%2Fhome-v4/);
+    const malformed = await render("/home-v4", { headers: { cookie: "trip_space_session=%ZZ" } });
+    assert.equal(malformed.status, 302);
+  } finally {
+    await loginAs("nini");
+    if (privateTrip) assert.equal((await render(`/api/trips/${privateTrip.slug}`, { method: "DELETE" })).status, 200);
+    DB.database.prepare("DELETE FROM members WHERE id=?").run(emptyId);
+    sessionCookie = savedSession;
+  }
+});
+
+test("selects canonical photos without copies and keeps Atlas, wall, membership and deletion independent", async () => {
+  const savedSession = sessionCookie;
+  const ids = ["v4-canonical-photo-a", "v4-canonical-photo-b"];
+  const albums = [];
+  let trip;
+  try {
+    await loginAs("nini");
+    trip = await createTrip({ title: "V4 私有照片行程", status: "planning", cities: ["上海"], memberIds: ["member-nini"] });
+    for (const title of ["V4 相册 A", "V4 相册 B"]) {
+      const response = await render("/api/albums", { method: "POST", body: { title, tripId: trip.id } });
+      assert.equal(response.status, 201); albums.push((await response.json()).album.id);
+    }
+    const now = new Date().toISOString();
+    for (const id of ids) DB.database.prepare("INSERT INTO media_assets (id,uploader_member_id,purpose,object_key,original_filename,content_type,byte_size,status,created_at,updated_at,ready_at) VALUES (?,?,?,?,?,'image/jpeg',100,'ready',?,?,?)").run(id,"member-nini","album",`album/${id}.jpg`,`${id}.jpg`,now,now,now);
+    assert.equal((await render(`/api/albums/${albums[0]}/media`, { method: "POST", body: { assetIds: ids } })).status, 200);
+    assert.equal((await render(`/api/albums/${albums[1]}/media`, { method: "POST", body: { assetIds: [ids[1]] } })).status, 200);
+    const count = DB.database.prepare("SELECT count(*) count FROM media_assets").get().count;
+    assert.equal((await render("/api/home/featured-photos", { method: "PUT", body: { slotKey: "map_primary", assetId: ids[0] } })).status, 200);
+    assert.equal((await render("/api/home/featured-photos", { method: "PUT", body: { slotKey: "wall", assetIds: ids } })).status, 200);
+    assert.equal((await render("/api/home/featured-photos", { method: "PUT", body: { slotKey: "wall", assetIds: [...ids].reverse() } })).status, 200);
+    assert.equal(DB.database.prepare("SELECT media_asset_id id FROM home_featured_photos WHERE slot_key='map_primary'").get().id, ids[0]);
+    assert.equal(DB.database.prepare("SELECT count(*) count FROM media_assets").get().count, count);
+    assert.equal((await render("/api/home/featured-photos", { method: "PUT", body: { slotKey: "wall", assetIds: [ids[0], ids[0]] } })).status, 400);
+    assert.equal(DB.database.prepare("SELECT media_asset_id id FROM home_featured_photos WHERE slot_key='wall_01'").get().id, ids[1]);
+    await loginAs("kiki");
+    const hidden = await (await render("/api/home/featured-photos")).json();
+    assert.equal(hidden.photos.some((photo) => ids.includes(photo.assetId)), false);
+    assert.equal((await render(`/api/media/${ids[0]}`)).status, 404);
+    assert.equal((await render("/api/home/featured-photos", { method: "PUT", body: { slotKey: "map_secondary", assetId: ids[0] } })).status, 400);
+    await loginAs("nini");
+    assert.equal((await render("/api/home/featured-photos", { method: "DELETE", body: { slotKey: "map_primary" } })).status, 200);
+    assert.equal(DB.database.prepare("SELECT count(*) count FROM media_assets WHERE id=?").get(ids[0]).count, 1);
+    assert.equal(DB.database.prepare("SELECT count(*) count FROM home_featured_photos WHERE slot_key LIKE 'wall_%'").get().count, 2);
+    assert.equal((await render("/api/home/featured-photos", { method: "PUT", body: { slotKey: "map_primary", assetId: ids[0] } })).status, 200);
+    assert.equal((await render(`/api/albums/${albums[0]}/media/${ids[0]}`, { method: "DELETE" })).status, 200);
+    assert.equal(DB.database.prepare("SELECT count(*) count FROM home_featured_photos WHERE media_asset_id=?").get(ids[0]).count, 0);
+    assert.equal((await render(`/api/albums/${albums[0]}/media/${ids[1]}`, { method: "DELETE" })).status, 200);
+    assert.equal(DB.database.prepare("SELECT count(*) count FROM media_assets WHERE id=?").get(ids[1]).count, 1);
+    assert.equal((await render(`/api/albums/${albums[1]}/media/${ids[1]}`, { method: "DELETE" })).status, 200);
+    assert.equal(DB.database.prepare("SELECT count(*) count FROM media_assets WHERE id=?").get(ids[1]).count, 0);
+  } finally {
+    DB.database.prepare("DELETE FROM home_featured_photos WHERE media_asset_id IN (?,?)").run(...ids);
+    for (const id of albums) { DB.database.prepare("DELETE FROM album_media WHERE album_id=?").run(id); DB.database.prepare("DELETE FROM albums WHERE id=?").run(id); }
+    for (const id of ids) DB.database.prepare("DELETE FROM media_assets WHERE id=?").run(id);
+    await loginAs("nini");
+    if (trip) assert.equal((await render(`/api/trips/${trip.slug}`, { method: "DELETE" })).status, 200);
+    sessionCookie = savedSession;
+  }
+});
+
+test("blocks cross-origin API writes and repeated failed member login attempts", async () => {
+  const before = DB.database.prepare("SELECT count(*) count FROM guestbook_messages").get().count;
+  for (const origin of ["https://external.example", "null"]) {
+    assert.equal((await render("/api/guestbook", { method: "POST", headers: { origin }, body: { body: "must not be created" } })).status, 403);
+  }
+  assert.equal(DB.database.prepare("SELECT count(*) count FROM guestbook_messages").get().count, before);
+  const request = { method: "POST", headers: { "cf-connecting-ip": "198.51.100.23" }, body: { memberName: "rate-limit-fixture", code: "wrong" } };
+  for (let i = 0; i < 20; i++) assert.equal((await render("/api/session", request)).status, 401);
+  const blocked = await render("/api/session", request);
+  assert.equal(blocked.status, 429);
+  assert.ok(Number(blocked.headers.get("retry-after")) > 0);
+  assert.equal((await render("/api/session", request)).status, 429);
 });
 
 test("shares a Trip cover with its members without exposing orphaned cover media", async () => {
@@ -1002,7 +1211,7 @@ test("protects E1 routes and gives Generic Trip an empty workspace", async () =>
   const saved = sessionCookie; sessionCookie = "";
   const anonymous = await render("/trips/shanghai-hangzhou-2026/plan?view=map&day=trip-shanghai-hangzhou-2026-day-2");
   assert.equal(anonymous.status, 302); assert.equal(new URL(anonymous.headers.get("location")).searchParams.get("returnTo"), "/trips/shanghai-hangzhou-2026/plan?view=map&day=trip-shanghai-hangzhou-2026-day-2");
-  const denied = await render("/api/trips/shanghai-hangzhou-2026/plan/items", { method: "POST", body: { recommendationId: "recommendation-west-lake", dayId: "trip-shanghai-hangzhou-2026-day-5" } }); assert.equal(denied.status, 302);
+  const denied = await render("/api/trips/shanghai-hangzhou-2026/plan/items", { method: "POST", body: { recommendationId: "recommendation-west-lake", dayId: "trip-shanghai-hangzhou-2026-day-5" } }); assert.equal(denied.status, 401);
   sessionCookie = saved;
 });
 
@@ -1132,7 +1341,7 @@ test("creates reusable places and keeps stable Day ordering", async () => {
 
 test("denies anonymous Place writes and preserves seeded members and shadow places", async () => {
   const saved = sessionCookie; sessionCookie = "";
-  const denied = await render("/api/trips/anything/places", { method: "POST", body: { action: "create" } }); assert.equal(denied.status, 302);
+  const denied = await render("/api/trips/anything/places", { method: "POST", body: { action: "create" } }); assert.equal(denied.status, 401);
   sessionCookie = saved;
   assert.equal(DB.database.prepare("SELECT count(*) AS count FROM members").get().count, 5);
   assert.equal(DB.database.prepare("SELECT count(*) AS count FROM places WHERE id LIKE 'place-%'").get().count >= 6, true);
@@ -1302,4 +1511,3 @@ test("keeps budget plans, expenses, and booking edits member-scoped", async () =
   const finalHtml = await (await render("/trips/shanghai-hangzhou-2026/plan?view=budget")).text();
   assert.match(finalHtml, /value="120\.00"/); assert.match(finalHtml, /共享晚餐均摊/); assert.match(finalHtml, /我的费用待确认/);
 });
-

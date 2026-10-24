@@ -35,4 +35,3 @@ export function AlbumDetailClient({album}:{album:Album}) {
   {activePhoto&&<div className="album-viewer" role="dialog" aria-modal="true" aria-label="照片预览" onPointerDown={e=>{swipeStart.current=e.clientX;}} onPointerUp={swipeEnd}><button className="album-viewer-close" aria-label="关闭" onClick={()=>setViewer(null)}><X/></button><img src={`/api/media/${activePhoto.assetId}?variant=display`} alt={activePhoto.filename}/><footer><span>{activeIndex+1} / {visible.length}</span><button className={activePhoto.isFavorite?"active":""} onClick={()=>batch("favorite",{isFavorite:!activePhoto.isFavorite},[activePhoto.assetId])}><Heart fill={activePhoto.isFavorite?"currentColor":"none"}/>收藏</button>{album.canEditAlbum&&<button onClick={()=>cover(activePhoto.assetId)}><Star fill={album.coverMediaAssetId===activePhoto.assetId?"currentColor":"none"}/>设为封面</button>}</footer></div>}
  </>;
 }
-

@@ -28,7 +28,7 @@ function equal(left: Uint8Array, right: Uint8Array) {
   return difference === 0;
 }
 export function validatePassword(password: string) {
-  if (password.length < 10 || password.length > 128) throw new Error("INVALID_PASSWORD_LENGTH");
+  if (typeof password !== "string" || password.length < 10 || password.length > 128) throw new Error("INVALID_PASSWORD_LENGTH");
 }
 export async function credentialStatus(memberId: string) {
   try { return await getRuntimeEnv().DB.prepare("SELECT credential_status FROM members WHERE id = ? LIMIT 1").bind(memberId).first<{ credential_status: "legacy" | "active" | "disabled" }>(); }
@@ -45,6 +45,7 @@ export async function activateCredential(memberId: string, password: string) {
   ]);
 }
 export async function verifyPassword(memberId: string, password: string) {
+  if (typeof password !== "string" || !password || password.length > 128) return false;
   const row = await getRuntimeEnv().DB.prepare("SELECT algorithm, algorithm_version, salt, password_digest FROM member_credentials WHERE member_id = ? LIMIT 1").bind(memberId).first<{ algorithm: string; algorithm_version: number; salt: string; password_digest: string }>();
   if (!row || row.algorithm !== "pbkdf2-sha256-6x100k" || row.algorithm_version !== 2) return false;
   return equal(await derive(password, fromBase64(row.salt)), fromBase64(row.password_digest));

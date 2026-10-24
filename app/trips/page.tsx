@@ -39,4 +39,3 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
     </main>
   </>);
 }
-

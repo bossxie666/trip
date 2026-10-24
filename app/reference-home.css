@@ -19,6 +19,9 @@ body:has(.reference-home){background:#f4ecdf;color:#07396b}
 .reference-home .home-atlas{position:absolute;inset:0 auto 0 31%;width:38.5%;height:100%;min-height:0;margin:0;padding:0;background:none;overflow:visible}
 .reference-home .atlas-paper-map{display:block;position:absolute;inset:8% 5% 3%;width:90%;height:89%;overflow:hidden;opacity:.94;mix-blend-mode:multiply;filter:saturate(.88) contrast(.96)}
 .reference-home .atlas-paper-map img{width:100%;height:100%;object-fit:fill}
+.reference-home .atlas-live-map{position:absolute;inset:8% 5% 3%;z-index:3;overflow:hidden;border:1px solid #b9b29a;border-radius:3px;isolation:isolate;background:#f2eddf}
+.reference-home .atlas-polaroid-frame,.reference-home .atlas-polaroid::before,.reference-home .atlas-caption{pointer-events:none}
+.reference-home .atlas-polaroid figcaption{z-index:6}
 .reference-home .atlas-caption{display:block;top:8%;left:7%;z-index:6;width:28%;padding:.5vw .7vw;background:#fbf5e5d9;font:1vw/1.6 KaiTi,serif;transform:rotate(-8deg);letter-spacing:.08em}
 .reference-home .home-atlas>svg{position:absolute;inset:22% 11% 8% 16%;width:73%;height:70%;overflow:visible}
 .reference-home .atlas-route{stroke:#164b7b;stroke-width:1.05;stroke-dasharray:3 2.4;stroke-linecap:round;stroke-linejoin:round}
@@ -86,6 +89,7 @@ body:has(.reference-home) .site-header{position:relative;height:4.3vw;min-height
   .reference-home .atlas-caption{display:none}
   .reference-home .atlas-paper-map{inset:39% 6% 3%;width:88%;height:58%;opacity:.9;mask-image:linear-gradient(to bottom,transparent 0,#000 13%,#000 94%,transparent 100%)}
   .reference-home .atlas-paper-map img{object-fit:fill}
+  .reference-home .atlas-live-map{inset:46% 7% 6%;width:86%;height:48%}
   .reference-home .home-atlas>svg{inset:49% 11% 7% 17%;width:72%;height:44%}
   .reference-home .atlas-polaroid-primary{box-sizing:border-box;left:11%;top:51%;bottom:auto;width:35%;max-width:none;transform:rotate(-9deg)}
   .reference-home .atlas-polaroid figcaption{font-size:4vw}

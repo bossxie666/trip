@@ -7,11 +7,15 @@ import "./dialogs.css";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  // The Chinese headings use system fonts/artwork. Do not let these Latin
+  // subsets compete with the paper and title for the first mobile response.
+  preload: false,
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  preload: false,
 });
 
 export const metadata: Metadata = {

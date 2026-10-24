@@ -254,7 +254,7 @@ export const recommendationReferenceMediaRecords = sqliteTable("recommendation_r
 ]);
 
 export const homeFeaturedPhotoRecords = sqliteTable("home_featured_photos", {
-  slotKey: text("slot_key", { enum: ["map_primary", "map_secondary"] }).primaryKey(),
+  slotKey: text("slot_key", { enum: ["map_primary", "map_secondary", "wall_01", "wall_02", "wall_03", "wall_04", "wall_05", "wall_06", "wall_07", "wall_08", "wall_09"] }).primaryKey(),
   mediaAssetId: text("media_asset_id").notNull().references(() => mediaAssetRecords.id, { onDelete: "restrict" }),
   updatedByMemberId: text("updated_by_member_id").notNull().references(() => memberRecords.id, { onDelete: "restrict" }),
   updatedAt: text("updated_at").notNull(),

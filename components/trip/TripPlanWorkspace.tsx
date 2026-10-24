@@ -266,7 +266,3 @@ export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query
     {view === "budget" && <BudgetWorkspace slug={trip.slug} budget={workspace.budget} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} days={dayLabels} cities={trip.cities.map((city) => ({ id: city.id, name: city.name }))} routeSegmentsByDay={workspace.routeSegmentsByDay} routePreferences={workspace.routePreferences} costMode={costMode} />}
   </main></TripBookShell>;
 }
-
-
-
-
