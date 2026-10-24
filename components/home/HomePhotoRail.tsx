@@ -73,8 +73,8 @@ export function HomePhotoRail({ items, management }: { items: HomePhotoRailItem[
     >
       {items.map((item, index) => <figure key={item.id} className={`home-photo-card home-photo-card-${index % 4}`}>
         <div className="home-photo-polaroid">
-          <img className="home-photo-image" src={item.src} alt={item.alt} width={520} height={380} loading={index < 3 ? "eager" : "lazy"} />
-          <img className="home-photo-frame" src={item.frame} alt="" aria-hidden="true" />
+          <img className="home-photo-image" src={item.src} alt={item.alt} width={520} height={380} loading="lazy" />
+          <img className="home-photo-frame" src={item.frame} alt="" aria-hidden="true" loading="lazy" />
         </div>
         <figcaption><b>{item.label}</b></figcaption>
       </figure>)}

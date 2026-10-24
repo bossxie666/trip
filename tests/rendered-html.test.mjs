@@ -640,6 +640,26 @@ test("lists the Shanghai Hangzhou trip through the shared workspace", async () =
   assert.doesNotMatch(await inspiration.text(), /上海 \+ 杭州/);
 });
 
+test("discovers the matching paper before CSS and omits permanently hidden reference decorations", async () => {
+  const savedSession = sessionCookie;
+  try {
+    await loginAs("nini");
+    const before = DB.database.prepare("SELECT total_changes() AS count").get().count;
+    const response = await render("/");
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /<link[^>]*rel="preload"[^>]*href="\/assets\/homepage-v4\/mobile-background.webp"[^>]*media="\(max-width: 767px\)"/);
+    assert.match(html, /<link[^>]*rel="preload"[^>]*href="\/assets\/homepage-v4\/desktop-background.webp"[^>]*media="\(min-width: 768px\)"/);
+    assert.doesNotMatch(html, /class="home-decor-layer"|class="atlas-polaroid-frame"|class="atlas-stamp-asset"|class="atlas-compass-asset"/);
+    assert.match(html, /home-title-asset[^>]*fetchPriority="high"/i);
+    assert.match(html, /href="\/trips"/);
+    assert.equal(DB.database.prepare("SELECT total_changes() AS count").get().count, before);
+    const tripsHtml = await (await render("/trips")).text();
+    assert.match(tripsHtml, /<link[^>]*href="\/assets\/homepage-v3\/mobile-shell.webp"[^>]*media="\(max-width: 680px\)"/);
+    assert.doesNotMatch(html, /<link[^>]*rel="preload"[^>]*as="font"/);
+  } finally { sessionCookie = savedSession; }
+});
+
 test("keeps the private homepage, global search, and media upload boundaries scoped to the signed-in member", async () => {
   const savedSession = sessionCookie;
   let privateTrip;

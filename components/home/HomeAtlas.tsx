@@ -21,15 +21,15 @@ export function HomeAtlas({ cities, trips, photos, reference = false }: { cities
     <div className="atlas-live-map"><HomeCityMap cities={cities} trips={trips} embedded /></div>
     <figure className="atlas-polaroid atlas-polaroid-primary">
       {primary ? <div className="atlas-polaroid-window"><img className="atlas-polaroid-photo" src={`/api/media/${encodeURIComponent(primary.assetId)}?variant=card`} alt="旅行地图照片一" width={360} height={260} /></div> : <div className="atlas-photo-empty">暂无照片</div>}
-      <img className="atlas-polaroid-frame" src="/assets/homepage-v3/polaroid-frame-01.webp" alt="" aria-hidden="true" />
+      {!reference && <img className="atlas-polaroid-frame" src="/assets/homepage-v3/polaroid-frame-01.webp" alt="" aria-hidden="true" />}
       <figcaption><HomePhotoPicker slot="map_primary" selectedIds={primary ? [primary.assetId] : []} /></figcaption>
     </figure>
     <figure className="atlas-polaroid atlas-polaroid-secondary">
-      {secondary ? <div className="atlas-polaroid-window"><img className="atlas-polaroid-photo" src={`/api/media/${encodeURIComponent(secondary.assetId)}?variant=card`} alt="旅行地图照片二" width={300} height={220} /></div> : <div className="atlas-photo-empty">暂无照片</div>}
-      <img className="atlas-polaroid-frame" src="/assets/homepage-v3/polaroid-frame-02.webp" alt="" aria-hidden="true" />
+      {secondary ? <div className="atlas-polaroid-window"><img className="atlas-polaroid-photo" src={`/api/media/${encodeURIComponent(secondary.assetId)}?variant=card`} alt="旅行地图照片二" width={300} height={220} loading="lazy" /></div> : <div className="atlas-photo-empty">暂无照片</div>}
+      {!reference && <img className="atlas-polaroid-frame" src="/assets/homepage-v3/polaroid-frame-02.webp" alt="" aria-hidden="true" />}
       <figcaption><HomePhotoPicker slot="map_secondary" selectedIds={secondary ? [secondary.assetId] : []} /></figcaption>
     </figure>
-    <img className="atlas-stamp-asset" src="/assets/homepage-v3/sticker-airmail.webp" alt="" aria-hidden="true" />
-    <img className="atlas-compass-asset" src="/assets/homepage-v3/sticker-compass.webp" alt="" aria-hidden="true" />
+    {!reference && <><img className="atlas-stamp-asset" src="/assets/homepage-v3/sticker-airmail.webp" alt="" aria-hidden="true" />
+      <img className="atlas-compass-asset" src="/assets/homepage-v3/sticker-compass.webp" alt="" aria-hidden="true" /></>}
   </div>;
 }

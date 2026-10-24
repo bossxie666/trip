@@ -31,13 +31,10 @@ export function ReferenceHome({ current, dashboard }: { current: SessionMemberSu
     return preferred.length === 2 ? preferred : names;
   })() : [];
   return <>
+    <link rel="preload" as="image" href="/assets/homepage-v4/mobile-background.webp" media="(max-width: 767px)" fetchPriority="high" />
+    <link rel="preload" as="image" href="/assets/homepage-v4/desktop-background.webp" media="(min-width: 768px)" fetchPriority="high" />
     <SiteHeader renderMobileNav={false} active="home" currentMember={current} />
     <main className="home-journal mobile-home reference-home">
-      <div className="home-decor-layer" aria-hidden="true">
-        <img className="home-decor home-decor-botanical" src="/assets/homepage-v3/botanical-small.webp" alt="" />
-        <img className="home-decor home-decor-plane" src="/assets/homepage-v3/sticker-paper-plane.webp" alt="" />
-        <img className="home-decor home-decor-airmail" src="/assets/homepage-v3/sticker-airmail.webp" alt="" />
-      </div>
       <section className="home-hero mobile-book-page">
         <article className="home-manifesto">
           <h1 className="home-title-heading"><picture className="home-title-picture"><source media="(max-width: 767px)" srcSet="/assets/homepage-v3/title-mobile.webp" /><img className="home-title-asset" src="/assets/homepage-v3/title-desktop.webp" alt="跳进地理书的旅行" width={2172} height={724} fetchPriority="high" /></picture></h1>
@@ -47,7 +44,7 @@ export function ReferenceHome({ current, dashboard }: { current: SessionMemberSu
         <HomeAtlas reference cities={dashboard.cities} trips={dashboard.cityTrips} photos={dashboard.featuredPhotos} />
         <article className="home-next-trip">
           <div className="next-trip-label"><span>下一站</span></div>
-          {next ? <><h2>{nextCityNames.join(" · ") || next.title}</h2><time>{range(next.startDate, next.endDate)}</time>{cover(next.cover) ? <img src={cover(next.cover)!} alt={`${next.title}封面`} width={560} height={340} fetchPriority="high" /> : <div className="next-trip-photo-empty">下一站，等一张照片</div>}<footer><span><MapPin size={16} />{nextCityNames.length || next.cities.length} 城市</span><span><Route size={16} />{dayCount(next.startDate, next.endDate) || "—"} 天</span><span>{next.members?.length || next.people} 人</span><Link href={`/trips/${next.slug}/plan`} aria-label={`打开${next.title}`}><ArrowRight size={19} /></Link></footer></> : <><h2>下一站待定</h2><p>先把想去的地方放进一条新行程。</p><Link className="home-primary-action" href="/trips/new">新建行程<ArrowRight size={17} /></Link></>}
+          {next ? <><h2>{nextCityNames.join(" · ") || next.title}</h2><time>{range(next.startDate, next.endDate)}</time>{cover(next.cover) ? <img src={cover(next.cover)!} alt={`${next.title}封面`} width={560} height={340} loading="lazy" /> : <div className="next-trip-photo-empty">下一站，等一张照片</div>}<footer><span><MapPin size={16} />{nextCityNames.length || next.cities.length} 城市</span><span><Route size={16} />{dayCount(next.startDate, next.endDate) || "—"} 天</span><span>{next.members?.length || next.people} 人</span><Link href={`/trips/${next.slug}/plan`} aria-label={`打开${next.title}`}><ArrowRight size={19} /></Link></footer></> : <><h2>下一站待定</h2><p>先把想去的地方放进一条新行程。</p><Link className="home-primary-action" href="/trips/new">新建行程<ArrowRight size={17} /></Link></>}
         </article>
       </section>
 

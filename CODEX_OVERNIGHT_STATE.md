@@ -2,6 +2,28 @@
 
 Last updated: 2026-10-24 (Asia/Shanghai)
 
+## Independent progress while Preview pipeline approval is pending
+
+The preceding goal turn made progress: it established the exact Preview/Production configuration boundary and verified unchanged Production traffic. The current continuation is NOT permission to retry the rejected pipeline change. Continue independent source/runtime work while that specific approval remains pending.
+
+Downloaded Lighthouse run 40065491483's existing CI artifact to `/private/tmp/trip-lighthouse-f86a06d.qm8ugy`. Measured server response times are about 35–162ms. Homepage mobile LCP is about 7.28s and its largest element is the CSS book-shell background, discovered after styles. Requests also include approximately 265KB of decorations/frames that ReferenceHome permanently hides. The Latin font subsets are preloaded ahead of visible paper; native Chrome also warns that these preloads are unused. Planning/Budget LCP is the title, mainly render delay; this still requires measurement after the resource-order fix.
+
+First performance patch preserves composition and original assets: media-matched book-shell preloads, no speculative Latin font preloads, omit permanently hidden ReferenceHome decorations, and lazy-load desktop-only secondary/gallery/Next Trip imagery. No data or auth/cache boundaries are changed. New rendered-HTML regression verifies the actual preload markup, hidden-image omission, title asset, retained Trips link and no GET data writes. 105/105 tests, lint, typecheck, explicit `npm run build:self-hosted`, diff check PASS; `npm audit --omit=dev` remains 0. Logs: `/private/tmp/trip-v4-paper-priority-tests.log`, `/private/tmp/trip-v4-paper-priority-build.log`. New CI measurements are pending; do not claim the performance gate passed from static assertions.
+
+Native authenticated Preview QA verifies the Atlas dialog opens, focuses its close button, and closes with Escape while restoring the trigger focus/hash. Atlas photo picker opens and lists the member's real 桂林 album (19 photos), but several actual thumbnail GET requests return 503. This is a NEW independent media failure, not an Album PASS. Picker was closed without saving, removing or changing any selection. Diagnose the read-only error response before deciding whether source or external configuration is at fault. No Production data writes occurred.
+
+## Latest Preview configuration boundary — awaiting explicit pipeline approval
+
+The user authorized restoring ONLY Preview configuration with existing values, without changing Production or Secret values. Read-only Cloudflare UI checks confirm that homepage-v3 is an aliased, undeployed Version URL, not a branch-isolated Worker Preview. The environment dropdown says "Create your first Preview"; the new Previews Base settings therefore do not configure this existing versions-upload flow. Do not migrate to a new Preview/resource architecture as a workaround.
+
+Current application commit `f86a06d` passed Cloudflare Build `e5309c70-553b-488a-8252-f2a8b0e04647`, Version `5ddf89c9-f765-445f-8fc8-235657c167e5`; alias remains https://homepage-v3-trip-archive.bossxie666.workers.dev. GitHub verify, browser, analyze and CodeQL checks pass. Lighthouse now actually runs all eight measurements, but fails the existing FCP/LCP thresholds; this is a measured performance gate failure, not the former missing-Chrome/sandbox failure. Do not relax thresholds or publish Production.
+
+The Cloudflare Deployments UI independently confirms Production Version `8ed27cf2` remains at 100% traffic. Settings shows Production branch `v2.4-r1`, production deploy command `npx --yes wrangler@4.131.1 deploy --keep-vars`, non-production Version command `npx --yes wrangler@4.131.1 versions upload --keep-vars`, and no build variables. Runtime settings show encrypted existing secrets, but no readable AMAP_JS_API_KEY. No local .dev.vars or .env files exist. Do not decrypt or replace secrets, guess a key, or copy cookies. A new normal Production tab requires login; no password attempt was made.
+
+A proposed narrowly branch-guarded Version-command edit was REJECTED by the action safety reviewer because this field is a persistent shared pipeline setting under the Production Worker, beyond the current Preview-only approval. The rejected tool call did not execute. Do not retry or implement an indirect repository/CLI workaround. No Cloudflare configuration, runtime secret, traffic, data, or Production source was changed. No local Wrangler command was run.
+
+Next step: obtain explicit permission to modify ONLY the non-production Version command and add the build-only variable HOMEPAGE_PREVIEW_AMAP_JS_API_KEY containing the user's existing JS API key. Production deploy command/branch/runtime config/traffic must remain unchanged; only homepage-v3 may consume the added variable. A previous async prompt asked the user to supply the existing key through the Cloudflare build-variable UI rather than chat; clarify the pipeline approval first. If approved, prepare the field safely, let the user enter the original key, then rebuild through GitHub → Cloudflare and verify HTTP 200 plus an actually rendered SDK map. Until then, do not claim the Preview config was repaired.
+
 ## Current phase
 
 Active goal: make the whole site usable end-to-end, allowing runtime-driven visual adjustments. Status: ACTIVE, not completed. The latest user asked for a real map and explicitly retained My Trips. The current turn integrates a real draggable/zoomable AMap into the existing ReferenceHome book, with an expandable city/trip dialog, safe text labels, bounded loading/retry, and browser Back/Escape handling. No POIs or inferred cross-trip routes are introduced.
