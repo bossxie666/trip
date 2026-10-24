@@ -11,7 +11,7 @@
     "build:self-hosted": "node scripts/vinext-command.mjs build --self-hosted",
     "deploy": "node scripts/vinext-command.mjs build --self-hosted && wrangler deploy --keep-vars",
     "start": "node scripts/vinext-command.mjs start",
-    "test": "node scripts/vinext-command.mjs build --self-hosted && node --experimental-strip-types --test tests/rendered-html.test.mjs tests/e0b-data-foundation.test.ts tests/e0c-real-trip-migration.test.mjs tests/amap-loader.test.mjs",
+    "test": "node scripts/vinext-command.mjs build --self-hosted && node --experimental-strip-types --test tests/rendered-html.test.mjs tests/e0b-data-foundation.test.ts tests/e0c-real-trip-migration.test.mjs tests/amap-loader.test.mjs tests/media-upload.test.mjs",
     "typecheck": "tsc --noEmit --pretty false",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "test:e2e": "playwright test",
