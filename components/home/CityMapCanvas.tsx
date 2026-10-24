@@ -76,7 +76,7 @@ export function CityMapCanvas({ cities, selected, onSelect, compact = false }: {
     else if (ready) mapRef.current?.setFitView(markersRef.current);
   }, [available, ready, selected]);
 
-  return <div className={`${styles.cityMapRoot}${compact ? ` ${styles.compactMap}` : ""}`}>
+  return <div className={`${styles.cityMapRoot}${compact ? ` ${styles.compactMap}` : ""}`} data-map-state={error ? "error" : ready ? "ready" : "loading"}>
     <div ref={container} className={styles.mapCanvas} aria-label="可拖动、缩放的高德城市地图" />
     {!available.length && <p className={styles.mapStatus}>{cities.length ? "行程城市暂缺中心坐标，定位确认后显示。" : "还没有行程城市。"}</p>}
     {!!available.length && !ready && !error && <p className={styles.mapStatus} role="status">正在加载高德地图…</p>}

@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { hasCityCoordinates, projectAtlasCities } from "../services/atlas-cities.ts";
+
+test("keeps the book artwork visible under map failures and moves mobile retry clear of the photo", () => {
+  const source = readFileSync(new URL("../components/home/CityMapCanvas.tsx", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../components/home/home-live.module.css", import.meta.url), "utf8");
+  assert.match(source, /data-map-state=\{error \? "error" : ready \? "ready" : "loading"\}/);
+  assert.match(css, /\.compactMap \{[^}]*background: transparent/);
+  assert.match(css, /\.compactMap\[data-map-state='error'\] \.mapCanvas \{ visibility: hidden/);
+  assert.match(css, /@media\(max-width:680px\)[\s\S]*\.compactMap \.mapStatus \{[^}]*right: 8px;[^}]*max-width: 42%/);
+});
 
 test("rejects missing, non-finite and invalid city centers instead of guessing markers", () => {
   const city = { cityId: "test", name: "测试城市", slug: "test", centerLat: 31.23, centerLng: 121.47 };
