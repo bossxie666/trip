@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": ">=22.13.0"
+    "node": ">=22.16.0"
   },
   "scripts": {
     "dev": "node scripts/vinext-command.mjs dev",
@@ -54,6 +54,9 @@
   },
   "overrides": {
     "vinext": { "image-size": "2.0.4" }
+  },
+  "pnpm": {
+    "overrides": { "vinext>image-size": "2.0.4" }
   },
   "type": "module"
 }
