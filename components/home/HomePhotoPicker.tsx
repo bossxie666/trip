@@ -9,6 +9,25 @@ import styles from "./home-live.module.css";
 type Album = { id: string; title: string };
 type Photo = { assetId: string; filename: string };
 
+function PhotoChoice({ photo, selected, selectedLabel, disabled, onChoose }: { photo: Photo; selected: boolean; selectedLabel: string; disabled: boolean; onChoose(): void }) {
+  const [attempt, setAttempt] = useState(0);
+  const [failed, setFailed] = useState(false);
+  const source = `/api/media/${encodeURIComponent(photo.assetId)}?variant=thumb${attempt ? `&retry=${attempt}` : ""}`;
+  return <button type="button" disabled={disabled} aria-label={failed ? `重新加载 ${photo.filename}` : photo.filename} aria-pressed={selected} onClick={() => {
+    // Retrying a thumbnail must never select or save an unseen photograph.
+    if (failed) { setFailed(false); setAttempt((value) => value + 1); }
+    else onChoose();
+  }}>
+    {failed ? <em className={styles.photoLoadError}>照片暂时无法读取<br />点击重新加载</em> : <img key={source} src={source} alt={photo.filename} loading="lazy" decoding="async" onError={() => {
+      // One automatic retry only. Persistent failures expose an explicit retry
+      // rather than looping requests or leaving a broken image indefinitely.
+      if (attempt === 0) setAttempt(1);
+      else setFailed(true);
+    }} />}
+    {selected && <span>{selectedLabel}</span>}
+  </button>;
+}
+
 export function HomePhotoPicker({ slot, selectedIds = [], className = "" }: { slot: AtlasPhotoSlot | "wall"; selectedIds?: string[]; className?: string }) {
   const titleId = useId();
   const dialog = useRef<HTMLDialogElement>(null);
@@ -109,7 +128,7 @@ export function HomePhotoPicker({ slot, selectedIds = [], className = "" }: { sl
         {error && <p className={styles.error} role="alert">{error}<button type="button" onClick={() => void (albumId ? loadAlbum(albumId) : show())}>重试</button></p>}
         {!loading && !error && !albums.length && <p>还没有相册。<a href="/albums">打开相册上传照片</a></p>}
         {!loading && !error && !!albums.length && !photos.length && <p>这个相册还没有照片。<a href={`/albums/${encodeURIComponent(albumId)}`}>打开相册</a></p>}
-        <div className={styles.photoGrid}>{photos.map((photo) => <button key={photo.assetId} type="button" disabled={saving || isWall && selection.length >= 9 && !selection.includes(photo.assetId)} aria-label={photo.filename} aria-pressed={selection.includes(photo.assetId)} onClick={() => choose(photo.assetId)}><img src={`/api/media/${encodeURIComponent(photo.assetId)}?variant=thumb`} alt={photo.filename} />{selection.includes(photo.assetId) && <span>{isWall ? selection.indexOf(photo.assetId) + 1 : "已选"}</span>}</button>)}</div>
+        <div className={styles.photoGrid}>{photos.map((photo) => <PhotoChoice key={photo.assetId} photo={photo} disabled={saving || isWall && selection.length >= 9 && !selection.includes(photo.assetId)} selected={selection.includes(photo.assetId)} selectedLabel={isWall ? String(selection.indexOf(photo.assetId) + 1) : "已选"} onChoose={() => choose(photo.assetId)} />)}</div>
         <footer className={styles.photoFooter}>{isWall && <span>已选 {selection.length}/9</span>}{!isWall && !!selectedIds.length && <button type="button" disabled={saving} onClick={() => void save(true)}>移除地图照片</button>}<button type="button" disabled={saving || loading || !isWall && !selection.length} onClick={() => void save()}>{saving ? "保存中…" : "保存选择"}</button></footer>
       </div>
     </dialog>
