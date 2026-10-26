@@ -30,7 +30,7 @@ export function ReferenceHome({ current, dashboard }: { current: SessionMemberSu
     return preferred.length === 2 ? preferred : names;
   })() : [];
   return <>
-    <SiteHeader renderMobileNav={false} active="home" currentMember={{ id: current.id, displayName: current.displayName, avatar: current.avatar }} />
+    <SiteHeader renderMobileNav={false} active="home" currentMember={{ id: current.id, displayName: current.displayName, avatar: current.avatar, role: current.role }} />
     <main className="home-journal mobile-home reference-home">
       <div className="home-decor-layer" aria-hidden="true">
         <img className="home-decor home-decor-botanical" src="/assets/homepage-v3/botanical-small.webp" alt="" />

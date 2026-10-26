@@ -9,6 +9,7 @@ export function knowledgeMutationError(request: Request, error: unknown) {
     INVALID_EXTERNAL_URL: "外部链接必须使用有效的 https 地址。",
     INVALID_KNOWLEDGE_MEDIA: "图片无效或尚未上传完成，请重新选择。",
     INVALID_KNOWLEDGE_TAG: "标签不能超过 32 个字。",
+    INVALID_KNOWLEDGE_PLACE: "请选择有效的关联地点。",
   };
   if (messages[code]) return apiError(request, 400, code, messages[code]);
   return apiError(request, 500, "KNOWLEDGE_SAVE_FAILED", "保存失败，请重试。原有内容未更改。");

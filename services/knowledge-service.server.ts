@@ -1,10 +1,16 @@
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getDb, getRuntimeEnv } from "@/db";
-import { knowledgeEntryRecords, knowledgeEntryTagRecords, knowledgeFavoriteRecords, knowledgeMediaRecords, knowledgeTagRecords, knowledgeTripLinkRecords, memberRecords, mediaAssetRecords, tripMemberRecords, tripRecords } from "@/db/schema";
+import { knowledgeEntryRecords, knowledgeEntryTagRecords, knowledgeFavoriteRecords, knowledgeMediaRecords, knowledgePlaceLinkRecords, knowledgeTagRecords, knowledgeTripLinkRecords, memberRecords, mediaAssetRecords, placeRecords, tripMemberRecords, tripRecords } from "@/db/schema";
 
 export const knowledgeSections = ["photography", "transition_video", "travel_guide"] as const;
 export type KnowledgeSection = typeof knowledgeSections[number];
-export type KnowledgeEntryView = typeof knowledgeEntryRecords.$inferSelect & { tags: string[]; mediaAssetIds: string[]; favorite: boolean; authorName: string | null };
+export type KnowledgePlaceChoice = { id: string; name: string; address: string | null };
+export type KnowledgeEntryView = typeof knowledgeEntryRecords.$inferSelect & { tags: string[]; mediaAssetIds: string[]; favorite: boolean; authorName: string | null; places: KnowledgePlaceChoice[] };
+function distinctKnowledgePlaces(places: KnowledgePlaceChoice[]) { return [...new Map(places.map(({ id, name, address }) => [id, { id, name, address }])).values()]; }
+
+async function knowledgePlaces(ids: string[]) {
+  return getDb().select({ entryId: knowledgePlaceLinkRecords.entryId, id: placeRecords.id, name: placeRecords.name, address: placeRecords.address }).from(knowledgePlaceLinkRecords).innerJoin(placeRecords, eq(knowledgePlaceLinkRecords.placeId, placeRecords.id)).where(inArray(knowledgePlaceLinkRecords.entryId, ids)).orderBy(knowledgePlaceLinkRecords.sortOrder);
+}
 
 function safeSection(value?: string | null): KnowledgeSection | null { return knowledgeSections.includes(value as KnowledgeSection) ? value as KnowledgeSection : null; }
 function normalizedTags(value: unknown) { return [...new Set((Array.isArray(value) ? value : []).map(String).map((tag) => tag.trim()).filter(Boolean).slice(0, 8))]; }
@@ -38,13 +44,14 @@ export async function listKnowledgePage(memberId: string, filters: KnowledgeFilt
   const hasMore = fetched.length > pageSize, rows = fetched.slice(0, pageSize);
   if (!rows.length) return { entries: [] as KnowledgeEntryView[], page, hasMore: false };
   const ids = rows.map(({ entry }) => entry.id);
-  const [tagRows, mediaRows, favorites] = await Promise.all([
+  const [tagRows, mediaRows, favorites, places] = await Promise.all([
     db.select({ entryId: knowledgeEntryTagRecords.entryId, name: knowledgeTagRecords.name }).from(knowledgeEntryTagRecords).innerJoin(knowledgeTagRecords, eq(knowledgeEntryTagRecords.tagId, knowledgeTagRecords.id)).where(inArray(knowledgeEntryTagRecords.entryId, ids)),
     db.select({ entryId: knowledgeMediaRecords.entryId, assetId: knowledgeMediaRecords.mediaAssetId }).from(knowledgeMediaRecords).where(inArray(knowledgeMediaRecords.entryId, ids)).orderBy(knowledgeMediaRecords.sortOrder),
     db.select({ entryId: knowledgeFavoriteRecords.entryId }).from(knowledgeFavoriteRecords).where(and(eq(knowledgeFavoriteRecords.memberId, memberId), inArray(knowledgeFavoriteRecords.entryId, ids))),
+    knowledgePlaces(ids),
   ]);
   const favoriteIds = new Set(favorites.map((item) => item.entryId));
-  const entries = rows.map(({ entry, authorName }) => ({ ...entry, authorName, tags: tagRows.filter((tag) => tag.entryId === entry.id).map((tag) => tag.name), mediaAssetIds: mediaRows.filter((item) => item.entryId === entry.id).map((item) => item.assetId), favorite: favoriteIds.has(entry.id) }));
+  const entries = rows.map(({ entry, authorName }) => ({ ...entry, authorName, tags: tagRows.filter((tag) => tag.entryId === entry.id).map((tag) => tag.name), mediaAssetIds: mediaRows.filter((item) => item.entryId === entry.id).map((item) => item.assetId), favorite: favoriteIds.has(entry.id), places: distinctKnowledgePlaces(places.filter((place) => place.entryId === entry.id)) }));
   return { entries, page, hasMore };
 }
 
@@ -61,12 +68,13 @@ export async function getKnowledgeEntry(memberId: string, id: string) {
   const db = getDb();
   const row = (await db.select({ entry: knowledgeEntryRecords, authorName: memberRecords.displayName }).from(knowledgeEntryRecords).leftJoin(memberRecords, eq(knowledgeEntryRecords.createdByMemberId, memberRecords.id)).where(and(eq(knowledgeEntryRecords.id, id), isNull(knowledgeEntryRecords.deletedAt))).limit(1))[0];
   if (!row) return null;
-  const [tagRows, mediaRows, favorite] = await Promise.all([
+  const [tagRows, mediaRows, favorite, places] = await Promise.all([
     db.select({ name: knowledgeTagRecords.name }).from(knowledgeEntryTagRecords).innerJoin(knowledgeTagRecords, eq(knowledgeEntryTagRecords.tagId, knowledgeTagRecords.id)).where(eq(knowledgeEntryTagRecords.entryId, id)),
     db.select({ assetId: knowledgeMediaRecords.mediaAssetId }).from(knowledgeMediaRecords).where(eq(knowledgeMediaRecords.entryId, id)).orderBy(knowledgeMediaRecords.sortOrder),
     db.select({ entryId: knowledgeFavoriteRecords.entryId }).from(knowledgeFavoriteRecords).where(and(eq(knowledgeFavoriteRecords.memberId, memberId), eq(knowledgeFavoriteRecords.entryId, id))).limit(1),
+    knowledgePlaces([id]),
   ]);
-  return { ...row.entry, authorName: row.authorName, tags: tagRows.map((tag) => tag.name), mediaAssetIds: mediaRows.map((item) => item.assetId), favorite: favorite.length > 0 } satisfies KnowledgeEntryView;
+  return { ...row.entry, authorName: row.authorName, tags: tagRows.map((tag) => tag.name), mediaAssetIds: mediaRows.map((item) => item.assetId), favorite: favorite.length > 0, places: distinctKnowledgePlaces(places) } satisfies KnowledgeEntryView;
 }
 
 export async function saveKnowledgeEntry(actorId: string, input: Record<string, unknown>, id?: string) {
@@ -80,10 +88,18 @@ export async function saveKnowledgeEntry(actorId: string, input: Record<string, 
   if (input.mediaAssetIds !== undefined && !Array.isArray(input.mediaAssetIds)) throw new Error("INVALID_KNOWLEDGE_MEDIA");
   const alreadyLinked = id ? await db.select({ id: knowledgeMediaRecords.mediaAssetId }).from(knowledgeMediaRecords).where(eq(knowledgeMediaRecords.entryId, entryId)) : [];
   const mediaIds = [...new Set((Array.isArray(input.mediaAssetIds) ? input.mediaAssetIds.map(String) : alreadyLinked.map((row) => row.id)))];
-  if (mediaIds.length > 12) throw new Error("INVALID_KNOWLEDGE_MEDIA");
+  if (mediaIds.length > Math.max(12, alreadyLinked.length)) throw new Error("INVALID_KNOWLEDGE_MEDIA");
   const assets = mediaIds.length ? await db.select().from(mediaAssetRecords).where(inArray(mediaAssetRecords.id, mediaIds)) : [];
   const linkedIds = new Set(alreadyLinked.map((row) => row.id));
   if (assets.length !== mediaIds.length || assets.some((asset) => asset.status !== "ready" || (!linkedIds.has(asset.id) && (asset.uploaderMemberId !== actorId || asset.purpose !== "knowledge_image")))) throw new Error("INVALID_KNOWLEDGE_MEDIA");
+  let placeIds: string[] | undefined;
+  const existingPlaceLinks = id && input.placeIds !== undefined ? await db.select().from(knowledgePlaceLinkRecords).where(eq(knowledgePlaceLinkRecords.entryId, entryId)) : [];
+  if (input.placeIds !== undefined) {
+    if (!Array.isArray(input.placeIds) || input.placeIds.some((id) => typeof id !== "string") || input.placeIds.length > 24) throw new Error("INVALID_KNOWLEDGE_PLACE");
+    placeIds = [...new Set(input.placeIds as string[])];
+    const places = placeIds.length ? await db.select().from(placeRecords).where(inArray(placeRecords.id, placeIds)) : [];
+    if (places.length !== placeIds.length || places.some((place) => !existingPlaceLinks.some((link) => link.placeId === place.id) && place.createdByMemberId !== actorId && !(place.provider === "amap" && place.latitude !== null && place.longitude !== null))) throw new Error("INVALID_KNOWLEDGE_PLACE");
+  }
 
   // D1 batch is atomic: validate every relation before the first write, then
   // commit the entry, tags and images together (including tag-name races).
@@ -103,6 +119,13 @@ export async function saveKnowledgeEntry(actorId: string, input: Record<string, 
   }
   statements.push(d1.prepare("DELETE FROM knowledge_entry_media WHERE entry_id=?").bind(entryId));
   mediaIds.forEach((assetId, sortOrder) => statements.push(d1.prepare("INSERT INTO knowledge_entry_media (entry_id,media_asset_id,sort_order) VALUES (?,?,?)").bind(entryId, assetId, sortOrder)));
+  if (placeIds) {
+    statements.push(d1.prepare("DELETE FROM knowledge_place_links WHERE entry_id=?").bind(entryId));
+    placeIds.forEach((placeId, sortOrder) => {
+      const previous = existingPlaceLinks.filter((link) => link.placeId === placeId);
+      for (const relationType of previous.length ? previous.map((link) => link.relationType) : ["component"]) statements.push(d1.prepare("INSERT INTO knowledge_place_links (entry_id,place_id,relation_type,sort_order) VALUES (?,?,?,?)").bind(entryId, placeId, relationType, sortOrder));
+    });
+  }
   await d1.batch(statements);
   return getKnowledgeEntry(actorId, entryId);
 }
@@ -110,9 +133,12 @@ export async function saveKnowledgeEntry(actorId: string, input: Record<string, 
 export async function softDeleteKnowledge(actorId: string, id: string) { const now = new Date().toISOString(); const result = await getDb().update(knowledgeEntryRecords).set({ deletedAt: now, updatedAt: now, updatedByMemberId: actorId }).where(and(eq(knowledgeEntryRecords.id, id), isNull(knowledgeEntryRecords.deletedAt))).returning({ id: knowledgeEntryRecords.id }); if (!result.length) throw new Error("KNOWLEDGE_NOT_FOUND"); }
 export async function setKnowledgeFavorite(memberId: string, id: string, favorite: boolean) {
   const db = getDb();
-  if (!(await db.select({ id: knowledgeEntryRecords.id }).from(knowledgeEntryRecords).where(and(eq(knowledgeEntryRecords.id, id), isNull(knowledgeEntryRecords.deletedAt))).limit(1))[0]) throw new Error("KNOWLEDGE_NOT_FOUND");
-  if (favorite) await db.insert(knowledgeFavoriteRecords).values({ entryId: id, memberId, createdAt: new Date().toISOString() }).onConflictDoNothing();
-  else await db.delete(knowledgeFavoriteRecords).where(and(eq(knowledgeFavoriteRecords.entryId, id), eq(knowledgeFavoriteRecords.memberId, memberId)));
+  const entry = (await db.select({ id: knowledgeEntryRecords.id, legacyId: knowledgeEntryRecords.legacyRecommendationId }).from(knowledgeEntryRecords).where(and(eq(knowledgeEntryRecords.id, id), isNull(knowledgeEntryRecords.deletedAt))).limit(1))[0];
+  if (!entry) throw new Error("KNOWLEDGE_NOT_FOUND");
+  const d1 = getRuntimeEnv().DB, now = new Date().toISOString();
+  const statements = [favorite ? d1.prepare("INSERT INTO knowledge_favorites (entry_id,member_id,created_at) VALUES (?,?,?) ON CONFLICT DO NOTHING").bind(id, memberId, now) : d1.prepare("DELETE FROM knowledge_favorites WHERE entry_id=? AND member_id=?").bind(id, memberId)];
+  if (entry.legacyId) statements.push(d1.prepare("INSERT INTO recommendation_member_states (recommendation_id,member_id,is_favorite,updated_at) VALUES (?,?,?,?) ON CONFLICT(recommendation_id,member_id) DO UPDATE SET is_favorite=excluded.is_favorite,updated_at=excluded.updated_at").bind(entry.legacyId, memberId, favorite ? 1 : 0, now));
+  await d1.batch(statements);
 }
 
 export async function listKnowledgeTripOptions(memberId: string) { return getDb().select({ id: tripRecords.id, slug: tripRecords.slug, title: tripRecords.title }).from(tripMemberRecords).innerJoin(tripRecords, eq(tripMemberRecords.tripId, tripRecords.id)).where(eq(tripMemberRecords.memberId, memberId)).orderBy(desc(tripRecords.startDate)); }

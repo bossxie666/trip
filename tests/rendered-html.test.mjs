@@ -74,7 +74,7 @@ class TestD1Database {
 const DB = new TestD1Database();
 globalThis.__TRIP_TEST_D1__ = DB;
 globalThis.__TRIP_TEST_ENV__ = { TRIP_SPACE_INVITE_CODE: "test-invite", TRIP_SPACE_SESSION_SECRET: "test-session-secret-at-least-32-characters", AMAP_JS_API_KEY: "test-js-key", AMAP_JS_SECURITY_CODE: "test-js-code", AMAP_WEB_SERVICE_KEY: "test-web-key" };
-for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql", "0014_v2_2_1_confirmed_facts.sql", "0015_v2_4_r1_booking_endpoint_labels.sql", "0016_recommendation_v2.sql", "0017_home_media_guestbook.sql", "0018_recommendation_member_authoring.sql", "0019_albums.sql", "0020_city_centers.sql", "0021_security_rate_limits.sql", "0022_album_photo_management.sql", "0023_member_identity.sql", "0024_knowledge_library.sql", "0025_knowledge_reference_titles.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
+for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql", "0014_v2_2_1_confirmed_facts.sql", "0015_v2_4_r1_booking_endpoint_labels.sql", "0016_recommendation_v2.sql", "0017_home_media_guestbook.sql", "0018_recommendation_member_authoring.sql", "0019_albums.sql", "0020_city_centers.sql", "0021_security_rate_limits.sql", "0022_album_photo_management.sql", "0023_member_identity.sql", "0024_knowledge_library.sql", "0025_knowledge_reference_titles.sql", "0026_knowledge_legacy_favorites.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
 
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
@@ -85,7 +85,7 @@ globalThis.fetch = async (input, init) => {
     const id = url.searchParams.get("id");
     const fixtures = { B0TESTHANGZHOU: ["测试杭州酒店", "杭州市上城区", "120.182860,30.243482", "330102", "0571", "上城区"], B0TESTSHENZHEN: ["深圳宝安国际机场", "宝安区机场路", "113.810664,22.639258", "440306", "0755", "宝安区"], B0TESTPUDONG: ["上海浦东国际机场", "浦东新区机场大道", "121.805199,31.143463", "310115", "021", "浦东新区"] };
     const fixture = fixtures[id] || ["测试外滩", "中山东一路", "121.490317,31.241701", "310101", "021", "黄浦区"];
-    return Response.json({ status: "1", infocode: "10000", pois: [{ id, name: fixture[0], address: fixture[1], location: fixture[2], adcode: fixture[3], citycode: fixture[4], adname: fixture[5], typecode: "110202" }] });
+    return Response.json({ status: "1", infocode: "10000", pois: [{ id, name: fixture[0], address: fixture[1], location: fixture[2], adcode: fixture[3], citycode: fixture[4], cityname: id === "B0TESTHANGZHOU" ? "杭州市" : id === "B0TESTSHENZHEN" ? "深圳市" : "上海市", adname: fixture[5], typecode: "110202" }] });
   }
   if (url.pathname === "/v3/geocode/geo") return Response.json({ status: "1", infocode: "10000", geocodes: [{ formatted_address: "上海市黄浦区中山东一路", location: "121.490317,31.241701", adcode: "310101", citycode: "021", district: "黄浦区" }] });
   if (url.pathname === "/v3/direction/transit/integrated") return Response.json({ status: "1", infocode: "10000", route: { transits: [{ distance: "18400", cost: { duration: "3960", transit_fee: "7" }, segments: [{ walking: { distance: "300", duration: "240", polyline: "121.490317,31.241701;121.492000,31.243000" } }, { bus: { buslines: [{ type: "地铁", name: "地铁2号线", departure_stop: { name: "人民广场" }, arrival_stop: { name: "江苏路" }, distance: "8000", duration: "1800", polyline: "121.492000,31.243000;121.430000,31.220000" }] } }, { bus: { buslines: [{ type: "地铁", name: "地铁11号线", departure_stop: { name: "江苏路" }, arrival_stop: { name: "迪士尼" }, distance: "9800", duration: "1680", polyline: "121.430000,31.220000;121.660000,31.140000" }] } }, { walking: { distance: "300", duration: "240", polyline: "121.660000,31.140000;121.661000,31.141000" } }] }] } });
@@ -323,7 +323,9 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   assert.match(budget, /allocationMode: "custom"/);
   assert.match(budget, /自定义金额/);
   assert.match(overlay, /createPortal/);
-  assert.match(overlay, /document\.body\.style\.overflow = "hidden"/);
+  assert.match(overlay, /useModalLifecycle\(open, surfaceRef, onClose\)/);
+  const modalLifecycle = readFileSync(new URL("../components/site/useModalLifecycle.ts", import.meta.url), "utf8");
+  assert.match(modalLifecycle, /document\.body\.style\.overflow = "hidden"/);
   assert.match(css, /\.trip-console\{gap:10px\}/);
   assert.match(css, /\.trip-console-side\{padding-top:12px\}/);
   assert.match(mobileNavigation, />首页</);
@@ -1007,7 +1009,7 @@ test("protects E1 routes and gives Generic Trip an empty workspace", async () =>
   const saved = sessionCookie; sessionCookie = "";
   const anonymous = await render("/trips/shanghai-hangzhou-2026/plan?view=map&day=trip-shanghai-hangzhou-2026-day-2");
   assert.equal(anonymous.status, 302); assert.equal(new URL(anonymous.headers.get("location")).searchParams.get("returnTo"), "/trips/shanghai-hangzhou-2026/plan?view=map&day=trip-shanghai-hangzhou-2026-day-2");
-  const denied = await render("/api/trips/shanghai-hangzhou-2026/plan/items", { method: "POST", body: { recommendationId: "recommendation-west-lake", dayId: "trip-shanghai-hangzhou-2026-day-5" } }); assert.equal(denied.status, 302);
+  const denied = await render("/api/trips/shanghai-hangzhou-2026/plan/items", { method: "POST", body: { recommendationId: "recommendation-west-lake", dayId: "trip-shanghai-hangzhou-2026-day-5" } }); assert.equal(denied.status, 401); assert.equal((await denied.json()).code, "UNAUTHORIZED");
   sessionCookie = saved;
 });
 
@@ -1137,7 +1139,7 @@ test("creates reusable places and keeps stable Day ordering", async () => {
 
 test("denies anonymous Place writes and preserves seeded members and shadow places", async () => {
   const saved = sessionCookie; sessionCookie = "";
-  const denied = await render("/api/trips/anything/places", { method: "POST", body: { action: "create" } }); assert.equal(denied.status, 302);
+  const denied = await render("/api/trips/anything/places", { method: "POST", body: { action: "create" } }); assert.equal(denied.status, 401); assert.equal((await denied.json()).code, "UNAUTHORIZED");
   sessionCookie = saved;
   assert.equal(DB.database.prepare("SELECT count(*) AS count FROM members").get().count, 5);
   assert.equal(DB.database.prepare("SELECT count(*) AS count FROM places WHERE id LIKE 'place-%'").get().count >= 6, true);
@@ -1580,6 +1582,77 @@ test("authorizes migrated knowledge media only while a shared entry references i
     DB.database.prepare("DELETE FROM media_assets WHERE id=?").run(assetId);
     DB.database.prepare("DELETE FROM member_sessions WHERE member_id=?").run(memberId);
     DB.database.prepare("DELETE FROM members WHERE id=?").run(memberId);
+  }
+});
+
+test("binds verified knowledge POIs without a trip and adds only selected locations", async () => {
+  await loginAs("nini");
+  const saved = sessionCookie, memberId = "member-knowledge-place-test", now = new Date().toISOString();
+  let entryId, trip; const placeIds = [];
+  try {
+    DB.database.prepare("INSERT INTO members (id,name,display_name,active,created_at,role,credential_status) VALUES (?,?,?,1,?,'member','legacy')").run(memberId, "knowledge-place-test", "地点测试", now);
+    await loginAs("knowledge-place-test");
+    const search = await render('/api/knowledge/places?keywords=%E5%A4%96%E6%BB%A9');
+    assert.equal(search.status, 200); assert.equal((await search.json()).pois.length, 1);
+    for (const providerPlaceId of ["B0KNOWLEDGETEST1", "B0KNOWLEDGETEST2"]) {
+      const response = await render("/api/knowledge/places", { method: "POST", body: { providerPlaceId } });
+      assert.equal(response.status, 200); const { place } = await response.json(); placeIds.push(place.id);
+      const again = await render("/api/knowledge/places", { method: "POST", body: { providerPlaceId } });
+      assert.equal((await again.json()).place.id, place.id);
+    }
+    const created = await render("/api/knowledge", { method: "POST", body: { section: "travel_guide", title: "可选择地点的知识", placeIds } });
+    assert.equal(created.status, 201); const { entry } = await created.json(); entryId = entry.id;
+    assert.deepEqual(entry.places.map(place => place.id), placeIds);
+    const invalid = await render(`/api/knowledge/${entryId}`, { method: "PATCH", body: { section: "travel_guide", title: "不能保存", placeIds: ["not-a-place"] } });
+    assert.equal(invalid.status, 400);
+    assert.equal((await (await render(`/api/knowledge/${entryId}`)).json()).entry.title, entry.title);
+    assert.equal((await render("/api/knowledge/places", { method: "POST", headers: { origin: "https://other.example" }, body: { providerPlaceId: "B0KNOWLEDGETEST1" } })).status, 403);
+    sessionCookie = saved;
+    trip = await createTrip({ title: "选择知识地点测试", status: "planning", cities: [], startDate: "2031-07-01", endDate: "2031-07-02", memberIds: ["member-nini"] });
+    const day = DB.database.prepare("SELECT id FROM days WHERE trip_id=? ORDER BY day_number LIMIT 1").get(trip.id);
+    const added = await render(`/api/trips/${trip.slug}/knowledge-items`, { method: "POST", body: { entryId, dayId: day.id, placeIds: [placeIds[1]] } });
+    assert.equal((await added.json()).count, 1);
+    const items = DB.database.prepare("SELECT place_id FROM itinerary_items WHERE trip_id=?").all(trip.id);
+    assert.deepEqual(items.map(item => item.place_id), [placeIds[1]]);
+    assert.equal((await render('/api/knowledge/places?keywords=test', { headers: { cookie: "", accept: "application/json" } })).status, 401);
+  } finally {
+    sessionCookie = saved;
+    if (trip) await render(`/api/trips/${trip.slug}`, { method: "DELETE" });
+    if (entryId) DB.database.prepare("DELETE FROM knowledge_entries WHERE id=?").run(entryId);
+    for (const id of placeIds) DB.database.prepare("DELETE FROM places WHERE id=?").run(id);
+    DB.database.prepare("DELETE FROM member_sessions WHERE member_id=?").run(memberId);
+    DB.database.prepare("DELETE FROM members WHERE id=?").run(memberId);
+  }
+});
+
+test("shows legacy category, price, every reference and image without duplicated summaries", async () => {
+  await loginAs("nini");
+  const id = "legacy-metadata-regression", now = new Date().toISOString(); let entryId;
+  try {
+    DB.database.prepare("INSERT INTO recommendations (id,trip_id,kind,category,title,summary,price_min_minor,price_max_minor,price_currency,price_basis,estimated_duration_minutes,created_at,updated_at) VALUES (?,'trip-shanghai-hangzhou-2026','place','food','旧攻略','仅出现一次的旧简介',1200,2500,'CNY','per_person',90,?,?)").run(id, now, now);
+    for (const index of [1, 2]) DB.database.prepare("INSERT INTO recommendation_references (id,recommendation_id,platform,title,source_url,image_urls_json,sort_order,created_at,updated_at) VALUES (?,?,'web',?,?,?,?,?,?)").run(`${id}-ref-${index}`, id, `来源${index}`, `https://example.com/ref/${index}`, JSON.stringify([`https://example.com/image/${index}.jpg`, 'javascript:bad']), index, now, now);
+    const { entry } = await (await render("/api/knowledge", { method: "POST", body: { section: "travel_guide", title: "迁移后攻略", summary: "仅出现一次的旧简介", body: "仅出现一次的旧简介" } })).json(); entryId = entry.id;
+    DB.database.prepare("UPDATE knowledge_entries SET legacy_recommendation_id=? WHERE id=?").run(id, entryId);
+    const favoriteMigration = readFileSync(new URL("../drizzle/0026_knowledge_legacy_favorites.sql", import.meta.url), "utf8");
+    DB.database.prepare("INSERT INTO recommendation_member_states (recommendation_id,member_id,is_favorite,updated_at) VALUES (?,'member-nini',1,?)").run(id, now);
+    DB.database.exec(favoriteMigration); DB.database.exec(favoriteMigration);
+    assert.equal((await (await render(`/api/knowledge/${entryId}`)).json()).entry.favorite, true);
+    await render(`/api/knowledge/${entryId}/favorite`, { method: "POST", body: { favorite: false } });
+    assert.equal(DB.database.prepare("SELECT is_favorite f FROM recommendation_member_states WHERE recommendation_id=? AND member_id='member-nini'").get(id).f, 0);
+    DB.database.exec(favoriteMigration);
+    assert.equal((await (await render(`/api/knowledge/${entryId}`)).json()).entry.favorite, false);
+    const { setRecommendationFavorite } = await import("../services/recommendation-repository.server.ts");
+    await setRecommendationFavorite(id, "member-nini", true);
+    assert.equal((await (await render(`/api/knowledge/${entryId}`)).json()).entry.favorite, true);
+    const html = await (await render(`/knowledge/${entryId}`)).text();
+    assert.match(html, /美食/); assert.match(html, /12\.00/); assert.match(html, /25\.00/); assert.match(html, /每人/); assert.match(html.replaceAll(/<!--.*?-->/g, ""), /90 分钟/);
+    for (const index of [1, 2]) { assert.ok(html.includes(`https://example.com/ref/${index}`)); assert.ok(html.includes(`https://example.com/image/${index}.jpg`)); }
+    assert.doesNotMatch(html, /javascript:bad/);
+    assert.equal((html.match(/class="knowledge-lead"/g) || []).length, 1);
+    assert.doesNotMatch(html, /class="knowledge-body"><p>仅出现一次的旧简介/);
+  } finally {
+    if (entryId) DB.database.prepare("DELETE FROM knowledge_entries WHERE id=?").run(entryId);
+    DB.database.prepare("DELETE FROM recommendations WHERE id=?").run(id);
   }
 });
 

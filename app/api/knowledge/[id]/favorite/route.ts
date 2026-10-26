@@ -2,6 +2,8 @@ import { getCurrentMember } from "@/services/auth.server";
 import { setKnowledgeFavorite } from "@/services/knowledge-service.server";
 import { apiError, hasValidRequestOrigin } from "@/services/api-response";
 import { knowledgeMutationError } from "@/services/knowledge-api.server";
+import { recordAuditEvent } from "@/services/audit.server";
+import { requestIdFrom } from "@/services/api-response";
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const actor = await getCurrentMember();
   if (!actor) return apiError(request, 401, "UNAUTHORIZED", "请先登录。");
@@ -9,7 +11,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const body = await request.json() as { favorite?: boolean };
     if (!body || typeof body.favorite !== "boolean") return apiError(request, 400, "INVALID_FAVORITE", "收藏状态无效。");
-    await setKnowledgeFavorite(actor.id, (await params).id, body.favorite);
+    const id = (await params).id;
+    await setKnowledgeFavorite(actor.id, id, body.favorite);
+    await recordAuditEvent({ memberId: actor.id, action: "knowledge.favorite", resourceType: "knowledge", resourceId: id, requestId: requestIdFrom(request), metadata: { favorite: body.favorite } });
     return Response.json({ ok: true });
   } catch (error) { return knowledgeMutationError(request, error); }
 }

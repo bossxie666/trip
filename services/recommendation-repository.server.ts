@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { getDb, getRuntimeEnv } from "../db/index.ts";
-import { mediaAssetRecords, placeRecords, recommendationMemberStateRecords, recommendationPlaceOptionRecords, recommendationRecords, recommendationReferenceMediaRecords, recommendationReferenceRecords, tripCityRecords, tripMemberRecords, tripRecords } from "../db/schema.ts";
+import { mediaAssetRecords, placeRecords, recommendationPlaceOptionRecords, recommendationRecords, recommendationReferenceMediaRecords, recommendationReferenceRecords, tripCityRecords, tripMemberRecords, tripRecords } from "../db/schema.ts";
 import { assertCurrency, assertMinorAmount } from "./planning-domain.mjs";
 import type { RecommendationCategory, RecommendationKind, RecommendationPlaceRelation } from "../models/planning.ts";
 
@@ -181,5 +181,9 @@ export async function setRecommendationFavorite(recommendationId: string, member
   const recommendation = (await db.select({ tripId: recommendationRecords.tripId }).from(recommendationRecords).where(and(eq(recommendationRecords.id, recommendationId), isNull(recommendationRecords.deletedAt))).limit(1))[0];
   if (!recommendation) throw new Error("RECOMMENDATION_NOT_FOUND");
   if (!(await db.select({ memberId: tripMemberRecords.memberId }).from(tripMemberRecords).where(and(eq(tripMemberRecords.tripId, recommendation.tripId), eq(tripMemberRecords.memberId, memberId))).limit(1))[0]) throw new Error("MEMBER_NOT_IN_TRIP");
-  await db.insert(recommendationMemberStateRecords).values({ recommendationId, memberId, isFavorite, updatedAt: new Date().toISOString() }).onConflictDoUpdate({ target: [recommendationMemberStateRecords.recommendationId, recommendationMemberStateRecords.memberId], set: { isFavorite, updatedAt: new Date().toISOString() } });
+  const d1 = getRuntimeEnv().DB, now = new Date().toISOString();
+  await d1.batch([
+    d1.prepare("INSERT INTO recommendation_member_states (recommendation_id,member_id,is_favorite,updated_at) VALUES (?,?,?,?) ON CONFLICT(recommendation_id,member_id) DO UPDATE SET is_favorite=excluded.is_favorite,updated_at=excluded.updated_at").bind(recommendationId, memberId, isFavorite ? 1 : 0, now),
+    isFavorite ? d1.prepare("INSERT INTO knowledge_favorites (entry_id,member_id,created_at) SELECT id,?,? FROM knowledge_entries WHERE legacy_recommendation_id=? AND deleted_at IS NULL ON CONFLICT DO NOTHING").bind(memberId, now, recommendationId) : d1.prepare("DELETE FROM knowledge_favorites WHERE member_id=? AND entry_id IN (SELECT id FROM knowledge_entries WHERE legacy_recommendation_id=?)").bind(memberId, recommendationId),
+  ]);
 }

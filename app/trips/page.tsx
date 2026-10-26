@@ -29,7 +29,7 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
   const [trips, members, canDeleteTrips] = actor ? await Promise.all([listTripSummaries(activeStatus, actor.id), listActiveMembers(), isAdminMember(actor.id)]) : [[], [], false];
 
   return (<>
-    {actor && <SiteHeader active="trips" currentMember={{ id: actor.id, displayName: actor.displayName, avatar: actor.avatar }} />}
+    {actor && <SiteHeader active="trips" currentMember={{ id: actor.id, displayName: actor.displayName, avatar: actor.avatar, role: actor.role }} />}
     <main className="archive-index archive-index-with-shell">
       <div className="archive-index-toolbar"><nav className="trip-tabs" aria-label="行程状态">{filters.map((filter) => <Link key={filter.value} className={activeStatus === filter.value ? "active" : ""} href={filter.value === "all" ? "/trips" : `/trips?status=${filter.value}`}>{filter.label}</Link>)}</nav></div><Link className="global-floating-add" aria-label="新建行程" href="/trips/new">＋</Link>
       <section className="trip-list">

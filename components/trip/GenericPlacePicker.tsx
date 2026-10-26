@@ -13,7 +13,7 @@ export type GenericPlaceChoice = {
   source: "existing" | "amap";
 };
 
-export function GenericPlacePicker({ slug, existing = [], value, onChange, autoFocus = false, showExisting = true, placeholder }: { slug: string; existing?: GenericPlaceChoice[]; value: GenericPlaceChoice | null; onChange: (place: GenericPlaceChoice | null) => void; autoFocus?: boolean; showExisting?: boolean; placeholder?: string }) {
+export function GenericPlacePicker({ slug, existing = [], value, onChange, autoFocus = false, showExisting = true, placeholder, searchEndpoint = "/api/amap/places/search" }: { slug: string; existing?: GenericPlaceChoice[]; value: GenericPlaceChoice | null; onChange: (place: GenericPlaceChoice | null) => void; autoFocus?: boolean; showExisting?: boolean; placeholder?: string; searchEndpoint?: string }) {
   const radioName = useId();
   const [query, setQuery] = useState(""), [results, setResults] = useState<GenericPlaceChoice[]>([]), [loading, setLoading] = useState(false), [error, setError] = useState(""), [focused, setFocused] = useState(false);
   useEffect(() => {
@@ -22,15 +22,15 @@ export function GenericPlacePicker({ slug, existing = [], value, onChange, autoF
     const timer = window.setTimeout(async () => {
       setLoading(true); setError("");
       try {
-        const response = await fetch(`/api/amap/places/search?keywords=${encodeURIComponent(query.trim())}&tripSlug=${encodeURIComponent(slug)}`, { signal: controller.signal });
-        const payload = await response.json() as { pois?: Array<Omit<GenericPlaceChoice, "source" | "providerPlaceId">>; error?: string };
-        if (!response.ok) throw new Error(payload.error || "地点搜索失败");
+        const response = await fetch(`${searchEndpoint}?keywords=${encodeURIComponent(query.trim())}&tripSlug=${encodeURIComponent(slug)}`, { signal: controller.signal });
+        const payload = await response.json() as { pois?: Array<Omit<GenericPlaceChoice, "source" | "providerPlaceId">>; error?: string; message?: string };
+        if (!response.ok) throw new Error(payload.message || payload.error || "地点搜索失败");
         setResults((payload.pois || []).map((poi) => ({ ...poi, providerPlaceId: poi.id, source: "amap" })));
       } catch (caught) { if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "地点搜索失败"); }
       finally { if (!controller.signal.aborted) setLoading(false); }
     }, 300);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [query, slug]);
+  }, [query, slug, searchEndpoint]);
   const choices = query.trim() ? results : showExisting ? existing : [];
   const showPopover = focused && (choices.length > 0 || loading || Boolean(error));
   function leave(event: FocusEvent<HTMLDivElement>) {

@@ -86,8 +86,9 @@ const worker = {
 
       if (!isPublicPath(url.pathname)) {
         const memberId = await verifySessionMemberId(readCookie(request, sessionCookieName), env.TRIP_SPACE_SESSION_SECRET, env.DB);
-        const member = memberId ? await env.DB.prepare("SELECT active FROM members WHERE id = ? LIMIT 1").bind(memberId).first<{ active: number }>() : null;
-        if (!member?.active) {
+        // Session verification already joins the member and checks enabled status.
+        if (!memberId) {
+          if (url.pathname.startsWith("/api/")) return finish(Response.json({ code: "UNAUTHORIZED", message: "登录已失效，请重新登录。", error: "登录已失效，请重新登录。", requestId }, { status: 401, headers: { "cache-control": "no-store" } }), "authentication");
           const unlock = new URL("/unlock", request.url);
           unlock.searchParams.set("returnTo", safeInternalReturnTo(`${url.pathname}${url.search}`));
           return finish(Response.redirect(unlock, 302), "authentication");
