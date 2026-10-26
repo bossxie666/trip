@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, isNull, max } from "drizzle-orm";
 import { getDb, getRuntimeEnv } from "../db/index.ts";
-import { dayRecords, itineraryItemParticipantOverrideRecords, itineraryItemRecords, placeRecords, recommendationPlaceOptionRecords, recommendationRecords, tripCityRecords, tripMemberRecords, tripStageRecords } from "../db/schema.ts";
+import { dayRecords, itineraryItemParticipantOverrideRecords, itineraryItemRecords, knowledgeEntryRecords, placeRecords, recommendationPlaceOptionRecords, recommendationRecords, tripCityRecords, tripMemberRecords, tripStageRecords } from "../db/schema.ts";
 import { assertLocalTime, assertUtcInstant } from "./planning-domain.mjs";
 import type { ItineraryItemType } from "../models/planning.ts";
 
@@ -130,9 +130,17 @@ export async function updateItineraryItem(tripId: string, id: string, input: Upd
   }
   const targetDayId = input.dayId ?? item.dayId;
   if (!(await db.select({ id: dayRecords.id }).from(dayRecords).where(and(eq(dayRecords.id, targetDayId), eq(dayRecords.tripId, tripId))).limit(1))[0]) throw new Error("DAY_NOT_IN_TRIP");
+  let knowledgeTitleOverride = item.knowledgeTitleOverride;
+  if (item.knowledgeEntryId && input.title !== undefined) {
+    const [knowledge, linkedPlace] = await Promise.all([
+      db.select({ title: knowledgeEntryRecords.title }).from(knowledgeEntryRecords).where(eq(knowledgeEntryRecords.id, item.knowledgeEntryId)).limit(1),
+      nextPlaceId ? db.select({ name: placeRecords.name }).from(placeRecords).where(eq(placeRecords.id, nextPlaceId)).limit(1) : [],
+    ]);
+    knowledgeTitleOverride = title === (linkedPlace[0]?.name ?? knowledge[0]?.title) ? null : title;
+  }
   const now = new Date().toISOString(), note = input.note === undefined ? item.note : input.note;
   if (targetDayId === item.dayId) {
-    await db.update(itineraryItemRecords).set({ title, note, placeId: nextPlaceId, startTimeLocal, endTimeLocal, timeMode, openingHoursNote, durationMinutes, updatedByMemberId: actorMemberId, updatedAt: now }).where(and(eq(itineraryItemRecords.id, id), eq(itineraryItemRecords.tripId, tripId)));
+    await db.update(itineraryItemRecords).set({ title, knowledgeTitleOverride, note, placeId: nextPlaceId, startTimeLocal, endTimeLocal, timeMode, openingHoursNote, durationMinutes, updatedByMemberId: actorMemberId, updatedAt: now }).where(and(eq(itineraryItemRecords.id, id), eq(itineraryItemRecords.tripId, tripId)));
   } else {
     if (item.lockedAt != null) throw new Error("ITINERARY_ITEM_LOCKED");
     const [sourceItems, targetHighest] = await Promise.all([
@@ -140,7 +148,7 @@ export async function updateItineraryItem(tripId: string, id: string, input: Upd
       db.select({ value: max(itineraryItemRecords.sortOrder) }).from(itineraryItemRecords).where(and(eq(itineraryItemRecords.tripId, tripId), eq(itineraryItemRecords.dayId, targetDayId))),
     ]);
     const remainingIds = sourceItems.map((row) => row.id).filter((itemId) => itemId !== id), targetSortOrder = (targetHighest[0]?.value ?? 0) + 1;
-    const d1 = getRuntimeEnv().DB, statements = [d1.prepare("UPDATE itinerary_items SET day_id = ?, sort_order = ?, title = ?, note = ?, place_id = ?, start_time_local = ?, end_time_local = ?, time_mode = ?, opening_hours_note = ?, duration_minutes = ?, updated_by_member_id = ?, updated_at = ? WHERE id = ? AND trip_id = ?").bind(targetDayId, targetSortOrder, title, note, nextPlaceId, startTimeLocal, endTimeLocal, timeMode, openingHoursNote, durationMinutes, actorMemberId, now, id, tripId)];
+    const d1 = getRuntimeEnv().DB, statements = [d1.prepare("UPDATE itinerary_items SET day_id = ?, sort_order = ?, title = ?, knowledge_title_override = ?, note = ?, place_id = ?, start_time_local = ?, end_time_local = ?, time_mode = ?, opening_hours_note = ?, duration_minutes = ?, updated_by_member_id = ?, updated_at = ? WHERE id = ? AND trip_id = ?").bind(targetDayId, targetSortOrder, title, knowledgeTitleOverride, note, nextPlaceId, startTimeLocal, endTimeLocal, timeMode, openingHoursNote, durationMinutes, actorMemberId, now, id, tripId)];
     for (const [index, itemId] of remainingIds.entries()) statements.push(d1.prepare("UPDATE itinerary_items SET sort_order = ?, updated_at = ? WHERE id = ? AND day_id = ? AND trip_id = ?").bind(-(index + 1), now, itemId, item.dayId, tripId));
     for (const [index, itemId] of remainingIds.entries()) statements.push(d1.prepare("UPDATE itinerary_items SET sort_order = ?, updated_at = ? WHERE id = ? AND day_id = ? AND trip_id = ?").bind(index + 1, now, itemId, item.dayId, tripId));
     await d1.batch(statements);

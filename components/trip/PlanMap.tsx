@@ -43,7 +43,7 @@ async function loadAMap() {
       const script = document.createElement("script"); script.dataset.tripAmap = "true"; script.src = `https://webapi.amap.com/maps?v=${encodeURIComponent(config.version || "2.0")}&key=${encodeURIComponent(jsKey)}`; script.async = true; script.onload = () => finish(); script.onerror = () => finish(new Error("高德地图加载失败。")); timeout = window.setTimeout(() => finish(new Error("高德地图加载超时，请重试。")), 8_000); document.head.appendChild(script);
     });
     if (!window.AMap) throw new Error("高德地图加载失败。"); return window.AMap;
-  })().catch((caught) => { loader = null; throw caught; });
+  })().catch((caught) => { loader = null; document.querySelector("script[data-trip-amap]")?.remove(); throw caught; });
   return loader;
 }
 
@@ -76,6 +76,7 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
   const { refreshWorkspace } = useWorkspaceNavigation();
   const container = useRef<HTMLDivElement>(null), mapRef = useRef<AMapObject | null>(null), overlays = useRef<unknown[]>([]), markerObjects = useRef<AMapMarker[]>([]), lastFitSignature = useRef(""), focusedFitSignatureRef = useRef(""), fitContextRef = useRef(""), userHasInteractedWithMap = useRef(false), searchAbortRef = useRef<AbortController | null>(null), searchRequestRef = useRef(0), routeAbortRef = useRef<AbortController | null>(null), routeRequestRef = useRef(0);
   const defaultRouteKey = useRef("");
+  const [mapAttempt, setMapAttempt] = useState(0), [mapError, setMapError] = useState("");
   const [ready, setReady] = useState(false), [error, setError] = useState(""), [search, setSearch] = useState(""), [searching, setSearching] = useState(false), [searchResults, setSearchResults] = useState<SearchPoi[]>([]), [selectedSearch, setSelectedSearch] = useState<string | null>(null), [selectedMapEntryId, setSelectedMapEntryId] = useState<string | null>(null), [focusedRecommendationId, setFocusedRecommendationId] = useState<string | null>(null), [bindingBookingId, setBindingBookingId] = useState(""), [area, setArea] = useState("all"), [category, setCategory] = useState("all"), [dayFilter, setDayFilter] = useState("all"), [memberFilter, setMemberFilter] = useState(workspace?.memberFilter || workspace?.currentMemberId || "all"), [targetDayId, setTargetDayId] = useState(activeDayId || ""), [routeResults, setRouteResults] = useState<Record<string, AMapRouteResult>>({}), [routeComparisons, setRouteComparisons] = useState<Record<string, Partial<Record<AMapRouteMode, AMapRouteResult>>>>({}), [routeStale, setRouteStale] = useState<Record<string, boolean>>({}), [routing, setRouting] = useState<string | null>(null), [viewport, setViewport] = useState<{ south: number; west: number; north: number; east: number } | null>(null), [manualPoint, setManualPoint] = useState<{ longitude: number; latitude: number } | null>(null), [manualName, setManualName] = useState(""), [manualAddress, setManualAddress] = useState(""), [manualBookingId, setManualBookingId] = useState("");
   const activeDay = workspace?.days.find((day) => day.id === activeDayId) || workspace?.days[0];
   const timelineNodes = activeDay ? workspace?.timelineNodesByDay?.[activeDay.id] || [] : [];
@@ -135,6 +136,7 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
   useEffect(() => {
     let cancelled = false, frame = 0, attempts = 0;
     let observer: ResizeObserver | null = null;
+    setReady(false); setMapError(""); lastFitSignature.current = "";
     loadAMap().then((AMap) => {
       const mount = () => {
         const target = container.current;
@@ -144,7 +146,8 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
           frame = window.requestAnimationFrame(mount);
           return;
         }
-        mapRef.current = new AMap.Map(target, { zoom: 11, center: [121.47, 31.23], viewMode: "2D" });
+        try { mapRef.current = new AMap.Map(target, { zoom: 11, center: [121.47, 31.23], viewMode: "2D" }); }
+        catch { setMapError("地图初始化失败，请重试。"); return; }
         if (typeof ResizeObserver !== "undefined") {
           observer = new ResizeObserver(() => mapRef.current?.resize?.());
           observer.observe(target);
@@ -152,9 +155,9 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
         setReady(true);
       };
       frame = window.requestAnimationFrame(mount);
-    }).catch((caught) => { if (!cancelled) setError(caught instanceof Error ? caught.message : "地图加载失败。"); });
+    }).catch((caught) => { if (!cancelled) setMapError(caught instanceof Error ? caught.message : "地图加载失败。"); });
     return () => { cancelled = true; window.cancelAnimationFrame(frame); observer?.disconnect(); mapRef.current?.destroy(); mapRef.current = null; };
-  }, []);
+  }, [mapAttempt]);
   useEffect(() => { setMemberFilter(workspace?.memberFilter || workspace?.currentMemberId || "all"); }, [workspace?.memberFilter, workspace?.currentMemberId]);
   useEffect(() => { if (mapMode === "library") setFocusedRecommendationId(new URLSearchParams(window.location.search).get("focusRecommendation")); }, [mapMode]);
   useEffect(() => { if (!ready || !mapRef.current?.on) return; const map = mapRef.current; const updateViewport = () => { const bounds = map.getBounds?.(), sw = bounds?.getSouthWest?.(), ne = bounds?.getNorthEast?.(); if (sw && ne) setViewport({ south: sw.lat, west: sw.lng, north: ne.lat, east: ne.lng }); }; const markInteraction = () => { userHasInteractedWithMap.current = true; }; map.on("moveend", updateViewport); map.on("zoomend", updateViewport); map.on("dragstart", markInteraction); map.on("zoomstart", markInteraction); map.on("movestart", markInteraction); updateViewport(); return () => { map.off?.("moveend", updateViewport); map.off?.("zoomend", updateViewport); map.off?.("dragstart", markInteraction); map.off?.("zoomstart", markInteraction); map.off?.("movestart", markInteraction); }; }, [ready]);
@@ -436,7 +439,7 @@ export function PlanMap({ slug, places = [], workspace, activeDayId, mapMode = "
     {!compact && manualPoint && workspace && <div className="map-manual-point" role="dialog" aria-label="手动地图选点"><b>手动地点 · {manualPoint.longitude.toFixed(5)}, {manualPoint.latitude.toFixed(5)}</b><label>名称<input value={manualName} onChange={(event) => setManualName(event.target.value)} placeholder="例如：集合点" autoFocus /></label><label>地址或备注<input value={manualAddress} onChange={(event) => setManualAddress(event.target.value)} placeholder="可选" /></label>{workspace.bookings?.length ? <label>同时绑定订单（可选）<select value={manualBookingId} onChange={(event) => setManualBookingId(event.target.value)}><option value="">不绑定订单</option>{workspace.bookings.map((booking) => <option key={booking.id} value={booking.id}>{booking.title}</option>)}</select></label> : null}<div><button type="button" onClick={createManualPoint} disabled={searching || !manualName.trim()}>保存地点</button><button type="button" onClick={() => setManualPoint(null)}>取消</button></div></div>}
     {!compact && mapMode === "library" && workspace?.savedPlaces?.length ? <section className="saved-place-list"><header><b>暂存地点</b><small>不属于正式行程，选择后再加入目标 Day</small></header>{workspace.savedPlaces.map((saved) => <article key={saved.id}><div><strong>{saved.place.name}</strong><small>{saved.place.address || saved.note || "暂存地点"}</small></div><div><button type="button" onClick={async () => { const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/plan/items`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ dayId: targetDayId || activeDay?.id, placeId: saved.place.id, itemType: "place" }) }); if (response.ok) refreshWorkspace(); }}>加入 Day</button><button type="button" onClick={() => saveSavedAsRecommendation(saved)} disabled={searching}>收藏攻略</button><button type="button" onClick={async () => { const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/saved-places?id=${encodeURIComponent(saved.id)}`, { method: "DELETE" }); if (response.ok) refreshWorkspace(); }}>删除</button></div></article>)}</section> : null}
     {!compact && renderRouteDirectory()}
-    <div className="plan-map-canvas-wrap"><div ref={container} className="plan-map-canvas" aria-label="高德地图" />{!ready && !error && <p>地图加载中…</p>}{ready && !visible.length && <p>当前视图还没有带坐标的地点。</p>}</div>
+    <div className="plan-map-canvas-wrap"><div ref={container} className="plan-map-canvas" aria-label="高德地图" />{!ready && !mapError && <p role="status">地图加载中…</p>}{mapError && <div className="map-recovery" role="alert"><p>{mapError}</p><button type="button" onClick={() => setMapAttempt((attempt) => attempt + 1)}>重新加载地图</button></div>}{ready && !visible.length && <p>当前视图还没有带坐标的地点。</p>}</div>
     {!compact && mapMode === "library" && <p className="map-hint">攻略地图默认展示整趟旅行的地点分布。正式行程、Booking、攻略素材、暂存地点和候选点会用不同透明度区分（候选点为淡色 Marker）；拖动后点击“搜索此区域”才会请求候选 POI。</p>}
     {error && <p className="form-error" role="alert">{error}</p>}
   </div>;

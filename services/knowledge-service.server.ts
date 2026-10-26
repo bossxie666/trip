@@ -8,7 +8,12 @@ export type KnowledgeEntryView = typeof knowledgeEntryRecords.$inferSelect & { t
 
 function safeSection(value?: string | null): KnowledgeSection | null { return knowledgeSections.includes(value as KnowledgeSection) ? value as KnowledgeSection : null; }
 function normalizedTags(value: unknown) { return [...new Set((Array.isArray(value) ? value : []).map(String).map((tag) => tag.trim()).filter(Boolean).slice(0, 8))]; }
-function safeUrl(value: unknown) { const raw = String(value || "").trim(); if (!raw) return null; const url = new URL(raw); if (url.protocol !== "https:") throw new Error("INVALID_EXTERNAL_URL"); return url.toString(); }
+function safeUrl(value: unknown) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  try { const url = new URL(raw); if (url.protocol !== "https:") throw new Error(); return url.toString(); }
+  catch { throw new Error("INVALID_EXTERNAL_URL"); }
+}
 
 export async function listKnowledge(memberId: string, filters: { section?: string; q?: string; tag?: string; destination?: string; favorite?: boolean } = {}) {
   const db = getDb(); const section = safeSection(filters.section); const q = filters.q?.trim().slice(0, 80); const pattern = q ? `%${q.replaceAll("%", "\\%").replaceAll("_", "\\_")}%` : null;
@@ -44,28 +49,50 @@ export async function getKnowledgeEntry(memberId: string, id: string) {
 }
 
 export async function saveKnowledgeEntry(actorId: string, input: Record<string, unknown>, id?: string) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("INVALID_KNOWLEDGE_ENTRY");
   const db = getDb(), section = safeSection(String(input.section || "")), title = String(input.title || "").trim().slice(0, 120);
   if (!section || !title) throw new Error("INVALID_KNOWLEDGE_ENTRY");
   const body = String(input.body || "").trim().slice(0, 12000) || null, summary = String(input.summary || "").trim().slice(0, 500) || null, destination = String(input.destination || "").trim().slice(0, 100) || null, externalUrl = safeUrl(input.externalUrl), now = new Date().toISOString(), entryId = id || crypto.randomUUID();
-  const mediaIds = [...new Set((Array.isArray(input.mediaAssetIds) ? input.mediaAssetIds : []).map(String))].slice(0, 12);
   if (id) {
     const existing = (await db.select({ id: knowledgeEntryRecords.id }).from(knowledgeEntryRecords).where(and(eq(knowledgeEntryRecords.id, id), isNull(knowledgeEntryRecords.deletedAt))).limit(1))[0]; if (!existing) throw new Error("KNOWLEDGE_NOT_FOUND");
-    await db.update(knowledgeEntryRecords).set({ section, title, body, summary, destination, externalUrl, updatedByMemberId: actorId, updatedAt: now }).where(eq(knowledgeEntryRecords.id, id));
-  } else await db.insert(knowledgeEntryRecords).values({ id: entryId, section, title, body, summary, destination, externalUrl, createdByMemberId: actorId, updatedByMemberId: actorId, createdAt: now, updatedAt: now });
-  await db.delete(knowledgeEntryTagRecords).where(eq(knowledgeEntryTagRecords.entryId, entryId));
-  for (const name of normalizedTags(input.tags)) { const normalized = name.toLocaleLowerCase("zh-CN"); let tag = (await db.select().from(knowledgeTagRecords).where(eq(knowledgeTagRecords.normalizedName, normalized)).limit(1))[0]; if (!tag) { tag = { id: crypto.randomUUID(), name, normalizedName: normalized, createdAt: now }; await db.insert(knowledgeTagRecords).values(tag); } await db.insert(knowledgeEntryTagRecords).values({ entryId, tagId: tag.id }).onConflictDoNothing(); }
+  }
+  if (input.mediaAssetIds !== undefined && !Array.isArray(input.mediaAssetIds)) throw new Error("INVALID_KNOWLEDGE_MEDIA");
   const alreadyLinked = id ? await db.select({ id: knowledgeMediaRecords.mediaAssetId }).from(knowledgeMediaRecords).where(eq(knowledgeMediaRecords.entryId, entryId)) : [];
-  const uploaded = mediaIds.length ? await db.select({ id: mediaAssetRecords.id }).from(mediaAssetRecords).where(and(inArray(mediaAssetRecords.id, mediaIds), eq(mediaAssetRecords.uploaderMemberId, actorId), eq(mediaAssetRecords.purpose, "knowledge_image"), eq(mediaAssetRecords.status, "ready"))) : [];
-  const allowed = new Set([...alreadyLinked, ...uploaded].map((item) => item.id));
-  if (mediaIds.some((assetId) => !allowed.has(assetId))) throw new Error("INVALID_KNOWLEDGE_MEDIA");
-  await db.delete(knowledgeMediaRecords).where(eq(knowledgeMediaRecords.entryId, entryId));
-  if (mediaIds.length) await db.insert(knowledgeMediaRecords).values(mediaIds.map((assetId, sortOrder) => ({ entryId, mediaAssetId: assetId, sortOrder })));
-  await db.update(knowledgeEntryRecords).set({ coverMediaAssetId: mediaIds[0] || null }).where(eq(knowledgeEntryRecords.id, entryId));
+  const mediaIds = [...new Set((Array.isArray(input.mediaAssetIds) ? input.mediaAssetIds.map(String) : alreadyLinked.map((row) => row.id)))];
+  if (mediaIds.length > 12) throw new Error("INVALID_KNOWLEDGE_MEDIA");
+  const assets = mediaIds.length ? await db.select().from(mediaAssetRecords).where(inArray(mediaAssetRecords.id, mediaIds)) : [];
+  const linkedIds = new Set(alreadyLinked.map((row) => row.id));
+  if (assets.length !== mediaIds.length || assets.some((asset) => asset.status !== "ready" || (!linkedIds.has(asset.id) && (asset.uploaderMemberId !== actorId || asset.purpose !== "knowledge_image")))) throw new Error("INVALID_KNOWLEDGE_MEDIA");
+
+  // D1 batch is atomic: validate every relation before the first write, then
+  // commit the entry, tags and images together (including tag-name races).
+  const d1 = getRuntimeEnv().DB;
+  const statements = [id
+    ? d1.prepare("UPDATE knowledge_entries SET section=?,title=?,body=?,summary=?,destination=?,external_url=?,cover_media_asset_id=?,updated_by_member_id=?,updated_at=? WHERE id=? AND deleted_at IS NULL").bind(section, title, body, summary, destination, externalUrl, mediaIds[0] || null, actorId, now, entryId)
+    : d1.prepare("INSERT INTO knowledge_entries (id,section,title,body,summary,destination,external_url,cover_media_asset_id,created_by_member_id,updated_by_member_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)").bind(entryId, section, title, body, summary, destination, externalUrl, mediaIds[0] || null, actorId, actorId, now, now),
+  ];
+  if (input.tags !== undefined || !id) {
+    statements.push(d1.prepare("DELETE FROM knowledge_entry_tags WHERE entry_id=?").bind(entryId));
+    const tags = new Map(normalizedTags(input.tags).map((name) => [name.toLocaleLowerCase("zh-CN"), name]));
+    for (const [normalized, name] of tags) {
+      if (name.length > 32) throw new Error("INVALID_KNOWLEDGE_TAG");
+      statements.push(d1.prepare("INSERT INTO knowledge_tags (id,name,normalized_name,created_at) VALUES (?,?,?,?) ON CONFLICT(normalized_name) DO NOTHING").bind(crypto.randomUUID(), name, normalized, now));
+      statements.push(d1.prepare("INSERT INTO knowledge_entry_tags (entry_id,tag_id) SELECT ?,id FROM knowledge_tags WHERE normalized_name=? ON CONFLICT DO NOTHING").bind(entryId, normalized));
+    }
+  }
+  statements.push(d1.prepare("DELETE FROM knowledge_entry_media WHERE entry_id=?").bind(entryId));
+  mediaIds.forEach((assetId, sortOrder) => statements.push(d1.prepare("INSERT INTO knowledge_entry_media (entry_id,media_asset_id,sort_order) VALUES (?,?,?)").bind(entryId, assetId, sortOrder)));
+  await d1.batch(statements);
   return getKnowledgeEntry(actorId, entryId);
 }
 
 export async function softDeleteKnowledge(actorId: string, id: string) { const now = new Date().toISOString(); const result = await getDb().update(knowledgeEntryRecords).set({ deletedAt: now, updatedAt: now, updatedByMemberId: actorId }).where(and(eq(knowledgeEntryRecords.id, id), isNull(knowledgeEntryRecords.deletedAt))).returning({ id: knowledgeEntryRecords.id }); if (!result.length) throw new Error("KNOWLEDGE_NOT_FOUND"); }
-export async function setKnowledgeFavorite(memberId: string, id: string, favorite: boolean) { const db = getDb(); if (favorite) await db.insert(knowledgeFavoriteRecords).values({ entryId: id, memberId, createdAt: new Date().toISOString() }).onConflictDoNothing(); else await db.delete(knowledgeFavoriteRecords).where(and(eq(knowledgeFavoriteRecords.entryId, id), eq(knowledgeFavoriteRecords.memberId, memberId))); }
+export async function setKnowledgeFavorite(memberId: string, id: string, favorite: boolean) {
+  const db = getDb();
+  if (!(await db.select({ id: knowledgeEntryRecords.id }).from(knowledgeEntryRecords).where(and(eq(knowledgeEntryRecords.id, id), isNull(knowledgeEntryRecords.deletedAt))).limit(1))[0]) throw new Error("KNOWLEDGE_NOT_FOUND");
+  if (favorite) await db.insert(knowledgeFavoriteRecords).values({ entryId: id, memberId, createdAt: new Date().toISOString() }).onConflictDoNothing();
+  else await db.delete(knowledgeFavoriteRecords).where(and(eq(knowledgeFavoriteRecords.entryId, id), eq(knowledgeFavoriteRecords.memberId, memberId)));
+}
 
 export async function listKnowledgeTripOptions(memberId: string) { return getDb().select({ id: tripRecords.id, slug: tripRecords.slug, title: tripRecords.title }).from(tripMemberRecords).innerJoin(tripRecords, eq(tripMemberRecords.tripId, tripRecords.id)).where(eq(tripMemberRecords.memberId, memberId)).orderBy(desc(tripRecords.startDate)); }
 export async function linkKnowledgeToTrip(memberId: string, entryId: string, tripId: string) { const membership = (await getDb().select({ id: tripMemberRecords.tripId }).from(tripMemberRecords).where(and(eq(tripMemberRecords.memberId, memberId), eq(tripMemberRecords.tripId, tripId))).limit(1))[0]; if (!membership) throw new Error("TRIP_FORBIDDEN"); await getDb().insert(knowledgeTripLinkRecords).values({ entryId, tripId, createdByMemberId: memberId, createdAt: new Date().toISOString() }).onConflictDoNothing(); }

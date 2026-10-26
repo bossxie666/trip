@@ -26,6 +26,7 @@ import { isTransportBooking, transportDisplayLabel } from "@/services/booking-se
 import { summarizeAccommodation } from "@/services/accommodation-summary";
 import { TripBookShell } from "./TripBookShell";
 import { KnowledgeTripPicker } from "./KnowledgeTripPicker";
+import { KnowledgeReferenceControl } from "./KnowledgeReferenceControl";
 
 const PlanMap = dynamic(() => import("./PlanMap").then((module) => module.PlanMap));
 const BudgetWorkspace = dynamic(() => import("./BudgetWorkspace").then((module) => module.BudgetWorkspace));
@@ -192,6 +193,7 @@ export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query
         {transportEndpoint && node.endpoint === "destination" && entryBookingId && <div className="timeline-node-action"><BookingPlaceControl slug={trip.slug} bookingId={entryBookingId} slot="destination" cities={trip.cities.map((city) => ({ id: city.id, name: city.name }))} currentPlace={destinationPlace || null} currentLabel={entryBooking?.destinationLabel} label={destinationPlace ? "修改终点" : "完善终点"} /></div>}
         {detail && <>
           <p>{detail.item.placeId ? `地点：${detail.place?.name || "已绑定"}` : "地点待确认"}{detail.recommendationTitle ? ` · 来源：${detail.recommendationTitle}` : ""}{detail.item.timeMode === "opening_hours" ? ` · ${detail.item.openingHoursNote || "营业时间待确认"}` : ""}</p>
+          {detail.knowledge && <KnowledgeReferenceControl slug={trip.slug} itemId={detail.item.id} entry={detail.knowledge} />}
           {detail.item.placeId ? null : <ItineraryItemPlaceControl slug={trip.slug} itemId={detail.item.id} cities={trip.cities.map((city) => ({ id: city.id, name: city.name }))} currentPlace={null} />}
           <div className="timeline-node-controls"><ItineraryItemControl slug={trip.slug} item={detail.item} days={dayLabels} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} participantStates={detail.participantStates} participantOverrides={detail.participantOverrides} dayPresenceState={workspace.dayPresenceByDay?.[activeDay!.id] || {}} allowOpeningHours={detail.item.itemType !== "lodging" && !/酒店|住宿|入住/.test(detail.item.title)} /><ItineraryOrderControls slug={trip.slug} dayId={activeDay!.id} itemId={detail.item.id} itemIds={itemIds} locked={Boolean(detail.item.lockedAt)} /></div>
         </>}

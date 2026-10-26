@@ -509,6 +509,7 @@ export const itineraryItemRecords = sqliteTable("itinerary_items", {
   stageId: text("stage_id").references(() => tripStageRecords.id, { onDelete: "restrict" }),
   recommendationId: text("recommendation_id").references(() => recommendationRecords.id, { onDelete: "set null" }),
   knowledgeEntryId: text("knowledge_entry_id").references(() => knowledgeEntryRecords.id, { onDelete: "set null" }),
+  knowledgeTitleOverride: text("knowledge_title_override"),
   placeId: text("place_id").references(() => placeRecords.id, { onDelete: "restrict" }),
   originPlaceId: text("origin_place_id").references(() => placeRecords.id, { onDelete: "restrict" }),
   destinationPlaceId: text("destination_place_id").references(() => placeRecords.id, { onDelete: "restrict" }),

@@ -1,7 +1,7 @@
 import { getRuntimeEnv } from "@/db";
 import { findActiveMemberByName } from "@/services/member-repository.server";
 import { consumeRateLimit, rateLimitResponse, requestClientIdentifier } from "@/services/rate-limit.server";
-import { createSessionToken, sessionCookieName } from "@/services/session";
+import { sessionCookieName } from "@/services/session";
 import { activateCredential, credentialStatus, issueServerSession, revokeSession, verifyPassword } from "@/services/identity-auth.server";
 import { readCookie } from "@/services/session";
 import { recordAuditEvent } from "@/services/audit.server";
@@ -39,6 +39,7 @@ export async function POST(request: Request) {
   const member = memberName ? await findActiveMemberByName(memberName) : null;
   if (!member) return Response.json({ code: "INVALID_CREDENTIALS", error: "成员或密码不正确。" }, { status: 401 });
   const status = await credentialStatus(member.id);
+  if (!status) return Response.json({ code: "AUTH_UNAVAILABLE", error: "登录服务暂时不可用，请稍后重试。" }, { status: 503 });
   let token: string;
   let activationRequired = false;
   if (status?.credential_status === "disabled") return Response.json({ code: "MEMBER_DISABLED", error: "这个成员账号已停用。" }, { status: 403 });
@@ -58,7 +59,7 @@ export async function POST(request: Request) {
       token = await issueServerSession(member.id, request.headers.get("user-agent"));
       await recordAuditEvent({ memberId: member.id, action: "credential.activate", resourceType: "member", resourceId: member.id, requestId });
     } else {
-      token = await createSessionToken(member.id, env.TRIP_SPACE_SESSION_SECRET);
+      token = await issueServerSession(member.id, request.headers.get("user-agent"));
       activationRequired = Boolean(status);
     }
   }

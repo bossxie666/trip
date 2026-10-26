@@ -6,6 +6,7 @@ import { buildIdentitySwitchReturnTo } from "../services/identity-navigation.ts"
 import { summarizeAccommodation } from "../services/accommodation-summary.ts";
 import { isTransportBooking, railwayDisplayLabel } from "../services/booking-semantics.ts";
 import { isFerryLeg, transitLineSummary } from "../services/amap/route-presentation.ts";
+import { selectUpcomingTrip } from "../services/upcoming-trip.ts";
 
 test("derives one accommodation summary without double-counting booking totals", () => {
   const summary = summarizeAccommodation([
@@ -63,15 +64,15 @@ class TestD1Statement {
 }
 
 class TestD1Database {
-  constructor() { this.database = new DatabaseSync(":memory:"); this.database.exec("PRAGMA foreign_keys = ON"); this.prepareCount = 0; }
+  constructor() { this.database = new DatabaseSync(":memory:"); this.database.exec("PRAGMA foreign_keys = ON"); this.prepareCount = 0; this.failBatchAt = null; }
   prepare(sql) { this.prepareCount += 1; return new TestD1Statement(this.database, sql); }
-  async batch(statements) { this.database.exec("BEGIN IMMEDIATE"); try { const results = []; for (const statement of statements) results.push(await statement.all()); this.database.exec("COMMIT"); return results; } catch (error) { this.database.exec("ROLLBACK"); throw error; } }
+  async batch(statements) { this.database.exec("BEGIN IMMEDIATE"); try { const results = []; for (const [index, statement] of statements.entries()) { if (index === this.failBatchAt) { this.failBatchAt = null; throw new Error("INJECTED_BATCH_FAILURE"); } results.push(await statement.all()); } this.database.exec("COMMIT"); return results; } catch (error) { this.database.exec("ROLLBACK"); throw error; } finally { this.failBatchAt = null; } }
 }
 
 const DB = new TestD1Database();
 globalThis.__TRIP_TEST_D1__ = DB;
 globalThis.__TRIP_TEST_ENV__ = { TRIP_SPACE_INVITE_CODE: "test-invite", TRIP_SPACE_SESSION_SECRET: "test-session-secret-at-least-32-characters", AMAP_JS_API_KEY: "test-js-key", AMAP_JS_SECURITY_CODE: "test-js-code", AMAP_WEB_SERVICE_KEY: "test-web-key" };
-for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql", "0014_v2_2_1_confirmed_facts.sql", "0015_v2_4_r1_booking_endpoint_labels.sql", "0016_recommendation_v2.sql", "0017_home_media_guestbook.sql", "0018_recommendation_member_authoring.sql", "0019_albums.sql", "0020_city_centers.sql", "0021_security_rate_limits.sql", "0022_album_photo_management.sql", "0023_member_identity.sql", "0024_knowledge_library.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
+for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql", "0014_v2_2_1_confirmed_facts.sql", "0015_v2_4_r1_booking_endpoint_labels.sql", "0016_recommendation_v2.sql", "0017_home_media_guestbook.sql", "0018_recommendation_member_authoring.sql", "0019_albums.sql", "0020_city_centers.sql", "0021_security_rate_limits.sql", "0022_album_photo_management.sql", "0023_member_identity.sql", "0024_knowledge_library.sql", "0025_knowledge_reference_titles.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
 
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
@@ -1301,5 +1302,129 @@ test("keeps budget plans, expenses, and booking edits member-scoped", async () =
   assert.equal(DB.database.prepare("SELECT json_group_array(json_object('trip',trip_id,'place',place_id,'status',plan_status)) value FROM (SELECT * FROM trip_places ORDER BY trip_id, place_id)").get().value, legacyTripBefore);
   const finalHtml = await (await render("/trips/shanghai-hangzhou-2026/plan?view=budget")).text();
   assert.match(finalHtml, /value="120\.00"/); assert.match(finalHtml, /共享晚餐均摊/); assert.match(finalHtml, /我的费用待确认/);
+});
+
+test("keeps knowledge unchanged on validation and transactional write failures", async () => {
+  await loginAs("nini");
+  const created = await render("/api/knowledge", { method: "POST", body: { section: "photography", title: "原始摄影知识", tags: ["原始标签"] } });
+  assert.equal(created.status, 201);
+  const { entry } = await created.json();
+  const countBefore = DB.database.prepare("SELECT count(*) n FROM knowledge_entries").get().n;
+  const rejected = await render(`/api/knowledge/${entry.id}`, { method: "PATCH", body: { section: "photography", title: "不应保存的标题", tags: ["错误标签"], mediaAssetIds: ["nonexistent-image"] } });
+  assert.equal(rejected.status, 400);
+  assert.equal(DB.database.prepare("SELECT title FROM knowledge_entries WHERE id=?").get(entry.id).title, entry.title);
+  const failedCreate = await render("/api/knowledge", { method: "POST", body: { section: "photography", title: "不应创建", mediaAssetIds: ["nonexistent-image"] } });
+  assert.equal(failedCreate.status, 400);
+  assert.equal(DB.database.prepare("SELECT count(*) n FROM knowledge_entries").get().n, countBefore);
+  DB.failBatchAt = 2;
+  const rolledBack = await render(`/api/knowledge/${entry.id}`, { method: "PATCH", body: { section: "photography", title: "事务失败不能保存", tags: ["不会留下的标签"] } });
+  assert.equal(rolledBack.status, 500);
+  assert.equal((await rolledBack.json()).code, "KNOWLEDGE_SAVE_FAILED");
+  const after = await (await render(`/api/knowledge/${entry.id}`)).json();
+  assert.equal(after.entry.title, entry.title);
+  assert.deepEqual(after.entry.tags, ["原始标签"]);
+  assert.equal(DB.database.prepare("SELECT count(*) n FROM knowledge_tags WHERE name='不会留下的标签'").get().n, 0);
+  const caseTags = await render(`/api/knowledge/${entry.id}`, { method: "PATCH", body: { section: "photography", title: entry.title, tags: ["City", "city"] } });
+  assert.equal(caseTags.status, 200);
+  assert.equal((await caseTags.json()).entry.tags.length, 1);
+});
+
+test("uses revocable sessions for unactivated members and rejects signed legacy cookies", async () => {
+  await loginAs("nini");
+  assert.match(sessionCookie, /^trip_space_session=v2\./);
+  const { createSessionToken } = await import("../services/session.ts");
+  const signed = await createSessionToken("member-nini", globalThis.__TRIP_TEST_ENV__.TRIP_SPACE_SESSION_SECRET);
+  const denied = await render("/trips", { headers: { cookie: `trip_space_session=${signed}` } });
+  assert.equal(denied.status, 302);
+  const saved = sessionCookie;
+  const logout = await render("/api/session?all=true", { method: "DELETE" });
+  assert.equal(logout.status, 200);
+  assert.equal((await render("/trips", { headers: { cookie: saved } })).status, 302);
+  await loginAs("nini");
+});
+
+test("keeps shared knowledge current across trips, preserves custom names and safely detaches", async () => {
+  await loginAs("nini");
+  const created = await render("/api/knowledge", { method: "POST", body: { section: "travel_guide", title: "共享知识初始标题", body: "共同正文" } });
+  const { entry } = await created.json();
+  const trips = [];
+  try {
+    for (const suffix of ["A", "B"]) trips.push(await createTrip({ title: `知识引用测试${suffix}`, status: "planning", cities: [], startDate: "2031-05-01", endDate: "2031-05-02", memberIds: ["member-nini"] }));
+    for (const trip of trips) {
+      const day = DB.database.prepare("SELECT id FROM days WHERE trip_id=? ORDER BY day_number LIMIT 1").get(trip.id);
+      const added = await render(`/api/trips/${trip.slug}/knowledge-items`, { method: "POST", body: { entryId: entry.id, dayId: day.id } });
+      assert.equal(added.status, 200);
+      assert.equal((await added.json()).count, 1);
+      const repeated = await render(`/api/trips/${trip.slug}/knowledge-items`, { method: "POST", body: { entryId: entry.id, dayId: day.id } });
+      assert.equal((await repeated.json()).count, 0);
+    }
+    assert.equal((await render(`/api/knowledge/${entry.id}`, { method: "PATCH", body: { section: "travel_guide", title: "共享知识更新标题", body: "更新正文" } })).status, 200);
+    for (const trip of trips) {
+      const html = await (await render(`/trips/${trip.slug}/plan`)).text();
+      assert.match(html, /共享知识更新标题/);
+      assert.doesNotMatch(html, /共享知识初始标题/);
+      assert.ok(html.includes(`/knowledge/${entry.id}`));
+    }
+    const item = DB.database.prepare("SELECT id FROM itinerary_items WHERE trip_id=? AND knowledge_entry_id=?").get(trips[0].id, entry.id);
+    const renamed = await render(`/api/trips/${trips[0].slug}/plan/items/${item.id}`, { method: "PATCH", body: { title: "我的独立行程名" } });
+    assert.equal(renamed.status, 200);
+    await render(`/api/knowledge/${entry.id}`, { method: "PATCH", body: { section: "travel_guide", title: "知识再次更新" } });
+    const customHtml = await (await render(`/trips/${trips[0].slug}/plan`)).text();
+    assert.match(customHtml, /我的独立行程名/); assert.match(customHtml, /知识再次更新/);
+    const detached = await render(`/api/trips/${trips[0].slug}/knowledge-items`, { method: "DELETE", body: { itemId: item.id } });
+    assert.equal(detached.status, 200);
+    const kept = DB.database.prepare("SELECT title,knowledge_entry_id FROM itinerary_items WHERE id=?").get(item.id);
+    assert.equal(kept.title, "我的独立行程名"); assert.equal(kept.knowledge_entry_id, null);
+    assert.equal((await render(`/api/knowledge/${entry.id}`)).status, 200);
+    assert.equal(DB.database.prepare("SELECT count(*) n FROM itinerary_items WHERE trip_id=? AND knowledge_entry_id=?").get(trips[1].id, entry.id).n, 1);
+  } finally {
+    for (const trip of trips) assert.equal((await render(`/api/trips/${trip.slug}`, { method: "DELETE" })).status, 200);
+  }
+});
+
+test("validates knowledge writes and preserves trip items on invalid location input", async () => {
+  await loginAs("nini");
+  const { entry } = await (await render("/api/knowledge", { method: "POST", body: { section: "travel_guide", title: "来源校验测试" } })).json();
+  const foreign = { origin: "https://other.example" };
+  assert.equal((await render(`/api/knowledge/${entry.id}/favorite`, { method: "POST", headers: foreign, body: { favorite: true } })).status, 403);
+  assert.equal((await render("/api/trips/shanghai-hangzhou-2026/knowledge-items", { method: "POST", headers: foreign, body: { entryId: entry.id, dayId: "trip-shanghai-hangzhou-2026-day-1" } })).status, 403);
+  const invalid = await render("/api/trips/shanghai-hangzhou-2026/knowledge-items", { method: "POST", body: { entryId: entry.id, dayId: "trip-shanghai-hangzhou-2026-day-1", placeIds: ["not-linked"] } });
+  assert.equal(invalid.status, 400);
+  assert.equal(DB.database.prepare("SELECT count(*) n FROM itinerary_items WHERE knowledge_entry_id=?").get(entry.id).n, 0);
+  assert.equal((await render("/api/knowledge/missing/favorite", { method: "POST", body: { favorite: true } })).status, 404);
+});
+
+test("keeps participant overrides consistent in planning, map and budget including untimed items", async () => {
+  await loginAs("nini");
+  const trip = await createTrip({ title: "跨章节参与状态测试", status: "planning", cities: [], startDate: "2031-06-01", endDate: "2031-06-02", memberIds: ["member-nini", "member-liu-xu"] });
+  try {
+    const day = DB.database.prepare("SELECT id FROM days WHERE trip_id=? ORDER BY day_number LIMIT 1").get(trip.id);
+    const places = DB.database.prepare("SELECT id FROM places WHERE longitude IS NOT NULL AND latitude IS NOT NULL LIMIT 2").all();
+    assert.equal(places.length, 2);
+    for (const [index, place] of places.entries()) {
+      const created = await render(`/api/trips/${trip.slug}/plan/items`, { method: "POST", body: { dayId: day.id, placeId: place.id, itemType: "place", title: `参与状态地点${index}`, timeMode: "untimed" } });
+      assert.equal(created.status, 201);
+      const { item } = await created.json();
+      const updated = await render(`/api/trips/${trip.slug}/plan/items/${item.id}`, { method: "PATCH", body: { participantMemberIds: ["member-nini"] } });
+      assert.equal(updated.status, 200);
+    }
+    for (const view of ["planning", "map", "budget"]) {
+      const response = await render(`/trips/${trip.slug}/plan?view=${view}&day=${day.id}`);
+      assert.equal(response.status, 200);
+      const html = (await response.text()).replaceAll('\\"', '"');
+      assert.match(html, /"memberStates":\{[^}]*"member-nini":"present"/, `${view} must receive confirmed participants`);
+      assert.match(html, /"memberStates":\{[^}]*"member-liu-xu":"absent"/, `${view} must receive explicit exclusions`);
+    }
+  } finally { assert.equal((await render(`/api/trips/${trip.slug}`, { method: "DELETE" })).status, 200); }
+});
+
+test("selects only ongoing, future or undated planning trips for the homepage", () => {
+  const past = { status: "planning", startDate: "2026-09-23", endDate: "2026-09-27" };
+  const next = { status: "planning", startDate: "2026-11-02", endDate: "2026-11-05" };
+  const undecided = { status: "planning", startDate: null, endDate: null };
+  assert.equal(selectUpcomingTrip([past], "2026-10-26"), null);
+  assert.equal(selectUpcomingTrip([past, undecided, next], "2026-10-26"), next);
+  assert.equal(selectUpcomingTrip([past, undecided], "2026-10-26"), undecided);
+  assert.equal(selectUpcomingTrip([{ ...next, status: "completed" }], "2026-10-26"), null);
 });
 

@@ -8,7 +8,7 @@ interface D1PreparedStatement {
 }
 interface D1Database {
   prepare(query: string): D1PreparedStatement;
-  batch<T = unknown>(statements: D1PreparedStatement[]): Promise<T[]>;
+  batch<T = Record<string, unknown>>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]>;
   exec?(query: string): Promise<unknown>;
 }
 interface R2ObjectBody { body: ReadableStream; size: number; writeHttpMetadata(headers: Headers): void }

@@ -4,7 +4,7 @@ import {
   bookingCostLineRecords, bookingParticipantRecords, bookingRecords, dayPresenceRecords,
   itineraryItemRecords, placeRecords, recommendationPlaceOptionRecords, itineraryItemParticipantOverrideRecords, memberPresenceWindowRecords,
   recommendationRecords, tripMemberRecords, tripRecords, tripSavedPlaceRecords, cityRecords,
-  tripPlaceRecords, routePreferenceRecords,
+  tripPlaceRecords, routePreferenceRecords, knowledgeEntryRecords,
 } from "@/db/schema";
 import { findTripBySlug } from "@/services/trip-repository.server";
 import { getPersonalBudgetWorkspace } from "@/services/budget-service.server";
@@ -34,7 +34,7 @@ export async function getPlanWorkspace(slug: string, memberId?: string, loaderOp
   const view = loaderOptions.view || "planning";
   const needsRecommendations = view !== "budget";
   const paginatesRecommendations = view === "planning";
-  const needsPresence = view !== "budget";
+  const needsPresence = true;
   const needsSavedPlaces = view !== "budget";
   // Planning renders the saved decision between adjacent concrete nodes;
   // Map and Costs consume the same row for route execution and estimates.
@@ -77,10 +77,10 @@ export async function getPlanWorkspace(slug: string, memberId?: string, loaderOp
     : eq(routePreferenceRecords.tripId, stored.id);
   const budgetPromise = view === "budget" && memberId ? getPersonalBudgetWorkspace(slug, memberId, loaderOptions.requestContext).catch(() => null) : Promise.resolve(null);
 
-  const [recommendations, recommendationCountRows, items, recommendationItemRefs, bookings, bookingParticipants, presenceRows, presenceWindows, dayPresenceRows, participantOverrides, savedPlaceRows, routePreferences, legacyTripPlaces] = await Promise.all([
+  const [recommendations, recommendationCountRows, storedItems, recommendationItemRefs, bookings, bookingParticipants, presenceRows, presenceWindows, dayPresenceRows, participantOverrides, savedPlaceRows, routePreferences, legacyTripPlaces] = await Promise.all([
     recommendationRowsPromise,
     recommendationCountPromise,
-    db.select({ item: itineraryItemRecords, place: placeRecords, recommendationTitle: recommendationRecords.title }).from(itineraryItemRecords).leftJoin(placeRecords, eq(placeRecords.id, itineraryItemRecords.placeId)).leftJoin(recommendationRecords, eq(recommendationRecords.id, itineraryItemRecords.recommendationId)).where(itemWhere).orderBy(asc(itineraryItemRecords.dayId), asc(itineraryItemRecords.sortOrder), asc(itineraryItemRecords.id)),
+    db.select({ item: itineraryItemRecords, place: placeRecords, recommendationTitle: recommendationRecords.title, knowledge: { id: knowledgeEntryRecords.id, title: knowledgeEntryRecords.title, summary: knowledgeEntryRecords.summary, deletedAt: knowledgeEntryRecords.deletedAt } }).from(itineraryItemRecords).leftJoin(placeRecords, eq(placeRecords.id, itineraryItemRecords.placeId)).leftJoin(recommendationRecords, eq(recommendationRecords.id, itineraryItemRecords.recommendationId)).leftJoin(knowledgeEntryRecords, eq(knowledgeEntryRecords.id, itineraryItemRecords.knowledgeEntryId)).where(itemWhere).orderBy(asc(itineraryItemRecords.dayId), asc(itineraryItemRecords.sortOrder), asc(itineraryItemRecords.id)),
     view === "planning" ? db.select({ recommendationId: itineraryItemRecords.recommendationId, dayId: itineraryItemRecords.dayId, lockedAt: itineraryItemRecords.lockedAt }).from(itineraryItemRecords).where(eq(itineraryItemRecords.tripId, stored.id)) : Promise.resolve([]),
     db.select({ booking: bookingRecords, place: placeRecords }).from(bookingRecords).leftJoin(placeRecords, eq(placeRecords.id, bookingRecords.placeId)).where(and(eq(bookingRecords.tripId, stored.id), isNull(bookingRecords.deletedAt), ne(bookingRecords.status, "cancelled"))).orderBy(asc(bookingRecords.startAt), asc(bookingRecords.startDateLocal), asc(bookingRecords.id)),
     db.select().from(bookingParticipantRecords).innerJoin(bookingRecords, eq(bookingRecords.id, bookingParticipantRecords.bookingId)).where(and(eq(bookingRecords.tripId, stored.id), isNull(bookingRecords.deletedAt))),
@@ -92,6 +92,12 @@ export async function getPlanWorkspace(slug: string, memberId?: string, loaderOp
     needsRoutes ? db.select().from(routePreferenceRecords).where(routePreferenceWhere).orderBy(asc(routePreferenceRecords.updatedAt), asc(routePreferenceRecords.id)) : Promise.resolve([]),
     needsSavedPlaces ? db.select({ place: placeRecords, planStatus: tripPlaceRecords.planStatus }).from(tripPlaceRecords).innerJoin(placeRecords, eq(tripPlaceRecords.placeId, placeRecords.id)).where(eq(tripPlaceRecords.tripId, stored.id)) : Promise.resolve([]),
   ]);
+  const items = storedItems.map((row) => {
+    const source = row.knowledge?.id ? row.knowledge : null;
+    const knowledge = source && !source.deletedAt ? source : null;
+    const title = source ? row.item.knowledgeTitleOverride ?? row.place?.name ?? source.title : row.item.title;
+    return { ...row, knowledge, item: { ...row.item, title }, recommendationTitle: knowledge?.title ?? row.recommendationTitle };
+  });
   const recommendationIds = recommendations.map((recommendation) => recommendation.id);
   const options = recommendationIds.length
     ? await db.select({ option: recommendationPlaceOptionRecords, place: placeRecords, recommendation: recommendationRecords }).from(recommendationPlaceOptionRecords).innerJoin(recommendationRecords, eq(recommendationRecords.id, recommendationPlaceOptionRecords.recommendationId)).innerJoin(placeRecords, eq(placeRecords.id, recommendationPlaceOptionRecords.placeId)).where(inArray(recommendationPlaceOptionRecords.recommendationId, recommendationIds)).orderBy(asc(recommendationPlaceOptionRecords.sortOrder))
@@ -153,7 +159,7 @@ export async function getPlanWorkspace(slug: string, memberId?: string, loaderOp
     return "absent" as const;
   };
   const itemOverrides = (itemId: string) => Object.fromEntries(participantOverrides.filter(({ itinerary_item_participant_overrides: entry }) => entry.itineraryItemId === itemId).map(({ itinerary_item_participant_overrides: entry }) => [entry.memberId, entry.participation])) as Record<string, "included" | "excluded">;
-  const itemStates = (item: typeof itineraryItemRecords.$inferSelect, dayDate: string | null) => Object.fromEntries(memberIds.map((memberId) => [memberId, item.startTimeLocal ? presenceState(item, memberId, dayDate) : dayPresenceState(item.dayId, dayDate, memberId)])) as Record<string, "present" | "absent" | "partial" | "unknown">;
+  const itemStates = (item: typeof itineraryItemRecords.$inferSelect, dayDate: string | null) => Object.fromEntries(memberIds.map((memberId) => [memberId, presenceState(item, memberId, dayDate)])) as Record<string, "present" | "absent" | "partial" | "unknown">;
   const bookingMemberStates = (bookingId: string) => {
     const participants = bookingParticipants.filter(({ booking_participants: participant }) => participant.bookingId === bookingId).map(({ booking_participants: participant }) => participant.memberId);
     return Object.fromEntries(presenceRows.map((member) => [member.memberId, participants.length ? (participants.includes(member.memberId) ? "present" : "absent") : "unknown"])) as Record<string, "present" | "absent" | "unknown">;
@@ -172,7 +178,8 @@ export async function getPlanWorkspace(slug: string, memberId?: string, loaderOp
       const ends = explicit.endsAt ? Date.parse(explicit.endsAt) : Number.POSITIVE_INFINITY;
       return Number.isFinite(instant) && starts <= instant && instant < ends ? "present" : "absent";
     }
-    if (coverage !== "complete" || !item.startTimeLocal || !dayDate) return "unknown";
+    if (!item.startTimeLocal) return dayPresenceState(item.dayId, dayDate, memberId);
+    if (coverage !== "complete" || !dayDate) return "unknown";
     const instant = Date.parse(`${dayDate}T${item.startTimeLocal}:00${timezoneOffset}`);
     if (!Number.isFinite(instant)) return "unknown";
     const windows = presenceWindows.filter((window) => window.memberId === memberId).some((window) => Date.parse(window.startsAt) <= instant && (window.endsAt == null || instant < Date.parse(window.endsAt)));
@@ -203,7 +210,7 @@ export async function getPlanWorkspace(slug: string, memberId?: string, loaderOp
   };
   return {
     trip,
-    days: days.map((day) => ({ ...day, items: items.filter(({ item }) => item.dayId === day.id).map(({ item, place, recommendationTitle }) => ({ item, place, recommendationTitle, participantStates: itemStates(item, day.date), participantOverrides: itemOverrides(item.id) })), timeline: [] })),
+    days: days.map((day) => ({ ...day, items: items.filter(({ item }) => item.dayId === day.id).map(({ item, place, recommendationTitle, knowledge }) => ({ item, place, recommendationTitle, knowledge, participantStates: itemStates(item, day.date), participantOverrides: itemOverrides(item.id) })), timeline: [] })),
     recommendations: recommendations.map((recommendation) => ({ ...recommendation, options: options.filter(({ option }) => option.recommendationId === recommendation.id), addedDays: (view === "planning" ? recommendationItemRefs : items.map(({ item }) => item)).filter((item) => item.recommendationId === recommendation.id).map((item) => item.dayId), locked: (view === "planning" ? recommendationItemRefs : items.map(({ item }) => item)).some((item) => item.recommendationId === recommendation.id && item.lockedAt != null) })),
     recommendationPage: { total: Number(recommendationCountRows[0]?.value || 0), page: recommendationQuery.page, pageSize: recommendationLimit, library: recommendationQuery.library },
     bookings: bookings.map(({ booking, place }) => ({ booking, place, originPlace: bookingPlace(booking.originPlaceId), destinationPlace: bookingPlace(booking.destinationPlaceId), memberStates: bookingMemberStates(booking.id) })),
