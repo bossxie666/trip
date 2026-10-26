@@ -846,19 +846,29 @@ body:has(.journal-subpage) {
 .trip-journal-workspace .console-title > span { margin-top:8px; }
 .trip-journal-workspace .console-title h1 { margin:4px 0; font-size:clamp(31px,3vw,44px); }
 .trip-journal-workspace .console-title p { margin-top:5px; }
-.trip-journal-workspace .trip-console-side { grid-template-columns:minmax(145px,.42fr) minmax(300px,1.58fr); gap:12px; padding-top:16px; }
-.trip-journal-workspace .booking-console { min-height:62px; padding:9px 12px; }
+.trip-journal-workspace .trip-console-side { grid-template-columns:minmax(0,1fr); gap:12px; padding-top:16px; }
+.trip-journal-workspace .booking-console { width:100%; min-width:0; min-height:62px; padding:12px; }
+.trip-journal-workspace .booking-console::after { content:none; }
+.trip-journal-workspace .accommodation-summary strong { grid-column:auto; grid-row:auto; align-self:auto; font-size:13px; line-height:1.5; overflow-wrap:normal; }
+.trip-journal-workspace .accommodation-summary small { font-size:11px; line-height:1.5; }
+.accommodation-list-trigger { grid-column:1/3; grid-row:2; justify-self:start; padding:4px 0; border:0; background:transparent; color:var(--journal-blue); font-size:12px; font-weight:700; text-align:left; cursor:pointer; }
+.workspace-surface.accommodation-list-dialog { width:min(560px,calc(100vw - 28px)); }
+.accommodation-list-content { display:grid; gap:12px; padding:16px 20px 20px; }
+.accommodation-list-content article { display:grid; gap:9px; min-width:0; padding:14px; border:1px solid var(--line); border-radius:8px; background:#fffdf7; }
+.accommodation-list-content .booking-summary-title { min-width:0; font-size:15px; line-height:1.5; overflow-wrap:anywhere; }
+.accommodation-list-content article>span { color:var(--muted); font-size:12px; line-height:1.5; }
+.accommodation-list-content .booking-summary-title svg { flex-shrink:0; }
 .trip-journal-workspace .library-console { grid-template-columns:1fr; }
 .trip-journal-workspace .library-console .console-title { min-height:84px; max-width:900px; }
 @media(max-width:900px){.trip-journal-workspace .trip-console{grid-template-columns:1fr}.trip-journal-workspace .trip-console-side{padding-top:0}}
 
 /* Mobile accommodation card: compact, readable rows without horizontal squeeze. */
 @media(max-width:680px){
-  .trip-journal-workspace .trip-console-side{grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start}
+  .trip-journal-workspace .trip-console-side{grid-template-columns:minmax(0,1fr);gap:8px;align-items:start}
   .trip-journal-workspace .booking-console{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:10px;row-gap:7px;width:100%;max-width:100%;min-width:0;padding:10px 11px;overflow:hidden}
   .trip-journal-workspace .booking-console-label{grid-column:1;grid-row:1;align-self:start;margin:1px 0 0;white-space:nowrap;font-size:10px;line-height:1.45}
   .trip-journal-workspace .accommodation-summary{grid-column:2;grid-row:1;display:grid;gap:4px;min-width:0;padding:0}
-  .trip-journal-workspace .accommodation-summary strong{display:block;min-width:0;color:var(--journal-red);font-size:11px;line-height:1.45;white-space:normal;overflow-wrap:anywhere}
+  .trip-journal-workspace .accommodation-summary strong{display:block;min-width:0;color:var(--journal-red);font-size:13px;line-height:1.5;white-space:normal;overflow-wrap:normal}
   .trip-journal-workspace .accommodation-summary small{display:block;color:var(--muted);font-size:9px;line-height:1.45;white-space:normal}
   .trip-journal-workspace .accommodation-details{grid-column:1/-1;grid-row:2;min-width:0;margin-top:1px;padding-top:6px;border-top:1px dashed var(--journal-rule)}
   .trip-journal-workspace .accommodation-details>summary{padding:2px 0;font-size:9px;line-height:1.5;white-space:normal}
