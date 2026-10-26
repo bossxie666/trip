@@ -226,6 +226,15 @@ export const mediaAssetRecords = sqliteTable("media_assets", {
   index("idx_media_assets_status_created").on(table.status, table.createdAt),
 ]);
 
+export const mediaDeletionRecords = sqliteTable("media_deletion_queue", {
+  objectKey: text("object_key").primaryKey(),
+  assetId: text("asset_id").notNull(),
+  createdAt: text("created_at").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: text("next_attempt_at").notNull(),
+  lastErrorCode: text("last_error_code"),
+}, (table) => [index("idx_media_deletion_due").on(table.nextAttemptAt, table.createdAt)]);
+
 export const knowledgeEntryRecords = sqliteTable("knowledge_entries", {
   id: text("id").primaryKey(),
   section: text("section", { enum: ["photography", "transition_video", "travel_guide"] }).notNull(),

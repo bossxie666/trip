@@ -9,6 +9,7 @@ import { isFerryLeg, transitLineSummary } from "../services/amap/route-presentat
 import { selectUpcomingTrip } from "../services/upcoming-trip.ts";
 import { knowledgeHref } from "../services/knowledge-navigation.ts";
 import { runAlbumUploadQueue } from "../components/media/album-upload-queue.ts";
+import { drainMediaDeletionQueue } from "../services/media-deletion.server.ts";
 
 test("derives one accommodation summary without double-counting booking totals", () => {
   const summary = summarizeAccommodation([
@@ -74,7 +75,7 @@ class TestD1Database {
 const DB = new TestD1Database();
 globalThis.__TRIP_TEST_D1__ = DB;
 globalThis.__TRIP_TEST_ENV__ = { TRIP_SPACE_INVITE_CODE: "test-invite", TRIP_SPACE_SESSION_SECRET: "test-session-secret-at-least-32-characters", AMAP_JS_API_KEY: "test-js-key", AMAP_JS_SECURITY_CODE: "test-js-code", AMAP_WEB_SERVICE_KEY: "test-web-key" };
-for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql", "0014_v2_2_1_confirmed_facts.sql", "0015_v2_4_r1_booking_endpoint_labels.sql", "0016_recommendation_v2.sql", "0017_home_media_guestbook.sql", "0018_recommendation_member_authoring.sql", "0019_albums.sql", "0020_city_centers.sql", "0021_security_rate_limits.sql", "0022_album_photo_management.sql", "0023_member_identity.sql", "0024_knowledge_library.sql", "0025_knowledge_reference_titles.sql", "0026_knowledge_legacy_favorites.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
+for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql", "0014_v2_2_1_confirmed_facts.sql", "0015_v2_4_r1_booking_endpoint_labels.sql", "0016_recommendation_v2.sql", "0017_home_media_guestbook.sql", "0018_recommendation_member_authoring.sql", "0019_albums.sql", "0020_city_centers.sql", "0021_security_rate_limits.sql", "0022_album_photo_management.sql", "0023_member_identity.sql", "0024_knowledge_library.sql", "0025_knowledge_reference_titles.sql", "0026_knowledge_legacy_favorites.sql", "0027_media_deletion_queue.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
 
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
@@ -1536,6 +1537,9 @@ test("handles album selections above 500 atomically without truncating or partia
     const asset = DB.database.prepare("INSERT INTO media_assets (id,uploader_member_id,purpose,object_key,original_filename,content_type,byte_size,status,created_at,updated_at,ready_at) VALUES (?,'member-nini','album',?,?,'image/jpeg',100,'ready',?,?,?)");
     const photo = DB.database.prepare("INSERT INTO album_media (album_id,media_asset_id,uploaded_by_member_id,sort_order,captured_at,created_at) VALUES (?,?,'member-nini',?,?,?)");
     for (const [index, id] of ids.entries()) { asset.run(id, `album/${id}.jpg`, `${id}.jpg`, now, now, now); photo.run(album.id, id, index, now, now); }
+    const indexResponse = await render("/api/albums");
+    assert.equal(indexResponse.status, 200);
+    assert.equal((await indexResponse.json()).albums.find((item) => item.id === album.id).photoCount, 505);
     const path = `/api/albums/${album.id}/media/batch`;
     DB.failBatchAt = 1;
     assert.equal((await render(path, { method: "PATCH", body: { action: "favorite", assetIds: ids, isFavorite: true } })).status, 500);
@@ -1553,11 +1557,27 @@ test("handles album selections above 500 atomically without truncating or partia
     assert.equal(DB.database.prepare("SELECT count(*) n FROM album_media WHERE album_id=? AND is_favorite=1").get(album.id).n, 0);
     assert.equal((await render(path, { method: "DELETE", body: { assetIds: [ids[0], "missing-photo"] } })).status, 404);
     assert.equal(DB.database.prepare("SELECT count(*) n FROM album_media WHERE album_id=?").get(album.id).n, 505);
+    DB.database.prepare("UPDATE albums SET cover_media_asset_id=? WHERE id=?").run(ids[0], album.id);
+    DB.failBatchAt = 16; // First cleanup intent inserted, then fail metadata removal.
+    assert.equal((await render(path, { method: "DELETE", body: { assetIds: ids.slice(0, 504) } })).status, 500);
+    assert.equal(DB.database.prepare("SELECT count(*) n FROM album_media WHERE album_id=?").get(album.id).n, 505);
+    assert.equal(DB.database.prepare("SELECT cover_media_asset_id cover FROM albums WHERE id=?").get(album.id).cover, ids[0]);
+    assert.equal(DB.database.prepare("SELECT count(*) n FROM media_deletion_queue WHERE asset_id LIKE 'album-bulk-regression-%'").get().n, 0);
+    const beforeDelete = DB.prepareCount;
+    assert.equal((await render(path, { method: "DELETE", body: { assetIds: ids.slice(0, 504) } })).status, 200);
+    assert.ok(DB.prepareCount - beforeDelete < 100, "bulk delete must not reload the entire album once per photo");
+    assert.equal(DB.database.prepare("SELECT count(*) n FROM album_media WHERE album_id=?").get(album.id).n, 1);
+    assert.equal(DB.database.prepare("SELECT cover_media_asset_id cover FROM albums WHERE id=?").get(album.id).cover, ids[504]);
+    assert.equal(DB.database.prepare("SELECT count(*) n FROM media_deletion_queue WHERE asset_id LIKE 'album-bulk-regression-%'").get().n, 504);
+    assert.equal((await render(`/api/albums/${album.id}/media/${ids[504]}`, { method: "DELETE" })).status, 200);
+    assert.equal(DB.database.prepare("SELECT cover_media_asset_id cover FROM albums WHERE id=?").get(album.id).cover, null);
+    assert.equal(DB.database.prepare("SELECT count(*) n FROM album_media WHERE album_id=?").get(album.id).n, 0);
   } finally {
     DB.database.prepare("DELETE FROM album_media_tags WHERE album_id=?").run(album.id);
     DB.database.prepare("DELETE FROM album_media WHERE album_id=?").run(album.id);
     DB.database.prepare("DELETE FROM albums WHERE id=?").run(album.id);
     DB.database.prepare("DELETE FROM media_assets WHERE id LIKE 'album-bulk-regression-%'").run();
+    DB.database.prepare("DELETE FROM media_deletion_queue WHERE asset_id LIKE 'album-bulk-regression-%'").run();
   }
 });
 
@@ -1656,3 +1676,112 @@ test("shows legacy category, price, every reference and image without duplicated
   }
 });
 
+
+test("retains storage deletion intents through R2 failure and lost acknowledgment without deleting restored assets", async () => {
+  const db = new TestD1Database();
+  db.database.exec("CREATE TABLE media_assets(id text PRIMARY KEY,object_key text UNIQUE)");
+  const migration = readFileSync(new URL("../drizzle/0027_media_deletion_queue.sql", import.meta.url), "utf8");
+  assert.equal(migration, readFileSync(new URL("../migrations/0013_media_deletion_queue.sql", import.meta.url), "utf8"));
+  db.database.exec(migration); db.database.exec(migration);
+  const now = new Date("2026-10-27T00:00:00.000Z"), calls = [];
+  const enqueue = db.database.prepare("INSERT INTO media_deletion_queue(object_key,asset_id,created_at,next_attempt_at) VALUES (?,?,?,?)");
+  enqueue.run("album/retry.jpg", "retry", now.toISOString(), now.toISOString());
+  enqueue.run("album/restored.jpg", "restored", now.toISOString(), now.toISOString());
+  db.database.prepare("INSERT INTO media_assets(id,object_key) VALUES ('restored','album/restored.jpg')").run();
+  let fail = true;
+  const env = { DB: db, MEDIA: { async delete(keys) { calls.push(keys); if (fail) throw new Error("R2 unavailable, private request details must not be persisted"); } } };
+  assert.deepEqual(await drainMediaDeletionQueue(env, { now }), { deleted: 0, failed: 1 });
+  const pending = db.database.prepare("SELECT attempts,next_attempt_at,last_error_code FROM media_deletion_queue WHERE asset_id='retry'").get();
+  assert.deepEqual({ ...pending }, { attempts: 1, next_attempt_at: "2026-10-27T00:01:00.000Z", last_error_code: "R2_DELETE_FAILED" });
+  assert.deepEqual(await drainMediaDeletionQueue(env, { now }), { deleted: 0, failed: 0 });
+  fail = false; db.failBatchAt = 0;
+  await assert.rejects(drainMediaDeletionQueue(env, { now: new Date("2026-10-27T00:02:00.000Z") }), /INJECTED_BATCH_FAILURE/);
+  assert.equal(db.database.prepare("SELECT count(*) n FROM media_deletion_queue WHERE asset_id='retry'").get().n, 1);
+  assert.deepEqual(await drainMediaDeletionQueue(env, { now: new Date("2026-10-27T00:03:00.000Z") }), { deleted: 1, failed: 0 });
+  assert.deepEqual(calls, [["album/retry.jpg"], ["album/retry.jpg"], ["album/retry.jpg"]]);
+  assert.equal(db.database.prepare("SELECT count(*) n FROM media_deletion_queue WHERE asset_id='restored'").get().n, 1);
+  for (let index = 0; index < 205; index++) enqueue.run(`album/page-${index}.jpg`, `page-${index}`, now.toISOString(), now.toISOString());
+  fail = true;
+  const beforeRetry = db.prepareCount;
+  assert.equal((await drainMediaDeletionQueue(env, { now, limit: 10000 })).failed, 100);
+  assert.ok(db.prepareCount - beforeRetry <= 5, "retry scheduling must use bounded groups instead of one query per object");
+  assert.equal(db.database.prepare("SELECT count(*) n FROM media_deletion_queue WHERE asset_id LIKE 'page-%' AND attempts=1").get().n, 100);
+  fail = false;
+  const afterBackoff = new Date("2026-10-27T00:04:00.000Z");
+  assert.equal((await drainMediaDeletionQueue(env, { now: afterBackoff })).deleted, 100);
+  assert.equal((await drainMediaDeletionQueue(env, { now: afterBackoff })).deleted, 100);
+  assert.equal((await drainMediaDeletionQueue(env, { now: afterBackoff })).deleted, 5);
+  assert.ok(calls.every(keys => keys.length <= 100));
+});
+
+test("removes an album photo without deleting a file referenced by another feature", async () => {
+  await loginAs("nini");
+  const { album } = await (await render("/api/albums", { method: "POST", body: { title: "共享文件保留测试" } })).json();
+  const now = new Date().toISOString(), assetId = "album-shared-file-regression";
+  DB.database.prepare("INSERT INTO media_assets(id,uploader_member_id,purpose,object_key,original_filename,content_type,byte_size,status,created_at,updated_at) VALUES (?,'member-nini','album',?,'shared.jpg','image/jpeg',100,'ready',?,?)").run(assetId, `album/${assetId}.jpg`, now, now);
+  DB.database.prepare("INSERT INTO album_media(album_id,media_asset_id,uploaded_by_member_id,sort_order,created_at) VALUES (?,?,'member-nini',0,?)").run(album.id, assetId, now);
+  const { entry } = await (await render("/api/knowledge", { method: "POST", body: { section: "travel_guide", title: "共享文件关联" } })).json();
+  DB.database.prepare("INSERT INTO knowledge_entry_media(entry_id,media_asset_id,sort_order) VALUES (?,?,0)").run(entry.id, assetId);
+  try {
+    assert.equal((await render(`/api/albums/${album.id}/media/${assetId}`, { method: "DELETE" })).status, 200);
+    assert.equal(DB.database.prepare("SELECT count(*) n FROM album_media WHERE album_id=?").get(album.id).n, 0);
+    assert.equal(DB.database.prepare("SELECT count(*) n FROM media_assets WHERE id=?").get(assetId).n, 1);
+    assert.equal(DB.database.prepare("SELECT count(*) n FROM knowledge_entry_media WHERE entry_id=?").get(entry.id).n, 1);
+    assert.equal(DB.database.prepare("SELECT count(*) n FROM media_deletion_queue WHERE asset_id=?").get(assetId).n, 0);
+  } finally {
+    DB.database.prepare("DELETE FROM knowledge_entries WHERE id=?").run(entry.id);
+    DB.database.prepare("DELETE FROM albums WHERE id=?").run(album.id);
+    DB.database.prepare("DELETE FROM media_assets WHERE id=?").run(assetId);
+  }
+});
+
+test("keeps SDK dynamic compilation confined to an authenticated map document", async () => {
+  const saved = sessionCookie;
+  try {
+    sessionCookie = "";
+    assert.equal((await render("/api/amap/canvas")).status, 401);
+    await loginAs("nini");
+    const home = await render("/");
+    assert.doesNotMatch(home.headers.get("content-security-policy"), /unsafe-eval/);
+    assert.equal(home.headers.get("x-frame-options"), "DENY");
+    const frame = await render("/api/amap/canvas");
+    assert.equal(frame.status, 200);
+    assert.match(frame.headers.get("content-type"), /text\/html/);
+    assert.equal(frame.headers.get("cache-control"), "no-store");
+    assert.equal(frame.headers.get("x-frame-options"), "SAMEORIGIN");
+    const csp = frame.headers.get("content-security-policy");
+    assert.match(csp, /frame-ancestors 'self'/);
+    assert.match(csp, /script-src 'unsafe-inline' 'unsafe-eval' https:\/\/\*\.amap\.com/);
+    assert.doesNotMatch(csp, /script-src[^;]* 'self'/);
+    const html = await frame.text();
+    assert.match(html, /id="map"/);
+    assert.doesNotMatch(html, /<script|password|nini|<form/);
+  } finally { sessionCookie = saved; }
+});
+
+test("passes map options and overlay arrays in the SDK document realm while preserving marker identities", async () => {
+  const { runInNewContext } = await import("node:vm");
+  const { bridgeAMapRealm } = await import("../components/trip/amap-realm.ts");
+  const realm = runInNewContext("({Array,Object})");
+  const markers = [], node = new Date();
+  class MapStub {
+    constructor(target, options) { assert.equal(target, node); assert.ok(options instanceof realm.Object); assert.ok(options.center instanceof realm.Array); }
+    setFitView(overlays, immediately, padding) { assert.ok(overlays instanceof realm.Array); assert.ok(padding instanceof realm.Array); assert.equal(overlays[0], markers[0]); assert.equal(immediately, true); }
+  }
+  class MarkerStub { constructor(options) { assert.ok(options.position instanceof realm.Array); markers.push(this); } }
+  const api = bridgeAMapRealm({ Map: MapStub, Marker: MarkerStub, Polyline: MarkerStub }, realm);
+  const map = new api.Map(node, { center: [121, 31] }), marker = new api.Marker({ position: [121, 31] });
+  map.setFitView([marker], true, [20, 20, 20, 20]);
+});
+
+test("routes AMap style and REST proxy requests to their fixed official hosts without accepting injected secrets or traversal", async () => {
+  const { amapProxyUrl } = await import("../services/amap/proxy-url.ts");
+  const incoming = new URL("https://preview.example/_AMapService/v4/map/styles?key=public-js-key&jscode=untrusted&styleid=test");
+  const styles = amapProxyUrl("v4/map/styles", incoming, "server-only-code");
+  assert.equal(styles.hostname, "webapi.amap.com");
+  assert.equal(styles.pathname, "/v4/map/styles");
+  assert.equal(styles.searchParams.get("jscode"), "server-only-code");
+  assert.equal(styles.searchParams.getAll("jscode").length, 1);
+  assert.equal(amapProxyUrl("v3/place/text", incoming, "server-only-code").hostname, "restapi.amap.com");
+  for (const path of ["https://evil.example", "v3/../../evil", "v3/foo?redirect=evil", "v3/foo#x", "v3/%2e%2e/x", "v6/place/text"]) assert.equal(amapProxyUrl(path, incoming, "server-only-code"), null);
+});

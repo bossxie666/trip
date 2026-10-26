@@ -3,6 +3,8 @@ import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } fr
 import handler from "vinext/server/app-router-entry";
 import { readCookie, sessionCookieName, verifySessionMemberId } from "../services/session";
 import { safeInternalReturnTo } from "../services/return-to";
+import { drainMediaDeletionQueue } from "../services/media-deletion.server";
+import { mapCanvasPath, mapCanvasCsp, mapCanvasResponse } from "../services/map-canvas";
 
 interface Env {
   ASSETS: Fetcher;
@@ -49,6 +51,10 @@ function withSecurityHeaders(response: Response, url: URL, requestId: string) {
   headers.set("referrer-policy", "strict-origin-when-cross-origin");
   headers.set("permissions-policy", "camera=(), microphone=(), geolocation=()");
   headers.set("content-security-policy", "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: blob: https:; font-src 'self' data: https:; style-src 'self' 'unsafe-inline' https:; script-src 'self' 'unsafe-inline' https:; connect-src 'self' https:; worker-src 'self' blob:");
+  if (url.pathname === mapCanvasPath) {
+    headers.set("content-security-policy", mapCanvasCsp);
+    headers.set("x-frame-options", "SAMEORIGIN");
+  }
   if (url.protocol === "https:") headers.set("strict-transport-security", "max-age=31536000; includeSubDomains");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
@@ -96,6 +102,7 @@ const worker = {
       }
 
       const appHeaders = new Headers(request.headers); appHeaders.set("x-request-id", requestId);
+      if (url.pathname === mapCanvasPath) return finish(mapCanvasResponse());
       return finish(await handler.fetch(new Request(request, { headers: appHeaders }), env, ctx));
     } catch (caught) {
       console.error(JSON.stringify({ type: "request_error", requestId, method: request.method, route: url.pathname, durationMs: Date.now() - startedAt, error: caught instanceof Error ? caught.name : "UnknownError" }));
@@ -104,6 +111,7 @@ const worker = {
   },
   async scheduled(_controller: unknown, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(cleanExpiredOperationalData(env));
+    ctx.waitUntil(drainMediaDeletionQueue(env).then((result) => console.log(JSON.stringify({ type: "media_deletion_cleanup", ...result }))));
   },
 };
 
@@ -119,8 +127,11 @@ async function cleanExpiredOperationalData(env: Env) {
     env.DB.prepare("DELETE FROM member_sessions WHERE expires_at < ? OR (revoked_at IS NOT NULL AND revoked_at < ?)").bind(now, revokedSessionBefore),
   ];
   if (pending.results?.length) {
-    const placeholders = pending.results.map(() => "?").join(",");
-    statements.push(env.DB.prepare(`DELETE FROM media_assets WHERE status = 'pending' AND id IN (${placeholders})`).bind(...pending.results.map((asset) => asset.id)));
+    for (let offset = 0; offset < pending.results.length; offset += 80) {
+      const group = pending.results.slice(offset, offset + 80);
+      const placeholders = group.map(() => "?").join(",");
+      statements.push(env.DB.prepare(`DELETE FROM media_assets WHERE status = 'pending' AND id IN (${placeholders})`).bind(...group.map((asset) => asset.id)));
+    }
   }
   const results = await env.DB.batch(statements);
   console.log(JSON.stringify({ type: "scheduled_cleanup", pendingMediaDeleted: pending.results?.length || 0, operations: results.length }));

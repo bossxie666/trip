@@ -38,7 +38,7 @@ function requiredKey() {
 
 function retryableInfocode(code: string | null) {
   if (!code) return true;
-  return !new Set(["10001", "10002", "10003", "10004", "10005", "10008", "10009", "10010", "10011", "10012", "10013", "10014"]).has(code);
+  return !new Set(["10001", "10002", "10003", "10004", "10005", "10006", "10008", "10009", "10010", "10011", "10012", "10013", "10014"]).has(code);
 }
 
 function requestKey(path: string, params: Record<string, string | undefined>) {
@@ -294,7 +294,7 @@ export function classifyAmapError(error: unknown, fallback: "poi" | "route" | "g
   if (error instanceof AMapUpstreamError) {
     if (error.httpStatus === 429 || error.infocode === "10003") return { status: 429, code: "AMAP_RATE_LIMIT", message: "请求过于频繁，请稍后再试。" };
     if (error.kind === "timeout") return { status: 504, code: "AMAP_TIMEOUT", message: fallback === "route" ? "路线暂时无法计算，请重试。" : "网络异常，请重试。" };
-    if (error.infocode && ["10001", "10004", "10008", "10009", "10010", "10011", "10012", "10013", "10014"].includes(error.infocode)) return { status: 503, code: "AMAP_CONFIGURATION", message: "地图服务配置异常，请联系管理员。" };
+    if (error.infocode && ["10001", "10004", "10005", "10006", "10008", "10009", "10010", "10011", "10012", "10013", "10014"].includes(error.infocode)) return { status: 503, code: "AMAP_CONFIGURATION", message: `地图服务配置异常（高德 ${error.infocode}），请联系管理员。` };
     if (error.kind === "http") return { status: 502, code: "AMAP_NETWORK", message: fallback === "route" ? "路线暂时无法计算，请重试。" : "网络异常，请重试。" };
     return { status: 502, code: "AMAP_SERVICE", message: fallback === "route" ? "地图服务繁忙，路线暂时无法计算。" : "地图服务繁忙，请稍后重试。" };
   }

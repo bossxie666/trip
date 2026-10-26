@@ -64,3 +64,8 @@
 - 预览地图产生地点标记及高德署名，但控制台明确返回 INVALID_USER_DOMAIN，且路线区显示配置异常；未判定地图通过。已请用户在原高德 JS Key 白名单保留原项并新增精确预览域名。正式域名未改动，后端路线配置仍待单独核验。
 - 本地发现住宿摘要被旧双列外壳和 strong 的网格定位挤压，已改单列外壳并重置嵌套金额布局。住宿列表迁到共享 WorkspaceOverlay，旅行页旧手机全屏/底部面板规则已移除，统一使用 dialogs.css 的纯色居中几何；费用页移除内部模型名说明。
 - 最新生产构建和 98 项测试通过：repair/batch3-accommodation-final-tests.log；typecheck/lint 通过。Chrome 本地实际测得 320/390/430px 住宿弹窗居中误差均 0，390px 为 362×264；320px 日期框同 x=35、宽235，页面无横向溢出；1280px 桌面住宿摘要不再分成两列，弹窗居中误差 0。嵌套编辑 Esc 仅关闭顶层、恢复编辑按钮焦点；再关闭列表恢复摘要按钮焦点并释放滚动锁。测试只写入本地隔离库，尚未正式发布。
+- 2026-10-27 高德预览域名白名单已由用户添加。Chrome 复测不再报 INVALID_USER_DOMAIN，但发现 SDK WebGL 动态编译被主页面 CSP 阻止。地图 SDK 已移入独立认证文档 /api/amap/canvas，仅该文档开放 SDK 所需动态编译，主页面仍禁止 unsafe-eval，且限制 iframe 为同源。补跨 realm 数组/选项转换与局部错误边界；首次预览发现 setFitView 跨 realm 报错，未视为通过，修正后重新部署。
+- 当前第一批独立预览版本 94129ee3-f2f8-43c2-845b-b3848272b21b；文件哈希与基础提交记录在 repair/batch1-map-preview-manifest.json。独立发布包再次构建及90项测试通过。Chrome 已确认行程页恢复、配置缺失仅在地图区提示；真实地图/路线尚未验收。
+- 只读 secret list 查明预览只有 JS Key 和两个会话配置，缺 AMAP_JS_SECURITY_CODE 与 AMAP_WEB_SERVICE_KEY；已请用户在预览 Worker 添加，勿在聊天发送密钥。高德样式代理按官方文档改为 webapi.amap.com/v4/map/styles，其他服务固定 restapi.amap.com；限制路径，覆盖外部 jscode 并补超时降级。未更改正式 secrets、正式代码或正式业务数据。
+- 第二批相册删除已改为单个原子批次：移除照片/标签、封面接替、写入持久清理任务、删除无引用元数据一起提交；失败不部分删除。R2失败保留任务重试，清理成功后才确认任务；其他功能引用的文件保留。新增 0027/0013_media_deletion_queue.sql（尚未远程执行），定时处理已接入；相册书架用SQL统计数量，不再读取所有照片行。
+- 完整源代码生产构建及103项回归通过，日志 repair/batch2-media-map-final-tests.log；typecheck/lint通过。覆盖504张删除的事务故障回滚与首张封面接替、删空、共享引用、R2故障/确认丢失/恢复记录保护、跨realm参数、地图文档CSP与代理固定目标。另扩充100项失败任务分组重试测试并单独通过：repair/batch2-media-delete-retry-focused.log。数据库和R2删除测试均使用隔离内存数据；预览仍共享正式R2，未在预览执行任何照片删除。相册分页与第三批剩余编辑器/性能验收继续进行。

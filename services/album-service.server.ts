@@ -1,6 +1,7 @@
-import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, inArray, isNull, or, sql } from "drizzle-orm";
 import { getDb, getRuntimeEnv } from "@/db";
 import { albumMediaRecords, albumMediaTagRecords, albumRecords, albumTagRecords, mediaAssetRecords, tripMemberRecords, tripRecords } from "@/db/schema";
+import { drainMediaDeletionQueue } from "./media-deletion.server";
 
 export type AlbumSummary = {
   id: string; title: string; description: string | null; tripId: string | null; tripTitle: string | null;
@@ -37,16 +38,13 @@ export async function listAlbumTripOptions(memberId: string) {
 }
 
 export async function listAlbums(memberId: string): Promise<AlbumSummary[]> {
-  const db = getDb();
-  const membershipRows = await db.select({ tripId: tripMemberRecords.tripId }).from(tripMemberRecords).where(eq(tripMemberRecords.memberId, memberId));
-  const tripIds = membershipRows.map((row) => row.tripId);
-  const rows = await db.select().from(albumRecords).where(isNull(albumRecords.deletedAt)).orderBy(desc(albumRecords.updatedAt));
-  const visible = rows.filter((row) => !row.tripId || tripIds.includes(row.tripId));
-  if (!visible.length) return [];
-  const ids = visible.map((row) => row.id);
-  const media = await db.select({ albumId: albumMediaRecords.albumId }).from(albumMediaRecords).where(inArray(albumMediaRecords.albumId, ids));
-  const tripRows = tripIds.length ? await db.select({ id: tripRecords.id, title: tripRecords.title }).from(tripRecords).where(inArray(tripRecords.id, [...new Set(visible.map((row) => row.tripId).filter(Boolean) as string[])])) : [];
-  return visible.map((row) => ({ ...row, tripTitle: tripRows.find((trip) => trip.id === row.tripId)?.title || null, photoCount: media.filter((item) => item.albumId === row.id).length, canEditAlbum: !row.tripId || row.createdByMemberId === memberId }));
+  const rows = await getDb().select({ ...getTableColumns(albumRecords), tripTitle: tripRecords.title,
+    photoCount: sql<number>`(SELECT count(*) FROM album_media am WHERE am.album_id=${albumRecords.id})`,
+  }).from(albumRecords).leftJoin(tripRecords, eq(tripRecords.id, albumRecords.tripId))
+    .where(and(isNull(albumRecords.deletedAt), or(isNull(albumRecords.tripId),
+      sql`EXISTS (SELECT 1 FROM trip_members tm WHERE tm.trip_id=${albumRecords.tripId} AND tm.member_id=${memberId})`)))
+    .orderBy(desc(albumRecords.updatedAt));
+  return rows.map((row) => ({ ...row, canEditAlbum: !row.tripId || row.createdByMemberId === memberId }));
 }
 
 export async function getAlbum(id: string, memberId: string) {
@@ -162,15 +160,59 @@ export async function updateAlbumMedia(id: string, memberId: string, assetIds: s
 
 export async function deleteAlbumMediaBatch(id: string, memberId: string, assetIds: string[]) {
   await requireAlbumEditor(id, memberId);
-  const groups = mediaIdGroups(assetIds);
+  const groups = mediaIdGroups(assetIds), d1 = getRuntimeEnv().DB;
   // Validate the entire selection before deleting the first photo.
   for (const group of groups) {
-    const current = await getDb().select({ id: albumMediaRecords.mediaAssetId }).from(albumMediaRecords).where(and(eq(albumMediaRecords.albumId, id), inArray(albumMediaRecords.mediaAssetId, group)));
+    const current = await getDb().select({ id: albumMediaRecords.mediaAssetId }).from(albumMediaRecords)
+      .innerJoin(mediaAssetRecords, eq(mediaAssetRecords.id, albumMediaRecords.mediaAssetId))
+      .where(and(eq(albumMediaRecords.albumId, id), inArray(albumMediaRecords.mediaAssetId, group), eq(mediaAssetRecords.purpose, "album")));
     if (current.length !== group.length) throw new Error("ALBUM_MEDIA_NOT_FOUND");
   }
-  for (const group of groups) for (const assetId of group) await deleteAlbumMedia(id, memberId, assetId);
+  const statements: D1PreparedStatement[] = [], now = new Date().toISOString();
+  for (const group of groups) {
+    const placeholders = group.map(() => "?").join(",");
+    statements.push(d1.prepare(`DELETE FROM album_media_tags WHERE album_id=? AND media_asset_id IN (${placeholders})`).bind(id, ...group));
+    statements.push(d1.prepare(`DELETE FROM album_media WHERE album_id=? AND media_asset_id IN (${placeholders})`).bind(id, ...group));
+  }
+  statements.push(d1.prepare(`UPDATE albums SET cover_media_asset_id=CASE
+    WHEN cover_media_asset_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM album_media WHERE album_id=albums.id AND media_asset_id=albums.cover_media_asset_id)
+    THEN (SELECT am.media_asset_id FROM album_media am JOIN media_assets m ON m.id=am.media_asset_id WHERE am.album_id=albums.id AND m.status='ready' ORDER BY am.sort_order LIMIT 1)
+    ELSE cover_media_asset_id END,updated_at=? WHERE id=?`).bind(now, id));
+  for (const group of groups) {
+    const placeholders = group.map(() => "?").join(",");
+    statements.push(d1.prepare(`INSERT INTO media_deletion_queue (object_key,asset_id,created_at,next_attempt_at)
+      SELECT m.object_key,m.id,?,? FROM media_assets m WHERE m.id IN (${placeholders}) AND m.purpose='album' AND ${unreferencedAsset}
+      ON CONFLICT(object_key) DO NOTHING`).bind(now, now, ...group));
+    statements.push(d1.prepare(`DELETE FROM media_assets AS m WHERE m.id IN (${placeholders}) AND ${unreferencedAsset}
+      AND EXISTS (SELECT 1 FROM media_deletion_queue q WHERE q.object_key=m.object_key AND q.asset_id=m.id)`).bind(...group));
+  }
+  await d1.batch(statements);
+  try {
+    const cleaned = await drainMediaDeletionQueue(getRuntimeEnv());
+    if (cleaned.failed) console.warn(JSON.stringify({ type: "media_cleanup_deferred", failed: cleaned.failed }));
+  } catch {
+    // The deletion intent is durable even when storage or acknowledgment fails.
+    console.warn(JSON.stringify({ type: "media_cleanup_deferred", reason: "cleanup_unavailable" }));
+  }
   return getAlbum(id, memberId);
 }
+
+// Keep shared files, including legacy string URL references and soft-deleted
+// resources that can still be restored. Only orphaned album assets are queued.
+const unreferencedAsset = [
+  "NOT EXISTS (SELECT 1 FROM album_media WHERE media_asset_id=m.id)",
+  "NOT EXISTS (SELECT 1 FROM albums WHERE cover_media_asset_id=m.id)",
+  "NOT EXISTS (SELECT 1 FROM home_featured_photos WHERE media_asset_id=m.id)",
+  "NOT EXISTS (SELECT 1 FROM guestbook_message_media WHERE media_asset_id=m.id)",
+  "NOT EXISTS (SELECT 1 FROM recommendation_reference_media WHERE media_asset_id=m.id)",
+  "NOT EXISTS (SELECT 1 FROM knowledge_entry_media WHERE media_asset_id=m.id)",
+  "NOT EXISTS (SELECT 1 FROM knowledge_entries WHERE cover_media_asset_id=m.id OR instr(cover_image_url,'/api/media/' || m.id)>0)",
+  "NOT EXISTS (SELECT 1 FROM member_personas WHERE preview_media_asset_id=m.id)",
+  "NOT EXISTS (SELECT 1 FROM trips WHERE instr(cover,'/api/media/' || m.id)>0)",
+  "NOT EXISTS (SELECT 1 FROM members WHERE instr(avatar,'/api/media/' || m.id)>0)",
+  "NOT EXISTS (SELECT 1 FROM recommendations WHERE instr(cover_image_url,'/api/media/' || m.id)>0)",
+  "NOT EXISTS (SELECT 1 FROM recommendation_references WHERE instr(image_urls_json,'/api/media/' || m.id)>0)",
+].join(" AND ");
 export async function reorderAlbumMedia(id: string, memberId: string, assetIds: string[]) {
   await requireAlbumEditor(id, memberId);
   const current = await getDb().select().from(albumMediaRecords).where(eq(albumMediaRecords.albumId, id));
@@ -182,15 +224,5 @@ export async function reorderAlbumMedia(id: string, memberId: string, assetIds: 
 }
 
 export async function deleteAlbumMedia(id: string, memberId: string, assetId: string) {
-  const album = await requireAlbumEditor(id, memberId);
-  const asset = (await getDb().select().from(mediaAssetRecords).innerJoin(albumMediaRecords, eq(albumMediaRecords.mediaAssetId, mediaAssetRecords.id)).where(and(eq(albumMediaRecords.albumId, id), eq(mediaAssetRecords.id, assetId))).limit(1))[0];
-  if (!asset || asset.media_assets.purpose !== "album") throw new Error("ALBUM_MEDIA_NOT_FOUND");
-  const db = getDb();
-  if (album.coverMediaAssetId === assetId) await db.update(albumRecords).set({ coverMediaAssetId: null }).where(eq(albumRecords.id, id));
-  await db.delete(albumMediaRecords).where(and(eq(albumMediaRecords.albumId, id), eq(albumMediaRecords.mediaAssetId, assetId)));
-  await db.delete(mediaAssetRecords).where(eq(mediaAssetRecords.id, assetId));
-  await getRuntimeEnv().MEDIA?.delete(asset.media_assets.objectKey);
-  const remaining = await db.select({ id: albumMediaRecords.mediaAssetId }).from(albumMediaRecords).where(eq(albumMediaRecords.albumId, id)).orderBy(asc(albumMediaRecords.sortOrder)).limit(1);
-  if (album.coverMediaAssetId === assetId && remaining[0]) await db.update(albumRecords).set({ coverMediaAssetId: remaining[0].id, updatedAt: new Date().toISOString() }).where(eq(albumRecords.id, id));
-  return getAlbum(id, memberId);
+  return deleteAlbumMediaBatch(id, memberId, [assetId]);
 }
