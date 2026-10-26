@@ -19,10 +19,23 @@ function AlbumBookCard({ album, index, trips }: { album: AlbumSummary; index: nu
 
   async function saveAlbum(event:FormEvent){event.preventDefault();setSaving(true);setError("");try{const response=await fetch(`/api/albums/${album.id}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({title:editTitle,description:editDescription,tripId:editTripId||null})});const payload=await response.json() as {error?:string};if(!response.ok)throw new Error(payload.error||"保存失败。");setEditOpen(false);router.refresh();}catch(c){setError(c instanceof Error?c.message:"保存失败。");}finally{setSaving(false);}}
 
+  async function deleteAlbum() {
+    if (saving || !confirm(`确定删除相册“${album.title}”吗？`)) return;
+    setSaving(true); setError("");
+    try {
+      const response = await fetch(`/api/albums/${album.id}`, { method: "DELETE" });
+      const payload = await response.json() as { error?: string; message?: string };
+      if (!response.ok) throw new Error(payload.message || payload.error || "删除失败。");
+      setEditOpen(false); router.refresh();
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "删除失败，请重试。"); }
+    finally { setSaving(false); }
+  }
+
   async function replaceCover(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file || replacing || !album.canEditAlbum) return;
     setReplacing(true);
+    setError("");
     try {
       const assetId = await uploadMediaFile(file, "album");
       const attached = await fetch(`/api/albums/${album.id}/media`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ assetIds: [assetId] }) });
@@ -30,6 +43,8 @@ function AlbumBookCard({ album, index, trips }: { album: AlbumSummary; index: nu
       const updated = await fetch(`/api/albums/${album.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ coverMediaAssetId: assetId }) });
       if (!updated.ok) throw new Error("封面设置失败。");
       router.refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "封面替换失败，请重试。");
     } finally {
       setReplacing(false);
       event.target.value = "";
@@ -43,8 +58,9 @@ function AlbumBookCard({ album, index, trips }: { album: AlbumSummary; index: nu
       <span className={`album-book-image${replacing ? " is-replacing" : ""}`}>{album.coverMediaAssetId ? <img src={`/api/media/${album.coverMediaAssetId}?variant=card`} alt="" width={640} height={420} loading="lazy" /> : <span className="album-book-empty"><BookOpen size={42} /></span>}</span>
       <span className="album-book-meta"><small>{album.tripTitle || "共同相册"}</small><strong>{album.title}</strong><span>{album.photoCount} 张照片</span></span>
     </Link>
-    <button className="album-book-replace" type="button" aria-label={`替换${album.title}的封面`} onClick={() => inputRef.current?.click()} />
-    {album.canEditAlbum&&<><button className="album-book-menu-trigger" type="button" aria-label={`编辑相册：${album.title}`} aria-haspopup="dialog" aria-expanded={editOpen} onClick={()=>setEditOpen(true)}><MoreHorizontal size={18}/></button><WorkspaceOverlay open={editOpen} onClose={()=>{if(!saving)setEditOpen(false);}} mode="modal" ariaLabel={`编辑相册：${album.title}`} className="book-edit-dialog clean-dialog"><header className="editor-dialog-heading"><h2>编辑相册</h2><button type="button" aria-label="关闭" onClick={()=>setEditOpen(false)}><X size={20}/></button></header><form className="album-form book-edit-form" onSubmit={saveAlbum}><label>标题<input required maxLength={80} value={editTitle} onChange={e=>setEditTitle(e.target.value)}/></label><label>关联旅行<select value={editTripId} onChange={e=>setEditTripId(e.target.value)}><option value="">不关联旅行</option>{trips.map(t=><option key={t.id} value={t.id}>{t.title}</option>)}</select></label><label>简介<textarea maxLength={500} rows={3} value={editDescription} onChange={e=>setEditDescription(e.target.value)}/></label>{error&&<p className="form-error" role="alert">{error}</p>}<div><button type="button" onClick={()=>setEditOpen(false)}>取消</button><button type="submit" disabled={saving}>{saving?"保存中…":"保存"}</button></div></form></WorkspaceOverlay></>}
+    {album.canEditAlbum && <button className="album-book-replace" type="button" disabled={replacing} aria-label={`替换${album.title}的封面`} onClick={() => inputRef.current?.click()} />}
+    {error && !editOpen && <p className="form-error" role="alert">{error}</p>}
+    {album.canEditAlbum&&<><button className="album-book-menu-trigger" type="button" aria-label={`编辑相册：${album.title}`} aria-haspopup="dialog" aria-expanded={editOpen} onClick={()=>setEditOpen(true)}><MoreHorizontal size={18}/></button><WorkspaceOverlay open={editOpen} onClose={()=>{if(!saving)setEditOpen(false);}} mode="modal" ariaLabel={`编辑相册：${album.title}`} className="book-edit-dialog clean-dialog"><header className="editor-dialog-heading"><h2>编辑相册</h2><button type="button" aria-label="关闭" onClick={()=>setEditOpen(false)}><X size={20}/></button></header><form className="album-form book-edit-form" onSubmit={saveAlbum}><label>标题<input required maxLength={80} value={editTitle} onChange={e=>setEditTitle(e.target.value)}/></label><label>关联旅行<select value={editTripId} onChange={e=>setEditTripId(e.target.value)}><option value="">不关联旅行</option>{trips.map(t=><option key={t.id} value={t.id}>{t.title}</option>)}</select></label><label>简介<textarea maxLength={500} rows={3} value={editDescription} onChange={e=>setEditDescription(e.target.value)}/></label>{error&&<p className="form-error" role="alert">{error}</p>}<div><button type="button" className="danger" disabled={saving} onClick={deleteAlbum}>删除相册</button><button type="button" disabled={saving} onClick={()=>setEditOpen(false)}>取消</button><button type="submit" disabled={saving}>{saving?"保存中…":"保存"}</button></div></form></WorkspaceOverlay></>}
   </article>;
 }
 

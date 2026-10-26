@@ -1,7 +1,7 @@
 import { and, eq, isNull, like } from "drizzle-orm";
 import { AwsV4Signer } from "aws4fetch";
 import { getDb, getRuntimeEnv } from "@/db";
-import { albumMediaRecords, albumRecords, homeFeaturedPhotoRecords, mediaAssetRecords, recommendationRecords, recommendationReferenceMediaRecords, recommendationReferenceRecords, tripMemberRecords, tripRecords } from "@/db/schema";
+import { albumMediaRecords, albumRecords, homeFeaturedPhotoRecords, knowledgeEntryRecords, knowledgeMediaRecords, mediaAssetRecords, recommendationRecords, recommendationReferenceMediaRecords, recommendationReferenceRecords, tripMemberRecords, tripRecords } from "@/db/schema";
 
 export const mediaPurposes = ["home_featured", "guestbook", "recommendation_reference", "trip_cover", "album", "member_avatar", "knowledge_image"] as const;
 export type MediaPurpose = (typeof mediaPurposes)[number];
@@ -126,6 +126,10 @@ export async function getAuthorizedReadyMediaAsset(assetId: string, memberId: st
     return member ? asset : null;
   }
   if (asset.purpose === "recommendation_reference") {
+    const shared = (await db.select({ id: knowledgeMediaRecords.entryId }).from(knowledgeMediaRecords)
+      .innerJoin(knowledgeEntryRecords, eq(knowledgeEntryRecords.id, knowledgeMediaRecords.entryId))
+      .where(and(eq(knowledgeMediaRecords.mediaAssetId, assetId), isNull(knowledgeEntryRecords.deletedAt))).limit(1))[0];
+    if (shared) return asset;
     const member = (await db.select({ memberId: tripMemberRecords.memberId }).from(recommendationReferenceMediaRecords)
       .innerJoin(recommendationReferenceRecords, eq(recommendationReferenceRecords.id, recommendationReferenceMediaRecords.referenceId))
       .innerJoin(recommendationRecords, eq(recommendationRecords.id, recommendationReferenceRecords.recommendationId))

@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, like, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getDb, getRuntimeEnv } from "@/db";
 import { knowledgeEntryRecords, knowledgeEntryTagRecords, knowledgeFavoriteRecords, knowledgeMediaRecords, knowledgeTagRecords, knowledgeTripLinkRecords, memberRecords, mediaAssetRecords, tripMemberRecords, tripRecords } from "@/db/schema";
 
@@ -15,14 +15,28 @@ function safeUrl(value: unknown) {
   catch { throw new Error("INVALID_EXTERNAL_URL"); }
 }
 
-export async function listKnowledge(memberId: string, filters: { section?: string; q?: string; tag?: string; destination?: string; favorite?: boolean } = {}) {
-  const db = getDb(); const section = safeSection(filters.section); const q = filters.q?.trim().slice(0, 80); const pattern = q ? `%${q.replaceAll("%", "\\%").replaceAll("_", "\\_")}%` : null;
+export type KnowledgeFilters = { section?: string; q?: string; tag?: string; destination?: string; favorite?: boolean; page?: number; pageSize?: number };
+
+// instr treats %, _ and backslashes literally, unlike an unescaped LIKE pattern.
+export function knowledgeSearchCondition(query: string) {
+  const term = query.trim().slice(0, 80).toLocaleLowerCase("zh-CN");
+  return sql`(instr(lower(coalesce(${knowledgeEntryRecords.title}, '') || ' ' || coalesce(${knowledgeEntryRecords.body}, '') || ' ' || coalesce(${knowledgeEntryRecords.summary}, '') || ' ' || coalesce(${knowledgeEntryRecords.destination}, '')), ${term}) > 0 OR EXISTS (SELECT 1 FROM knowledge_entry_tags et JOIN knowledge_tags t ON t.id=et.tag_id WHERE et.entry_id=${knowledgeEntryRecords.id} AND instr(t.normalized_name, ${term}) > 0))`;
+}
+
+export async function listKnowledgePage(memberId: string, filters: KnowledgeFilters = {}) {
+  const db = getDb(), section = safeSection(filters.section), q = filters.q?.trim();
+  const page = Number.isSafeInteger(filters.page) && filters.page! > 0 ? Math.min(filters.page!, 100000) : 1;
+  // Keep related IN queries below D1's bound parameter limit.
+  const pageSize = Number.isSafeInteger(filters.pageSize) ? Math.min(80, Math.max(1, filters.pageSize!)) : 40;
   const clauses = [isNull(knowledgeEntryRecords.deletedAt)];
   if (section) clauses.push(eq(knowledgeEntryRecords.section, section));
-  if (pattern) clauses.push(or(like(knowledgeEntryRecords.title, pattern), like(knowledgeEntryRecords.body, pattern), like(knowledgeEntryRecords.summary, pattern), like(knowledgeEntryRecords.destination, pattern))!);
-  if (filters.destination?.trim()) clauses.push(like(knowledgeEntryRecords.destination, `%${filters.destination.trim().slice(0, 80)}%`));
-  const rows = await db.select({ entry: knowledgeEntryRecords, authorName: memberRecords.displayName }).from(knowledgeEntryRecords).leftJoin(memberRecords, eq(knowledgeEntryRecords.createdByMemberId, memberRecords.id)).where(and(...clauses)).orderBy(desc(knowledgeEntryRecords.updatedAt)).limit(200);
-  if (!rows.length) return [] as KnowledgeEntryView[];
+  if (q) clauses.push(knowledgeSearchCondition(q));
+  if (filters.destination?.trim()) clauses.push(sql`instr(lower(coalesce(${knowledgeEntryRecords.destination}, '')), ${filters.destination.trim().slice(0, 80).toLocaleLowerCase("zh-CN")}) > 0`);
+  if (filters.favorite) clauses.push(sql`EXISTS (SELECT 1 FROM knowledge_favorites f WHERE f.entry_id=${knowledgeEntryRecords.id} AND f.member_id=${memberId})`);
+  if (filters.tag) clauses.push(sql`EXISTS (SELECT 1 FROM knowledge_entry_tags et JOIN knowledge_tags t ON t.id=et.tag_id WHERE et.entry_id=${knowledgeEntryRecords.id} AND t.normalized_name=${filters.tag.trim().toLocaleLowerCase("zh-CN")})`);
+  const fetched = await db.select({ entry: knowledgeEntryRecords, authorName: memberRecords.displayName }).from(knowledgeEntryRecords).leftJoin(memberRecords, eq(knowledgeEntryRecords.createdByMemberId, memberRecords.id)).where(and(...clauses)).orderBy(desc(knowledgeEntryRecords.updatedAt), desc(knowledgeEntryRecords.id)).limit(pageSize + 1).offset((page - 1) * pageSize);
+  const hasMore = fetched.length > pageSize, rows = fetched.slice(0, pageSize);
+  if (!rows.length) return { entries: [] as KnowledgeEntryView[], page, hasMore: false };
   const ids = rows.map(({ entry }) => entry.id);
   const [tagRows, mediaRows, favorites] = await Promise.all([
     db.select({ entryId: knowledgeEntryTagRecords.entryId, name: knowledgeTagRecords.name }).from(knowledgeEntryTagRecords).innerJoin(knowledgeTagRecords, eq(knowledgeEntryTagRecords.tagId, knowledgeTagRecords.id)).where(inArray(knowledgeEntryTagRecords.entryId, ids)),
@@ -30,10 +44,17 @@ export async function listKnowledge(memberId: string, filters: { section?: strin
     db.select({ entryId: knowledgeFavoriteRecords.entryId }).from(knowledgeFavoriteRecords).where(and(eq(knowledgeFavoriteRecords.memberId, memberId), inArray(knowledgeFavoriteRecords.entryId, ids))),
   ]);
   const favoriteIds = new Set(favorites.map((item) => item.entryId));
-  let result = rows.map(({ entry, authorName }) => ({ ...entry, authorName, tags: tagRows.filter((tag) => tag.entryId === entry.id).map((tag) => tag.name), mediaAssetIds: mediaRows.filter((item) => item.entryId === entry.id).map((item) => item.assetId), favorite: favoriteIds.has(entry.id) }));
-  if (filters.favorite) result = result.filter((entry) => entry.favorite);
-  if (filters.tag) result = result.filter((entry) => entry.tags.some((tag) => tag === filters.tag));
-  return result;
+  const entries = rows.map(({ entry, authorName }) => ({ ...entry, authorName, tags: tagRows.filter((tag) => tag.entryId === entry.id).map((tag) => tag.name), mediaAssetIds: mediaRows.filter((item) => item.entryId === entry.id).map((item) => item.assetId), favorite: favoriteIds.has(entry.id) }));
+  return { entries, page, hasMore };
+}
+
+export async function listKnowledge(memberId: string, filters: KnowledgeFilters = {}) { return (await listKnowledgePage(memberId, filters)).entries; }
+
+export async function listKnowledgeTags() {
+  return getDb().selectDistinct({ name: knowledgeTagRecords.name }).from(knowledgeTagRecords)
+    .innerJoin(knowledgeEntryTagRecords, eq(knowledgeEntryTagRecords.tagId, knowledgeTagRecords.id))
+    .innerJoin(knowledgeEntryRecords, eq(knowledgeEntryRecords.id, knowledgeEntryTagRecords.entryId))
+    .where(isNull(knowledgeEntryRecords.deletedAt)).orderBy(knowledgeTagRecords.normalizedName);
 }
 
 export async function getKnowledgeEntry(memberId: string, id: string) {
@@ -95,6 +116,12 @@ export async function setKnowledgeFavorite(memberId: string, id: string, favorit
 }
 
 export async function listKnowledgeTripOptions(memberId: string) { return getDb().select({ id: tripRecords.id, slug: tripRecords.slug, title: tripRecords.title }).from(tripMemberRecords).innerJoin(tripRecords, eq(tripMemberRecords.tripId, tripRecords.id)).where(eq(tripMemberRecords.memberId, memberId)).orderBy(desc(tripRecords.startDate)); }
-export async function linkKnowledgeToTrip(memberId: string, entryId: string, tripId: string) { const membership = (await getDb().select({ id: tripMemberRecords.tripId }).from(tripMemberRecords).where(and(eq(tripMemberRecords.memberId, memberId), eq(tripMemberRecords.tripId, tripId))).limit(1))[0]; if (!membership) throw new Error("TRIP_FORBIDDEN"); await getDb().insert(knowledgeTripLinkRecords).values({ entryId, tripId, createdByMemberId: memberId, createdAt: new Date().toISOString() }).onConflictDoNothing(); }
+export async function linkKnowledgeToTrip(memberId: string, entryId: string, tripId: string) {
+  const db = getDb();
+  if (!(await db.select({ id: knowledgeEntryRecords.id }).from(knowledgeEntryRecords).where(and(eq(knowledgeEntryRecords.id, entryId), isNull(knowledgeEntryRecords.deletedAt))).limit(1))[0]) throw new Error("KNOWLEDGE_NOT_FOUND");
+  const membership = (await db.select({ id: tripMemberRecords.tripId }).from(tripMemberRecords).where(and(eq(tripMemberRecords.memberId, memberId), eq(tripMemberRecords.tripId, tripId))).limit(1))[0];
+  if (!membership) throw new Error("TRIP_FORBIDDEN");
+  await db.insert(knowledgeTripLinkRecords).values({ entryId, tripId, createdByMemberId: memberId, createdAt: new Date().toISOString() }).onConflictDoNothing();
+}
 
 export async function getMemberPersona(memberId: string) { const row = await getRuntimeEnv().DB.prepare("SELECT model_url modelUrl, preview_media_asset_id previewMediaAssetId, resource_version resourceVersion, display_config_json displayConfigJson FROM member_personas WHERE member_id=?").bind(memberId).first(); return row || null; }

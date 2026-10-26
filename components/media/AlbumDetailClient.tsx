@@ -2,37 +2,103 @@
 "use client";
 import { ChangeEvent, PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Heart, ImagePlus, Plus, Star, Tag, Trash2, X } from "lucide-react";
+import { Check, Heart, ImagePlus, Plus, Star, Tag, Trash2, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { readPhotoCapturedAt, uploadMediaFile } from "./client-upload";
-type Photo = { assetId:string; filename:string; sortOrder:number; capturedAt:string; isFavorite:boolean; tagIds:string[] };
-type Album = { id:string; title:string; description:string|null; tripId:string|null; tripTitle:string|null; createdByMemberId:string; coverMediaAssetId:string|null; photos:Photo[]; tags:{id:string;name:string}[]; canEditAlbum:boolean };
-export function AlbumDetailClient({album}:{album:Album}) {
- const router=useRouter(),inputRef=useRef<HTMLInputElement>(null),longPress=useRef<ReturnType<typeof setTimeout>|null>(null),swipeStart=useRef<number|null>(null);
- const [busy,setBusy]=useState(""),[error,setError]=useState("");
- const [filter,setFilter]=useState("all"),[selecting,setSelecting]=useState(false),[selected,setSelected]=useState<Set<string>>(new Set()),[viewer,setViewer]=useState<string|null>(null);
- const visible=useMemo(()=>album.photos.filter(p=>filter==="all"||(filter==="favorite"?p.isFavorite:p.tagIds.includes(filter))),[album.photos,filter]);
- const groups=useMemo(()=>{const map=new Map<string,Photo[]>();for(const p of visible){const key=p.capturedAt.slice(0,10);map.set(key,[...(map.get(key)||[]),p]);}return [...map.entries()];},[visible]);
- const activeIndex=viewer?visible.findIndex(p=>p.assetId===viewer):-1,activePhoto=activeIndex>=0?visible[activeIndex]:null;
- useEffect(()=>{if(!viewer)return;const key=(e:KeyboardEvent)=>{if(e.key==="Escape")setViewer(null);if(e.key==="ArrowLeft"&&activeIndex>0)setViewer(visible[activeIndex-1].assetId);if(e.key==="ArrowRight"&&activeIndex<visible.length-1)setViewer(visible[activeIndex+1].assetId);};window.addEventListener("keydown",key);return()=>window.removeEventListener("keydown",key);},[viewer,activeIndex,visible]);
- async function json(url:string,init:RequestInit){const response=await fetch(url,init),payload=await response.json() as {error?:string};if(!response.ok)throw new Error(payload.error||"操作失败，请重试。");return payload;}
- async function upload(e:ChangeEvent<HTMLInputElement>){const files=[...(e.target.files||[])];e.target.value="";if(!files.length)return;if(files.length>20){setError("每次最多上传 20 张照片。");return;}setBusy("upload");setError("");try{const pairs:{id:string;capturedAt:string|null}[]=[];for(const file of files)pairs.push({id:await uploadMediaFile(file,"album"),capturedAt:await readPhotoCapturedAt(file)});await json(`/api/albums/${album.id}/media`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({assetIds:pairs.map(x=>x.id),capturedAtByAsset:Object.fromEntries(pairs.filter(x=>x.capturedAt).map(x=>[x.id,x.capturedAt]))})});router.refresh();}catch(c){setError(c instanceof Error?c.message:"照片上传失败。");}finally{setBusy("");}}
- async function batch(action:string,extra:Record<string,unknown>={},ids=[...selected]){if(!ids.length)return;setBusy(action);try{await json(`/api/albums/${album.id}/media/batch`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({action,assetIds:ids,...extra})});setSelected(new Set());setSelecting(false);router.refresh();}catch(c){setError(c instanceof Error?c.message:"照片操作失败。");}finally{setBusy("");}}
- async function removeSelected(){const ids=[...selected];if(!ids.length||!confirm(`确定永久删除选中的 ${ids.length} 张照片吗？删除后无法恢复。`))return;setBusy("delete");try{await json(`/api/albums/${album.id}/media/batch`,{method:"DELETE",headers:{"content-type":"application/json"},body:JSON.stringify({assetIds:ids})});setSelected(new Set());setSelecting(false);router.refresh();}catch(c){setError(c instanceof Error?c.message:"删除失败。");}finally{setBusy("");}}
- async function cover(id:string){setBusy("cover");try{await json(`/api/albums/${album.id}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({coverMediaAssetId:id})});router.refresh();}catch(c){setError(c instanceof Error?c.message:"封面设置失败。");}finally{setBusy("");}}
- function toggle(id:string){setSelected(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next;});}
- function startHold(id:string){longPress.current=setTimeout(()=>{setSelecting(true);setSelected(new Set([id]));longPress.current=null;},480);}
- function cancelHold(){if(longPress.current)clearTimeout(longPress.current);longPress.current=null;}
- function open(p:Photo){if(selecting)toggle(p.assetId);else setViewer(p.assetId);}
- function addTag(){const name=prompt("输入新标签名称（最多24个字）");if(name?.trim())void batch("addTag",{tagName:name.trim()});}
- function changeDate(){const value=prompt("输入拍摄日期（YYYY-MM-DD）");if(value&&/^\d{4}-\d{2}-\d{2}$/.test(value))void batch("date",{capturedAt:`${value}T12:00:00`});}
- function swipeEnd(e:PointerEvent){if(swipeStart.current===null)return;const d=e.clientX-swipeStart.current;if(d>50&&activeIndex>0)setViewer(visible[activeIndex-1].assetId);if(d< -50&&activeIndex<visible.length-1)setViewer(visible[activeIndex+1].assetId);swipeStart.current=null;}
- return <>
-  <nav className="album-photo-toolbar" aria-label="照片筛选"><div><button className={filter==="all"?"active":""} onClick={()=>setFilter("all")}>全部</button><button className={filter==="favorite"?"active":""} onClick={()=>setFilter("favorite")}><Heart size={15}/>收藏</button>{album.tags.map(t=><button className={filter===t.id?"active":""} key={t.id} onClick={()=>setFilter(t.id)}>{t.name}</button>)}</div><button onClick={()=>{setSelecting(!selecting);setSelected(new Set());}}>{selecting?"取消":"选择"}</button></nav>
-  {error&&<p className="form-error album-error" role="alert">{error}</p>}
-  {!visible.length?<section className="album-photo-empty"><ImagePlus size={45}/><p>{album.photos.length?"这个分类里还没有照片。":"还没有照片，点击右下角的加号添加吧。"}</p></section>:<div className="album-photo-timeline">{groups.map(([date,photos])=><section key={date}><header><h2>{new Intl.DateTimeFormat("zh-CN",{year:"numeric",month:"long",day:"numeric"}).format(new Date(`${date}T12:00:00`))}</h2><span>{photos.length} 张</span></header><div className="album-photo-grid">{photos.map(p=><button type="button" className={`album-photo-tile${selected.has(p.assetId)?" selected":""}`} key={p.assetId} onPointerDown={()=>startHold(p.assetId)} onPointerUp={cancelHold} onPointerCancel={cancelHold} onPointerLeave={cancelHold} onClick={()=>open(p)}><img src={`/api/media/${p.assetId}?variant=card`} alt={p.filename} width={720} height={720} loading="lazy"/>{p.isFavorite&&<Heart className="album-photo-heart" size={17} fill="currentColor"/>}{selecting&&<i className="album-photo-check">{selected.has(p.assetId)&&<Check size={16}/>}</i>}</button>)}</div></section>)}</div>}
-  <input ref={inputRef} className="album-floating-input" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" multiple disabled={!!busy} onChange={upload}/><button type="button" className={`album-floating-add${busy==="upload"?" busy":""}`} aria-label={busy==="upload"?"照片上传中":"添加照片"} disabled={!!busy} onClick={()=>inputRef.current?.click()}>{busy==="upload"?<span>上传中</span>:<Plus size={30}/>}</button>
-  {selecting&&<aside className="album-selection-bar"><b>已选 {selected.size} 张</b><button disabled={!selected.size||!!busy} onClick={()=>batch("favorite",{isFavorite:true})}><Heart size={18}/>收藏</button><button disabled={!selected.size||!!busy} onClick={addTag}><Tag size={18}/>标签</button>{album.canEditAlbum&&<><button disabled={!selected.size||!!busy} onClick={changeDate}>改日期</button><button className="danger" disabled={!selected.size||!!busy} onClick={removeSelected}><Trash2 size={18}/>删除</button></>}</aside>}
-  {activePhoto&&<div className="album-viewer" role="dialog" aria-modal="true" aria-label="照片预览" onPointerDown={e=>{swipeStart.current=e.clientX;}} onPointerUp={swipeEnd}><button className="album-viewer-close" aria-label="关闭" onClick={()=>setViewer(null)}><X/></button><img src={`/api/media/${activePhoto.assetId}?variant=display`} alt={activePhoto.filename}/><footer><span>{activeIndex+1} / {visible.length}</span><button className={activePhoto.isFavorite?"active":""} onClick={()=>batch("favorite",{isFavorite:!activePhoto.isFavorite},[activePhoto.assetId])}><Heart fill={activePhoto.isFavorite?"currentColor":"none"}/>收藏</button>{album.canEditAlbum&&<button onClick={()=>cover(activePhoto.assetId)}><Star fill={album.coverMediaAssetId===activePhoto.assetId?"currentColor":"none"}/>设为封面</button>}</footer></div>}
- </>;
-}
+import { runAlbumUploadQueue, type AlbumUploadItem } from "./album-upload-queue";
+import { WorkspaceOverlay } from "@/components/trip/WorkspaceOverlay";
 
+type Photo = { assetId: string; filename: string; sortOrder: number; capturedAt: string; isFavorite: boolean; tagIds: string[] };
+type Album = { id: string; title: string; description: string | null; tripId: string | null; tripTitle: string | null; createdByMemberId: string; coverMediaAssetId: string | null; photos: Photo[]; tags: { id: string; name: string }[]; canEditAlbum: boolean };
+const dateLabel = (date: string) => { const parsed = new Date(date); return Number.isFinite(parsed.getTime()) ? parsed.toLocaleDateString("zh-CN") : "日期未知"; };
+
+export function AlbumDetailClient({ album }: { album: Album }) {
+  const router = useRouter(), inputRef = useRef<HTMLInputElement>(null), running = useRef(false);
+  const hold = useRef<ReturnType<typeof setTimeout> | null>(null), pointerStart = useRef<{ x: number; y: number } | null>(null), held = useRef(false), swipeStart = useRef<{ x: number; y: number } | null>(null);
+  const [busy, setBusy] = useState(""), [error, setError] = useState(""), [queue, setQueue] = useState<AlbumUploadItem[]>([]);
+  const [filter, setFilter] = useState("all"), [selecting, setSelecting] = useState(false), [selected, setSelected] = useState<Set<string>>(new Set()), [viewer, setViewer] = useState<string | null>(null);
+  const [editAction, setEditAction] = useState<"tag" | "date" | null>(null), [tagName, setTagName] = useState(""), [date, setDate] = useState("");
+  const visible = useMemo(() => album.photos.filter(p => filter === "all" || (filter === "favorite" ? p.isFavorite : p.tagIds.includes(filter))), [album.photos, filter]);
+  const groups = useMemo(() => { const map = new Map<string, Photo[]>(); for (const p of visible) { const key = p.capturedAt.slice(0, 10); const group = map.get(key) || []; group.push(p); map.set(key, group); } return [...map.entries()]; }, [visible]);
+  const activeIndex = viewer ? visible.findIndex(p => p.assetId === viewer) : -1, activePhoto = activeIndex >= 0 ? visible[activeIndex] : null;
+  const failed = queue.filter(item => item.status === "error"), uploaded = queue.filter(item => item.status === "done").length;
+  const allSelected = visible.length > 0 && visible.every(photo => selected.has(photo.assetId));
+  useEffect(() => () => { if (hold.current) clearTimeout(hold.current); }, []);
+  useEffect(() => {
+    if (!viewer) return;
+    const key = (e: KeyboardEvent) => { if (e.key === "ArrowLeft" && activeIndex > 0) { e.preventDefault(); setViewer(visible[activeIndex - 1].assetId); } if (e.key === "ArrowRight" && activeIndex < visible.length - 1) { e.preventDefault(); setViewer(visible[activeIndex + 1].assetId); } };
+    window.addEventListener("keydown", key); return () => window.removeEventListener("keydown", key);
+  }, [viewer, activeIndex, visible]);
+  async function json(url: string, init: RequestInit) {
+    const response = await fetch(url, init), payload = await response.json() as { error?: string; message?: string };
+    if (!response.ok) throw new Error(payload.message || payload.error || "操作失败，请重试。"); return payload;
+  }
+  async function processUploads(items: AlbumUploadItem[]) {
+    if (running.current) return;
+    running.current = true; setBusy("upload"); setError("");
+    try {
+      const results = await runAlbumUploadQueue(items, {
+        upload: file => uploadMediaFile(file, "album"), capturedAt: readPhotoCapturedAt, changed: setQueue,
+        attach: (assetId, capturedAt) => json(`/api/albums/${album.id}/media`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ assetIds: [assetId], capturedAtByAsset: capturedAt ? { [assetId]: capturedAt } : {} }) }),
+      });
+      const errors = results.filter(item => item.status === "error");
+      if (errors.length) setError(`${errors.length} 张照片未完成，可只重试失败项。`);
+      router.refresh();
+    } finally { running.current = false; setBusy(""); }
+  }
+  async function upload(event: ChangeEvent<HTMLInputElement>) {
+    const files = [...(event.target.files || [])]; event.target.value = "";
+    if (!files.length || busy) return;
+    if (files.length > 20) { setError("每次最多上传 20 张照片。"); return; }
+    await processUploads([...failed, ...files.map(file => ({ file, status: "waiting" as const }))]);
+  }
+  async function batch(action: string, extra: Record<string, unknown> = {}, ids = [...selected]) {
+    if (!ids.length || running.current) return;
+    running.current = true; setBusy(action); setError("");
+    try {
+      await json(`/api/albums/${album.id}/media/batch`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, assetIds: ids, ...extra }) });
+      setSelected(new Set()); setSelecting(false); setEditAction(null); router.refresh();
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "照片操作失败。"); }
+    finally { running.current = false; setBusy(""); }
+  }
+  async function removeSelected() {
+    const ids = [...selected];
+    if (!ids.length || running.current || !confirm(`确定永久删除选中的 ${ids.length} 张照片吗？删除后无法恢复。`)) return;
+    running.current = true; setBusy("delete"); setError("");
+    try { await json(`/api/albums/${album.id}/media/batch`, { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ assetIds: ids }) }); setSelected(new Set()); setSelecting(false); router.refresh(); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : "删除失败。"); }
+    finally { running.current = false; setBusy(""); }
+  }
+  async function cover(id: string) {
+    if (running.current || !album.canEditAlbum) return;
+    running.current = true; setBusy("cover"); setError("");
+    try { await json(`/api/albums/${album.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ coverMediaAssetId: id }) }); router.refresh(); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : "封面设置失败。"); }
+    finally { running.current = false; setBusy(""); }
+  }
+  function toggle(id: string) { setSelected(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; }); }
+  function cancelHold() { if (hold.current) clearTimeout(hold.current); hold.current = null; pointerStart.current = null; }
+  function startHold(event: PointerEvent, id: string) {
+    if (event.button !== 0 || busy) return;
+    held.current = false; pointerStart.current = { x: event.clientX, y: event.clientY };
+    hold.current = setTimeout(() => { held.current = true; setSelecting(true); setSelected(current => new Set([...current, id])); hold.current = null; }, 480);
+  }
+  function open(photo: Photo) { if (held.current) { held.current = false; return; } if (selecting) toggle(photo.assetId); else setViewer(photo.assetId); }
+  function swipeEnd(event: PointerEvent) {
+    const start = swipeStart.current; swipeStart.current = null;
+    if (!start) return;
+    const x = event.clientX - start.x, y = event.clientY - start.y;
+    if (Math.abs(x) <= Math.max(50, Math.abs(y) * 1.5)) return;
+    if (x > 0 && activeIndex > 0) setViewer(visible[activeIndex - 1].assetId);
+    if (x < 0 && activeIndex < visible.length - 1) setViewer(visible[activeIndex + 1].assetId);
+  }
+  return <>
+    <nav className="album-photo-toolbar" aria-label="照片筛选"><div><button className={filter === "all" ? "active" : ""} onClick={() => { setFilter("all"); setSelected(new Set()); }}>全部</button><button className={filter === "favorite" ? "active" : ""} onClick={() => { setFilter("favorite"); setSelected(new Set()); }}><Heart size={15} />收藏</button>{album.tags.map(tag => <button className={filter === tag.id ? "active" : ""} key={tag.id} onClick={() => { setFilter(tag.id); setSelected(new Set()); }}>{tag.name}</button>)}</div><button disabled={!!busy} onClick={() => { setSelecting(!selecting); setSelected(new Set()); }}>{selecting ? "取消" : "选择"}</button></nav>
+    {error && <p className="form-error album-error" role="alert">{error}</p>}
+    {!!queue.length && <section className="album-upload-status" aria-live="polite"><p>{busy === "upload" ? `已完成 ${uploaded} / ${queue.length} 张` : `已添加 ${uploaded} 张`}</p>{failed.length > 0 && <><ul>{failed.map((item, index) => <li key={index}>{item.file.name}：{item.error}</li>)}</ul><button disabled={!!busy} onClick={() => processUploads(queue)}>重试失败的 {failed.length} 张</button></>}{!busy && !failed.length && <button onClick={() => setQueue([])}>关闭</button>}</section>}
+    {!visible.length ? <section className="album-photo-empty"><ImagePlus size={45} /><p>{album.photos.length ? "暂无匹配照片" : "暂无照片"}</p></section> : <div className="album-photo-timeline">{groups.map(([date, photos]) => <section key={date}><header><h2>{dateLabel(`${date}T12:00:00`)}</h2><span>{photos.length} 张</span></header><div className="album-photo-grid">{photos.map(photo => <button type="button" aria-label={selecting ? `${selected.has(photo.assetId) ? "取消选择" : "选择"}${photo.filename}` : `查看${photo.filename}`} aria-pressed={selecting ? selected.has(photo.assetId) : undefined} className={`album-photo-tile${selected.has(photo.assetId) ? " selected" : ""}`} key={photo.assetId} onPointerDown={event => startHold(event, photo.assetId)} onPointerMove={event => { const start = pointerStart.current; if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > 8) cancelHold(); }} onPointerUp={cancelHold} onPointerCancel={cancelHold} onPointerLeave={cancelHold} onContextMenu={event => event.preventDefault()} onClick={() => open(photo)}><img src={`/api/media/${photo.assetId}?variant=thumb`} alt={photo.filename} width={320} height={320} loading="lazy" draggable={false} />{photo.isFavorite && <Heart className="album-photo-heart" size={17} fill="currentColor" />}{selecting && <i className="album-photo-check">{selected.has(photo.assetId) && <Check size={16} />}</i>}</button>)}</div></section>)}</div>}
+    <input ref={inputRef} className="album-floating-input" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" multiple disabled={!!busy} onChange={upload} />{!selecting && <button type="button" className={`album-floating-add${busy === "upload" ? " busy" : ""}`} aria-label={busy === "upload" ? "照片上传中" : "添加照片"} disabled={!!busy} onClick={() => inputRef.current?.click()}>{busy === "upload" ? <span>{uploaded}/{queue.length}</span> : <Plus size={30} />}</button>}
+    {selecting && <aside className="album-selection-bar"><b>已选 {selected.size} 张</b><button disabled={!!busy || !visible.length} onClick={() => setSelected(allSelected ? new Set() : new Set(visible.map(photo => photo.assetId)))}>{allSelected ? "取消全选" : "全选"}</button><button disabled={!selected.size || !!busy} onClick={() => batch("favorite", { isFavorite: true })}><Heart size={18} />收藏</button><button disabled={!selected.size || !!busy} onClick={() => batch("favorite", { isFavorite: false })}>取消收藏</button><button disabled={!selected.size || !!busy} onClick={() => setEditAction("tag")}><Tag size={18} />标签</button>{album.canEditAlbum && <><button disabled={!selected.size || !!busy} onClick={() => setEditAction("date")}>日期</button><button className="danger" disabled={!selected.size || !!busy} onClick={removeSelected}><Trash2 size={18} />删除</button></>}</aside>}
+    <WorkspaceOverlay open={editAction !== null} onClose={() => !busy && setEditAction(null)} ariaLabel={editAction === "tag" ? "管理照片标签" : "修改拍摄日期"} className="clean-dialog album-action-dialog"><header className="editor-dialog-heading"><h2>{editAction === "tag" ? "管理照片标签" : "修改拍摄日期"}</h2><button disabled={!!busy} aria-label="关闭" onClick={() => setEditAction(null)}><X size={20} /></button></header>{editAction === "tag" ? <div><label>添加标签<input maxLength={24} value={tagName} onChange={event => setTagName(event.target.value)} /></label><button disabled={!!busy || !tagName.trim()} onClick={() => batch("addTag", { tagName: tagName.trim() })}>添加到选中照片</button><p>移除标签</p>{album.tags.filter(tag => album.photos.some(photo => selected.has(photo.assetId) && photo.tagIds.includes(tag.id))).map(tag => <button key={tag.id} disabled={!!busy} onClick={() => batch("removeTag", { tagId: tag.id })}>{tag.name} ×</button>)}</div> : <form onSubmit={event => { event.preventDefault(); if (date) void batch("date", { capturedAt: `${date}T12:00:00` }); }}><label>拍摄日期<input type="date" required value={date} onChange={event => setDate(event.target.value)} /></label><button disabled={!!busy || !date}>保存</button></form>}{error && <p role="alert">{error}</p>}</WorkspaceOverlay>
+    <WorkspaceOverlay open={!!activePhoto} onClose={() => setViewer(null)} ariaLabel="照片预览" className="album-viewer">{activePhoto && <><button className="album-viewer-close" aria-label="关闭" onClick={() => setViewer(null)}><X /></button><img src={`/api/media/${activePhoto.assetId}?variant=display`} alt={activePhoto.filename} onPointerDown={event => { swipeStart.current = { x: event.clientX, y: event.clientY }; }} onPointerUp={swipeEnd} onPointerCancel={() => { swipeStart.current = null; }} draggable={false} /><button className="album-viewer-prev" aria-label="上一张" disabled={activeIndex <= 0} onClick={() => setViewer(visible[activeIndex - 1].assetId)}><ChevronLeft /></button><button className="album-viewer-next" aria-label="下一张" disabled={activeIndex >= visible.length - 1} onClick={() => setViewer(visible[activeIndex + 1].assetId)}><ChevronRight /></button><footer><div className="album-viewer-info"><span>{activeIndex + 1} / {visible.length}</span><time dateTime={activePhoto.capturedAt}>{dateLabel(activePhoto.capturedAt)}</time><span>{album.tags.filter(tag => activePhoto.tagIds.includes(tag.id)).map(tag => `#${tag.name}`).join(" ")}</span></div><button disabled={!!busy} className={activePhoto.isFavorite ? "active" : ""} onClick={() => batch("favorite", { isFavorite: !activePhoto.isFavorite }, [activePhoto.assetId])}><Heart fill={activePhoto.isFavorite ? "currentColor" : "none"} />{activePhoto.isFavorite ? "取消收藏" : "收藏"}</button>{album.canEditAlbum && <button disabled={!!busy} onClick={() => cover(activePhoto.assetId)}><Star fill={album.coverMediaAssetId === activePhoto.assetId ? "currentColor" : "none"} />设为封面</button>}</footer>{error && <p className="album-viewer-error" role="alert">{error}</p>}</>}</WorkspaceOverlay>
+  </>;
+}

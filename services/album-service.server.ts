@@ -101,15 +101,16 @@ export async function attachAlbumMedia(id: string, memberId: string, assetIds: s
   if (!unique.length) throw new Error("INVALID_ALBUM_MEDIA");
   const assets = await getDb().select().from(mediaAssetRecords).where(inArray(mediaAssetRecords.id, unique));
   if (assets.length !== unique.length || assets.some((asset) => asset.purpose !== "album" || asset.status !== "ready" || asset.uploaderMemberId !== memberId)) throw new Error("INVALID_ALBUM_MEDIA");
-  const reused = await getDb().select({ id: albumMediaRecords.mediaAssetId }).from(albumMediaRecords).where(inArray(albumMediaRecords.mediaAssetId, unique));
-  if (reused.length) throw new Error("INVALID_ALBUM_MEDIA");
+  const reused = await getDb().select({ id: albumMediaRecords.mediaAssetId, albumId: albumMediaRecords.albumId }).from(albumMediaRecords).where(inArray(albumMediaRecords.mediaAssetId, unique));
+  if (reused.some((row) => row.albumId !== id)) throw new Error("INVALID_ALBUM_MEDIA");
   const existing = await getDb().select().from(albumMediaRecords).where(eq(albumMediaRecords.albumId, id));
   const existingIds = new Set(existing.map((row) => row.mediaAssetId));
   const additions = unique.filter((assetId) => !existingIds.has(assetId));
   if (additions.length) {
-    const now = new Date().toISOString(), start = existing.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
-    await getDb().insert(albumMediaRecords).values(additions.map((assetId, index) => ({ albumId: id, mediaAssetId: assetId, uploadedByMemberId: memberId, sortOrder: start + index, capturedAt: validCapturedAt(capturedAtByAsset[assetId]) || now, createdAt: now })));
-    await getDb().update(albumRecords).set({ coverMediaAssetId: existing.length ? undefined : additions[0], updatedAt: now }).where(eq(albumRecords.id, id));
+    const now = new Date().toISOString(), d1 = getRuntimeEnv().DB;
+    const statements = additions.map((assetId) => d1.prepare("INSERT INTO album_media (album_id,media_asset_id,uploaded_by_member_id,sort_order,captured_at,created_at) SELECT ?,?,?,coalesce(max(sort_order),-1)+1,?,? FROM album_media WHERE album_id=? ON CONFLICT(album_id,media_asset_id) DO NOTHING").bind(id, assetId, memberId, validCapturedAt(capturedAtByAsset[assetId]) || now, now, id));
+    statements.push(d1.prepare("UPDATE albums SET cover_media_asset_id=coalesce(cover_media_asset_id,?),updated_at=? WHERE id=?").bind(additions[0], now, id));
+    await d1.batch(statements);
   }
   return getAlbum(id, memberId);
 }
@@ -120,40 +121,56 @@ function validCapturedAt(value?: string | null) {
   return Number.isFinite(date.getTime()) && date.getTime() <= Date.now() + 86400000 ? date.toISOString() : null;
 }
 
+function mediaIdGroups(assetIds: string[]) {
+  const unique = [...new Set(assetIds)];
+  if (!unique.length || unique.length > 10000) throw new Error("INVALID_ALBUM_MEDIA");
+  const groups: string[][] = [];
+  for (let offset = 0; offset < unique.length; offset += 80) groups.push(unique.slice(offset, offset + 80));
+  return groups;
+}
+
 export async function updateAlbumMedia(id: string, memberId: string, assetIds: string[], input: { isFavorite?: boolean; capturedAt?: string | null; addTagName?: string; removeTagId?: string }) {
-  const album = await requireAlbumAccess(id, memberId);
-  const unique = [...new Set(assetIds)].slice(0, 500);
-  if (!unique.length) throw new Error("INVALID_ALBUM_MEDIA");
-  const current = await getDb().select({ id: albumMediaRecords.mediaAssetId }).from(albumMediaRecords).where(and(eq(albumMediaRecords.albumId, id), inArray(albumMediaRecords.mediaAssetId, unique)));
-  if (current.length !== unique.length) throw new Error("ALBUM_MEDIA_NOT_FOUND");
-  const values: Partial<typeof albumMediaRecords.$inferInsert> = {};
-  if (input.isFavorite !== undefined) values.isFavorite = Boolean(input.isFavorite);
+  const album = await requireAlbumAccess(id, memberId), groups = mediaIdGroups(assetIds), db = getDb(), d1 = getRuntimeEnv().DB;
+  for (const group of groups) {
+    const current = await db.select({ id: albumMediaRecords.mediaAssetId }).from(albumMediaRecords).where(and(eq(albumMediaRecords.albumId, id), inArray(albumMediaRecords.mediaAssetId, group)));
+    if (current.length !== group.length) throw new Error("ALBUM_MEDIA_NOT_FOUND");
+  }
+  const assignments: string[] = [], values: (string | number)[] = [];
+  if (input.isFavorite !== undefined) { assignments.push("is_favorite=?"); values.push(input.isFavorite ? 1 : 0); }
   if (input.capturedAt !== undefined) {
     if (album.tripId && album.createdByMemberId !== memberId) throw new Error("ALBUM_AUTHOR_REQUIRED");
     const capturedAt = validCapturedAt(input.capturedAt);
     if (!capturedAt) throw new Error("INVALID_ALBUM_DATE");
-    values.capturedAt = capturedAt;
+    assignments.push("captured_at=?"); values.push(capturedAt);
   }
-  if (Object.keys(values).length) await getDb().update(albumMediaRecords).set(values).where(and(eq(albumMediaRecords.albumId, id), inArray(albumMediaRecords.mediaAssetId, unique)));
-  if (input.addTagName !== undefined) {
-    const name = input.addTagName.trim().replace(/\s+/g, " ");
-    if (!name || name.length > 24) throw new Error("INVALID_ALBUM_TAG");
-    let tag = (await getDb().select().from(albumTagRecords).where(and(eq(albumTagRecords.albumId, id), eq(albumTagRecords.name, name))).limit(1))[0];
-    if (!tag) { tag = { id: crypto.randomUUID(), albumId: id, name, createdAt: new Date().toISOString() }; await getDb().insert(albumTagRecords).values(tag); }
-    await getDb().insert(albumMediaTagRecords).values(unique.map((mediaAssetId) => ({ albumId: id, mediaAssetId, tagId: tag.id }))).onConflictDoNothing();
+  const name = input.addTagName?.trim().replace(/\s+/g, " ");
+  if (input.addTagName !== undefined && (!name || name.length > 24)) throw new Error("INVALID_ALBUM_TAG");
+  const statements: D1PreparedStatement[] = [], now = new Date().toISOString();
+  for (const group of groups) {
+    const placeholders = group.map(() => "?").join(",");
+    if (assignments.length) statements.push(d1.prepare(`UPDATE album_media SET ${assignments.join(",")} WHERE album_id=? AND media_asset_id IN (${placeholders})`).bind(...values, id, ...group));
+    if (input.removeTagId) statements.push(d1.prepare(`DELETE FROM album_media_tags WHERE album_id=? AND tag_id=? AND media_asset_id IN (${placeholders})`).bind(id, input.removeTagId, ...group));
   }
-  if (input.removeTagId) await getDb().delete(albumMediaTagRecords).where(and(eq(albumMediaTagRecords.albumId, id), inArray(albumMediaTagRecords.mediaAssetId, unique), eq(albumMediaTagRecords.tagId, input.removeTagId)));
-  await getDb().update(albumRecords).set({ updatedAt: new Date().toISOString() }).where(eq(albumRecords.id, id));
+  if (name) {
+    statements.push(d1.prepare("INSERT INTO album_tags (id,album_id,name,created_at) VALUES (?,?,?,?) ON CONFLICT(album_id,name) DO NOTHING").bind(crypto.randomUUID(), id, name, now));
+    for (const group of groups) statements.push(d1.prepare(`INSERT INTO album_media_tags (album_id,media_asset_id,tag_id) SELECT m.album_id,m.media_asset_id,t.id FROM album_media m JOIN album_tags t ON t.album_id=m.album_id WHERE m.album_id=? AND t.name=? AND m.media_asset_id IN (${group.map(() => "?").join(",")}) ON CONFLICT DO NOTHING`).bind(id, name, ...group));
+  }
+  statements.push(d1.prepare("UPDATE albums SET updated_at=? WHERE id=?").bind(now, id));
+  await d1.batch(statements);
   return getAlbum(id, memberId);
 }
 
 export async function deleteAlbumMediaBatch(id: string, memberId: string, assetIds: string[]) {
-  const unique = [...new Set(assetIds)].slice(0, 500);
-  if (!unique.length) throw new Error("INVALID_ALBUM_MEDIA");
-  for (const assetId of unique) await deleteAlbumMedia(id, memberId, assetId);
+  await requireAlbumEditor(id, memberId);
+  const groups = mediaIdGroups(assetIds);
+  // Validate the entire selection before deleting the first photo.
+  for (const group of groups) {
+    const current = await getDb().select({ id: albumMediaRecords.mediaAssetId }).from(albumMediaRecords).where(and(eq(albumMediaRecords.albumId, id), inArray(albumMediaRecords.mediaAssetId, group)));
+    if (current.length !== group.length) throw new Error("ALBUM_MEDIA_NOT_FOUND");
+  }
+  for (const group of groups) for (const assetId of group) await deleteAlbumMedia(id, memberId, assetId);
   return getAlbum(id, memberId);
 }
-
 export async function reorderAlbumMedia(id: string, memberId: string, assetIds: string[]) {
   await requireAlbumEditor(id, memberId);
   const current = await getDb().select().from(albumMediaRecords).where(eq(albumMediaRecords.albumId, id));

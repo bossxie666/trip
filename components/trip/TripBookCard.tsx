@@ -21,6 +21,7 @@ export function TripBookCard({ trip, index, canDelete, members }: Props) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
   const [replacing, setReplacing] = useState(false);
+  const [coverError, setCoverError] = useState("");
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressOrigin = useRef({ x: 0, y: 0 });
   const coverInputRef = useRef<HTMLInputElement>(null);
@@ -55,14 +56,17 @@ export function TripBookCard({ trip, index, canDelete, members }: Props) {
 
   async function replaceCover(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file || replacing) return;
     setReplacing(true);
+    setCoverError("");
     try {
       const assetId = await uploadMediaFile(file, "trip_cover");
       const cover = `/api/media/${encodeURIComponent(assetId)}?variant=display`;
       const response = await fetch(`/api/trips/${trip.slug}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: trip.title, status: trip.status, cities: trip.cities, undated: !trip.startDate || !trip.endDate, startDate: trip.startDate || "", endDate: trip.endDate || "", people: trip.people, cover, memberIds: trip.memberIds }) });
       if (!response.ok) throw new Error("封面替换失败。");
       router.refresh();
+    } catch (caught) {
+      setCoverError(caught instanceof Error ? caught.message : "封面替换失败，请重试。");
     } finally {
       setReplacing(false);
       event.target.value = "";
@@ -80,6 +84,7 @@ export function TripBookCard({ trip, index, canDelete, members }: Props) {
       <i className="trip-book-mark" aria-hidden="true" />
     </a>
     <button className="trip-book-menu-trigger" type="button" aria-label={`编辑旅行：${trip.title}`} aria-haspopup="dialog" aria-expanded={editOpen} onClick={() => setEditOpen(true)}><MoreHorizontal size={18} /></button>
+    {coverError && <p className="form-error" role="alert">{coverError}</p>}
     <WorkspaceOverlay open={editOpen} onClose={() => setEditOpen(false)} mode="modal" ariaLabel={`编辑旅行：${trip.title}`} className="book-edit-dialog"><header className="editor-dialog-heading"><h2>编辑旅行</h2><button type="button" aria-label="关闭" onClick={() => setEditOpen(false)}><X size={20}/></button></header><EditTripForm trip={{ ...trip, cities: trip.cities.map((name) => ({ name })), members: trip.memberIds.map((id) => ({ id })) }} members={members} onSaved={() => setEditOpen(false)} /><div className="book-edit-danger"><TripDeleteButton slug={trip.slug} title={trip.title} canDelete={canDelete} /></div></WorkspaceOverlay>
   </article>;
 }

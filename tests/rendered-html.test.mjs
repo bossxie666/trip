@@ -7,6 +7,8 @@ import { summarizeAccommodation } from "../services/accommodation-summary.ts";
 import { isTransportBooking, railwayDisplayLabel } from "../services/booking-semantics.ts";
 import { isFerryLeg, transitLineSummary } from "../services/amap/route-presentation.ts";
 import { selectUpcomingTrip } from "../services/upcoming-trip.ts";
+import { knowledgeHref } from "../services/knowledge-navigation.ts";
+import { runAlbumUploadQueue } from "../components/media/album-upload-queue.ts";
 
 test("derives one accommodation summary without double-counting booking totals", () => {
   const summary = summarizeAccommodation([
@@ -471,6 +473,8 @@ test("creates and fully manages shared albums without leaking album media into o
     DB.database.prepare("INSERT INTO media_assets (id,uploader_member_id,purpose,object_key,original_filename,content_type,byte_size,status,created_at,updated_at,ready_at) VALUES (?,?,?,?,?,'image/jpeg',100,'ready',?,?,?)").run(assetB,"member-nini","album","album/test-b.jpg","b.jpg",now,now,now);
     const attached = await render(`/api/albums/${albumId}/media`, { method: "POST", body: { assetIds: [assetA, assetB] } });
     assert.equal(attached.status, 200); assert.equal((await attached.json()).album.photos.length, 2);
+    const attachRetry = await render(`/api/albums/${albumId}/media`, { method: "POST", body: { assetIds: [assetA, assetB] } });
+    assert.equal(attachRetry.status, 200); assert.equal((await attachRetry.json()).album.photos.length, 2);
     const favorited = await render(`/api/albums/${albumId}/media/batch`, { method: "PATCH", body: { action: "favorite", assetIds: [assetA], isFavorite: true } });
     assert.equal(favorited.status, 200); assert.equal((await favorited.json()).album.photos.find((photo) => photo.assetId === assetA).isFavorite, true);
     const tagged = await render(`/api/albums/${albumId}/media/batch`, { method: "PATCH", body: { action: "addTag", assetIds: [assetA, assetB], tagName: "桂林山水" } });
@@ -1426,5 +1430,156 @@ test("selects only ongoing, future or undated planning trips for the homepage", 
   assert.equal(selectUpcomingTrip([past, undecided, next], "2026-10-26"), next);
   assert.equal(selectUpcomingTrip([past, undecided], "2026-10-26"), undecided);
   assert.equal(selectUpcomingTrip([{ ...next, status: "completed" }], "2026-10-26"), null);
+});
+
+test("filters knowledge before pagination and searches tags literally beyond the old cap", async () => {
+  await loginAs("nini");
+  const prefix = "knowledge-page-regression-";
+  const insert = DB.database.prepare("INSERT INTO knowledge_entries (id,section,title,destination,created_at,updated_at) VALUES (?,'photography',?,'上海',?,?)");
+  try {
+    for (let index = 0; index < 245; index++) {
+      const timestamp = new Date(Date.UTC(2033, 0, 1, 0, index)).toISOString();
+      insert.run(`${prefix}${index}`, `分页测试 ${index}`, timestamp, timestamp);
+    }
+    DB.database.prepare("INSERT INTO knowledge_tags (id,name,normalized_name,created_at) VALUES ('page-tag-test','100%_人像','100%_人像','2033-01-01')").run();
+    DB.database.prepare("INSERT INTO knowledge_entry_tags (entry_id,tag_id) VALUES (?,'page-tag-test')").run(`${prefix}0`);
+    DB.database.prepare("INSERT INTO knowledge_favorites (entry_id,member_id,created_at) VALUES (?,'member-nini','2033-01-01')").run(`${prefix}0`);
+    const favorites = await (await render("/api/knowledge?section=photography&favorite=1&tag=100%25_%E4%BA%BA%E5%83%8F&destination=%E4%B8%8A%E6%B5%B7")).json();
+    assert.deepEqual(favorites.entries.map((entry) => entry.id), [`${prefix}0`]);
+    const tagSearch = await (await render("/api/knowledge?q=100%25_%E4%BA%BA%E5%83%8F")).json();
+    assert.deepEqual(tagSearch.entries.map((entry) => entry.id), [`${prefix}0`]);
+    const seen = new Set();
+    let more = true, page = 1;
+    while (more) {
+      const result = await (await render(`/api/knowledge?q=${encodeURIComponent('分页测试')}&page=${page}`)).json();
+      assert.equal(result.page, page);
+      assert.ok(result.entries.length <= 40);
+      for (const entry of result.entries) { assert.equal(seen.has(entry.id), false); seen.add(entry.id); }
+      more = result.hasMore; page++;
+      assert.ok(page < 10);
+    }
+    assert.equal(seen.size, 245);
+    const html = await (await render('/knowledge?section=photography&favorite=1&tag=100%25_%E4%BA%BA%E5%83%8F&q=100%25&destination=%E4%B8%8A%E6%B5%B7')).text();
+    assert.match(html, /name="section"/); assert.match(html, /name="favorite"/); assert.match(html, /name="tag"/);
+    assert.match(html, /分页测试 0/);
+  } finally {
+    DB.database.prepare("DELETE FROM knowledge_favorites WHERE entry_id LIKE ?").run(`${prefix}%`);
+    DB.database.prepare("DELETE FROM knowledge_entry_tags WHERE tag_id='page-tag-test'").run();
+    DB.database.prepare("DELETE FROM knowledge_tags WHERE id='page-tag-test'").run();
+    DB.database.prepare("DELETE FROM knowledge_entries WHERE id LIKE ?").run(`${prefix}%`);
+  }
+});
+
+test("searches shared knowledge for members without trips and does not resurrect deleted sources", async () => {
+  await loginAs("nini");
+  const { entry } = await (await render("/api/knowledge", { method: "POST", body: { section: "photography", title: "共同知识搜索测试", tags: ["无旅行成员可搜"] } })).json();
+  const saved = sessionCookie, memberId = "member-no-trips-search";
+  try {
+    DB.database.prepare("INSERT INTO members (id,name,display_name,active,created_at,role,credential_status) VALUES (?,?,?,1,?,'member','legacy')").run(memberId, "no-trips-search", "搜索测试", new Date().toISOString());
+    await loginAs("no-trips-search");
+    const html = await (await render(`/search?q=${encodeURIComponent('无旅行成员可搜')}`)).text();
+    assert.match(html, /共同知识搜索测试/);
+    assert.ok(html.includes(`/knowledge/${entry.id}`));
+    sessionCookie = saved;
+    await render(`/api/knowledge/${entry.id}`, { method: "DELETE" });
+    const after = await (await render(`/search?q=${encodeURIComponent('共同知识搜索测试')}`)).text();
+    assert.equal(after.includes(`/knowledge/${entry.id}`), false);
+    assert.equal((await render(`/api/knowledge/${entry.id}/trips`, { method: "POST", body: { tripId: "trip-shanghai-hangzhou-2026" } })).status, 404);
+    assert.equal((await render(`/api/knowledge/${entry.id}/trips`, { method: "POST", headers: { origin: "https://other.example" }, body: { tripId: "trip-shanghai-hangzhou-2026" } })).status, 403);
+  } finally {
+    sessionCookie = saved;
+    DB.database.prepare("DELETE FROM member_sessions WHERE member_id=?").run(memberId);
+    DB.database.prepare("DELETE FROM members WHERE id=?").run(memberId);
+  }
+});
+
+test("preserves combined knowledge filters and resets the page only when filters change", () => {
+  const current = { section: "photography", q: "人像", tag: "光线", destination: "上海", favorite: "1", page: "4" };
+  const changed = new URL(knowledgeHref(current, { section: "travel_guide" }), "http://localhost");
+  assert.equal(changed.searchParams.get("favorite"), "1"); assert.equal(changed.searchParams.get("tag"), "光线");
+  assert.equal(changed.searchParams.get("page"), null);
+  const next = new URL(knowledgeHref(current, { page: "5" }), "http://localhost");
+  assert.equal(next.searchParams.get("page"), "5"); assert.equal(next.searchParams.get("q"), "人像");
+  assert.equal(next.searchParams.get("destination"), "上海");
+});
+
+test("keeps partial album uploads and retries only failed steps", async () => {
+  const uploads = [], attached = [], changes = [];
+  let failUpload = true, failAttach = true;
+  const actions = {
+    upload: async file => { uploads.push(file.name); if (file.name === "upload-fails.jpg" && failUpload) throw new Error("网络失败"); return `asset-${file.name}`; },
+    capturedAt: async () => null,
+    attach: async id => { if (id === "asset-attach-fails.jpg" && failAttach) throw new Error("加入相册失败"); attached.push(id); },
+    changed: items => changes.push(items),
+  };
+  const first = await runAlbumUploadQueue(["good.jpg", "upload-fails.jpg", "attach-fails.jpg"].map(name => ({ file: new File(["photo"], name), status: "waiting" })), actions);
+  assert.deepEqual(first.map(item => item.status), ["done", "error", "error"]);
+  assert.equal(first[2].assetId, "asset-attach-fails.jpg");
+  assert.deepEqual(attached, ["asset-good.jpg"]);
+  assert.ok(changes.some(items => items[0].status === "done" && items[1].status === "uploading"));
+  failUpload = false; failAttach = false;
+  const retry = await runAlbumUploadQueue(first, actions);
+  assert.ok(retry.every(item => item.status === "done"));
+  assert.equal(uploads.filter(name => name === "good.jpg").length, 1);
+  assert.equal(uploads.filter(name => name === "attach-fails.jpg").length, 1);
+  assert.equal(uploads.filter(name => name === "upload-fails.jpg").length, 2);
+  assert.deepEqual(attached, ["asset-good.jpg", "asset-upload-fails.jpg", "asset-attach-fails.jpg"]);
+});
+
+test("handles album selections above 500 atomically without truncating or partial validation writes", async () => {
+  await loginAs("nini");
+  const { album } = await (await render("/api/albums", { method: "POST", body: { title: "大批照片回归" } })).json();
+  const now = new Date().toISOString(), ids = Array.from({ length: 505 }, (_, index) => `album-bulk-regression-${index}`);
+  try {
+    const asset = DB.database.prepare("INSERT INTO media_assets (id,uploader_member_id,purpose,object_key,original_filename,content_type,byte_size,status,created_at,updated_at,ready_at) VALUES (?,'member-nini','album',?,?,'image/jpeg',100,'ready',?,?,?)");
+    const photo = DB.database.prepare("INSERT INTO album_media (album_id,media_asset_id,uploaded_by_member_id,sort_order,captured_at,created_at) VALUES (?,?,'member-nini',?,?,?)");
+    for (const [index, id] of ids.entries()) { asset.run(id, `album/${id}.jpg`, `${id}.jpg`, now, now, now); photo.run(album.id, id, index, now, now); }
+    const path = `/api/albums/${album.id}/media/batch`;
+    DB.failBatchAt = 1;
+    assert.equal((await render(path, { method: "PATCH", body: { action: "favorite", assetIds: ids, isFavorite: true } })).status, 500);
+    assert.equal(DB.database.prepare("SELECT count(*) n FROM album_media WHERE album_id=? AND is_favorite=1").get(album.id).n, 0);
+    assert.equal((await render(path, { method: "PATCH", body: { action: "favorite", assetIds: ids, isFavorite: true } })).status, 200);
+    assert.equal(DB.database.prepare("SELECT count(*) n FROM album_media WHERE album_id=? AND is_favorite=1").get(album.id).n, 505);
+    assert.equal((await render(path, { method: "PATCH", body: { action: "favorite", assetIds: [ids[0], "missing-photo"], isFavorite: false } })).status, 404);
+    assert.equal(DB.database.prepare("SELECT is_favorite f FROM album_media WHERE album_id=? AND media_asset_id=?").get(album.id, ids[0]).f, 1);
+    assert.equal((await render(path, { method: "PATCH", body: { action: "addTag", assetIds: ids, tagName: "一组" } })).status, 200);
+    const tag = DB.database.prepare("SELECT id FROM album_tags WHERE album_id=?").get(album.id);
+    assert.equal(DB.database.prepare("SELECT count(*) n FROM album_media_tags WHERE album_id=?").get(album.id).n, 505);
+    assert.equal((await render(path, { method: "PATCH", body: { action: "removeTag", assetIds: ids, tagId: tag.id } })).status, 200);
+    assert.equal(DB.database.prepare("SELECT count(*) n FROM album_media_tags WHERE album_id=?").get(album.id).n, 0);
+    assert.equal((await render(path, { method: "PATCH", body: { action: "favorite", assetIds: ids, isFavorite: false } })).status, 200);
+    assert.equal(DB.database.prepare("SELECT count(*) n FROM album_media WHERE album_id=? AND is_favorite=1").get(album.id).n, 0);
+    assert.equal((await render(path, { method: "DELETE", body: { assetIds: [ids[0], "missing-photo"] } })).status, 404);
+    assert.equal(DB.database.prepare("SELECT count(*) n FROM album_media WHERE album_id=?").get(album.id).n, 505);
+  } finally {
+    DB.database.prepare("DELETE FROM album_media_tags WHERE album_id=?").run(album.id);
+    DB.database.prepare("DELETE FROM album_media WHERE album_id=?").run(album.id);
+    DB.database.prepare("DELETE FROM albums WHERE id=?").run(album.id);
+    DB.database.prepare("DELETE FROM media_assets WHERE id LIKE 'album-bulk-regression-%'").run();
+  }
+});
+
+test("authorizes migrated knowledge media only while a shared entry references it", async () => {
+  await loginAs("nini");
+  const { entry } = await (await render("/api/knowledge", { method: "POST", body: { section: "travel_guide", title: "迁移图片权限测试" } })).json();
+  const assetId = "legacy-knowledge-media-regression", memberId = "member-knowledge-media-reader", saved = sessionCookie, now = new Date().toISOString();
+  try {
+    DB.database.prepare("INSERT INTO media_assets (id,uploader_member_id,purpose,object_key,original_filename,content_type,byte_size,status,created_at,updated_at,ready_at) VALUES (?,'member-nini','recommendation_reference',?,'legacy.jpg','image/jpeg',100,'ready',?,?,?)").run(assetId, `reference/${assetId}.jpg`, now, now, now);
+    DB.database.prepare("INSERT INTO members (id,name,display_name,active,created_at,role,credential_status) VALUES (?,?,?,1,?,'member','legacy')").run(memberId, "knowledge-media-reader", "图片权限测试", now);
+    await loginAs("knowledge-media-reader");
+    assert.equal((await render(`/api/media/${assetId}`)).status, 404);
+    DB.database.prepare("INSERT INTO knowledge_entry_media (entry_id,media_asset_id,sort_order) VALUES (?,?,0)").run(entry.id, assetId);
+    // The local harness has no R2. 503 proves authorization reached storage;
+    // inaccessible media returns 404 before that boundary.
+    assert.equal((await render(`/api/media/${assetId}`)).status, 503);
+    DB.database.prepare("UPDATE knowledge_entries SET deleted_at=? WHERE id=?").run(now, entry.id);
+    assert.equal((await render(`/api/media/${assetId}`)).status, 404);
+  } finally {
+    sessionCookie = saved;
+    DB.database.prepare("DELETE FROM knowledge_entry_media WHERE entry_id=?").run(entry.id);
+    DB.database.prepare("DELETE FROM media_assets WHERE id=?").run(assetId);
+    DB.database.prepare("DELETE FROM member_sessions WHERE member_id=?").run(memberId);
+    DB.database.prepare("DELETE FROM members WHERE id=?").run(memberId);
+  }
 });
 
