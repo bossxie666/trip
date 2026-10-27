@@ -4,7 +4,7 @@
 
 ## 本地开发
 
-需要 Node.js 22.13+ 与 pnpm。复制 `.dev.vars.example` 为 `.dev.vars`，填写本地开发所需的会话、高德与 R2 配置；不要提交 `.dev.vars`。
+使用 `.node-version` 中固定的 Node.js 24.22.1 与 pnpm，CI 使用同一版本。测试的 SQLite 数组返回接口不支持旧的 Node.js 22.13。复制 `.dev.vars.example` 为 `.dev.vars`，填写本地开发所需的会话、高德与 R2 配置；不要提交 `.dev.vars`。
 
 ```bash
 pnpm install --frozen-lockfile

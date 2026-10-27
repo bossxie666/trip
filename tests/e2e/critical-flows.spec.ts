@@ -1,18 +1,8 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { enterTestSession } from "./session";
 
-async function enterLegacySession(page: Page) {
-  await page.goto("/unlock");
-  const status = await page.evaluate(async () => (await fetch("/api/session", {
-    method: "POST",
-    credentials: "include",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ memberName: "nini", code: "test-invite" }),
-  })).status);
-  expect(status).toBe(200);
-}
-
-test.beforeEach(async ({ page }) => enterLegacySession(page));
+test.beforeEach(async ({ page }) => enterTestSession(page));
 
 test("opens the bookshelf and a trip workspace without an intermediate page", async ({ page }) => {
   await page.goto("/trips");
