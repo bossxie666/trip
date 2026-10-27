@@ -39,7 +39,7 @@ jobs:
       - name: Verify authenticated performance reports
         if: always()
         run: node scripts/check-lighthouse-reports.mjs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: lighthouse-reports
