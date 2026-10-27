@@ -104,7 +104,7 @@ export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query
     const entryBookingRecord = entryBookingId ? bookings.find(({ booking }) => booking.id === entryBookingId) : null;
     const entryBooking = entryBookingRecord?.booking || null;
     const detail = node.itemId ? activeDay?.items.find(({ item }) => item.id === node.itemId) : null;
-    const displayTime = detail?.item.timeMode === "opening_hours" ? "开园 → 闭园" : node.timeLocal || (node.anchorKind === "start" ? "入住" : node.anchorKind === "stay" ? "住宿中" : node.anchorKind === "end" ? "退房" : "时间待定");
+    const displayTime = detail?.item.timeMode === "all_day" ? "全天" : detail?.item.timeMode === "opening_hours" ? "开园 → 闭园" : node.timeLocal || (node.anchorKind === "start" ? "入住" : node.anchorKind === "stay" ? "住宿中" : node.anchorKind === "end" ? "退房" : "时间待定");
     const number = nodeNumbers.get(node.id);
     const transportEndpoint = Boolean(entryBooking && node.nodeKind === "endpoint" && isTransportBooking(entryBooking));
     const originPlace = entryBookingRecord?.originPlace;

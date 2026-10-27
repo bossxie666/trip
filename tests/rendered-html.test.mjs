@@ -889,6 +889,20 @@ test("planning skips the retired material library reads while map candidates rem
   } finally { spy.mock.restore(); }
 });
 
+test("all-day items display their saved time mode in the planning timeline", async () => {
+  const trip = await createTrip({ title: "全天事项展示验证", status: "planning", cities: ["上海"], startDate: "2034-01-01", endDate: "2034-01-01", memberIds: ["member-nini"] });
+  try {
+    const day = DB.database.prepare("SELECT id FROM days WHERE trip_id=?").get(trip.id);
+    const created = await render(`/api/trips/${trip.slug}/plan/items`, { method: "POST", body: { title: "全天拍照", dayId: day.id, itemType: "activity", timeMode: "all_day" } });
+    assert.equal(created.status, 201);
+    const html = await (await render(`/trips/${trip.slug}/plan?view=planning&member=all`)).text();
+    const node = timelineNodeBlocks(html).find(block => block.includes("全天拍照"));
+    assert.ok(node);
+    assert.match(node, />全天</);
+    assert.doesNotMatch(node, /时间待定/);
+  } finally { await render(`/api/trips/${trip.slug}`, { method: "DELETE" }); }
+});
+
 test("renders a long-distance Booking as an edge between endpoint nodes", async () => {
   const trip = await createTrip({ title: "Timeline DOM Flight", status: "planning", cities: ["上海"], startDate: "2028-06-01", endDate: "2028-06-01", memberIds: ["member-nini"] });
   const dayId = DB.database.prepare("SELECT id FROM days WHERE trip_id = ? ORDER BY day_number LIMIT 1").get(trip.id).id;

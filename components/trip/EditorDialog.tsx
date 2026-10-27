@@ -29,7 +29,7 @@ export function EditorDialog({ open, title, onClose, dirty = false, busy = false
     try { await onSubmit(); } finally { submitted.current = false; }
   }
   return <WorkspaceOverlay open={open} onClose={close} ariaLabel={discard ? "放弃未保存修改" : title} className="workspace-editor-dialog">
-    <header className="editor-dialog-heading"><h2>{discard ? "放弃未保存修改？" : title}</h2><button ref={closeButton} type="button" className="workspace-close" disabled={busy} aria-label={discard ? "继续编辑" : `关闭${title}`} onClick={close}><X size={20} /></button></header>
+    <header className="editor-dialog-heading"><h2>{discard ? "放弃未保存修改？" : title}</h2><button ref={closeButton} type="button" className="workspace-close" disabled={busy} aria-label={discard ? "返回编辑" : `关闭${title}`} onClick={close}><X size={20} /></button></header>
     {discard ? <><p className="editor-discard-message">本次修改尚未保存。</p><footer className="workspace-editor-actions"><button ref={keepButton} type="button" onClick={keepEditing}>继续编辑</button><button type="button" className="danger" onClick={() => { setDiscard(false); onClose(); }}>放弃修改</button></footer></> : <>
     <form className="workspace-editor-form" onSubmit={submit}>
       <fieldset className="workspace-editor-fields" disabled={busy}>{children}</fieldset>

@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
-import { enterTestSession } from "./session";
+import { enterTestSession, fixtureRequest } from "./session";
 
 test.beforeEach(async ({ page }) => enterTestSession(page));
 
 test("item editing keeps unsaved input, discards explicitly and saves the selected day", async ({ page }) => {
   const title = `事项-${randomUUID()}`;
-  const created = await page.request.post("/api/trips/e2e-shanghai/plan/items", { data: { title, dayId: "trip-e2e-day-1", itemType: "note", timeMode: "all_day" } });
+  const created = await fixtureRequest(page, "POST", "/api/trips/e2e-shanghai/plan/items", { title, dayId: "trip-e2e-day-1", itemType: "note", timeMode: "all_day" });
   expect(created.status()).toBe(201);
   const { item } = await created.json();
   try {
@@ -15,7 +15,7 @@ test("item editing keeps unsaved input, discards explicitly and saves the select
     const record = page.locator("article.timeline-node").filter({ has: page.getByRole("heading", { name: title, exact: true }) });
     await record.getByRole("button", { name: "编辑事项", exact: true }).click();
     const editor = page.getByRole("dialog", { name: "编辑事项", exact: true });
-    await expect(editor.getByLabel("时间模式")).toHaveValue("all_day");
+    await expect(editor.getByRole("combobox", { name: "时间模式", exact: true })).toHaveValue("all_day");
     await editor.getByLabel("标题", { exact: true }).fill(`${title}-未保存`);
     await editor.getByRole("button", { name: "取消", exact: true }).click();
     const discard = page.getByRole("dialog", { name: "放弃未保存修改", exact: true });
@@ -35,13 +35,13 @@ test("item editing keeps unsaved input, discards explicitly and saves the select
     expect(Math.abs(box!.y + box!.height / 2 - viewport.height / 2)).toBeLessThan(2);
     await expect(editor).toHaveCSS("background-image", "none");
     await editor.getByLabel("标题", { exact: true }).fill(`${title}-已保存`);
-    await editor.getByLabel("日期", { exact: true }).selectOption("trip-e2e-day-2");
+    await editor.getByRole("combobox", { name: "日期", exact: true }).selectOption("trip-e2e-day-2");
     await editor.getByRole("button", { name: "保存并移动", exact: true }).click();
     await expect(page).toHaveURL(/day=trip-e2e-day-2/);
     await expect(page.getByRole("heading", { name: `${title}-已保存`, exact: true })).toBeVisible();
     await page.reload();
     await expect(page.getByRole("heading", { name: `${title}-已保存`, exact: true })).toBeVisible();
-  } finally { await page.request.delete(`/api/trips/e2e-shanghai/plan/items/${item.id}`); }
+  } finally { await fixtureRequest(page, "DELETE", `/api/trips/e2e-shanghai/plan/items/${item.id}`); }
 });
 
 test("shared knowledge can be created, added to a day and read with the latest title", async ({ page }) => {
@@ -51,7 +51,7 @@ test("shared knowledge can be created, added to a day and read with the latest t
     await page.goto(`/knowledge?q=${encodeURIComponent(title)}`);
     await page.getByRole("button", { name: "添加知识", exact: true }).first().click();
     const editor = page.getByRole("dialog", { name: "添加知识", exact: true });
-    await editor.getByLabel("栏目", { exact: true }).selectOption("travel_guide");
+    await editor.getByRole("combobox", { name: "栏目", exact: true }).selectOption("travel_guide");
     await editor.getByLabel("标题", { exact: true }).fill(title);
     await editor.getByLabel("正文", { exact: true }).fill("隔离环境的合成攻略正文。");
     const created = page.waitForResponse(response => new URL(response.url()).pathname === "/api/knowledge" && response.request().method() === "POST");
@@ -73,20 +73,20 @@ test("shared knowledge can be created, added to a day and read with the latest t
     itemIds = (await addResponse.json()).items.map((item: { id: string }) => item.id);
     await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
     const updatedTitle = `${title}-更新`;
-    const updated = await page.request.patch(`/api/knowledge/${entryId}`, { data: { section: "travel_guide", title: updatedTitle, body: "更新后的合成正文。" } });
+    const updated = await fixtureRequest(page, "PATCH", `/api/knowledge/${entryId}`, { section: "travel_guide", title: updatedTitle, body: "更新后的合成正文。" });
     expect(updated.status()).toBe(200);
     await page.reload();
     await expect(page.getByRole("heading", { name: updatedTitle, exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: `查看知识：${updatedTitle}`, exact: true })).toHaveAttribute("href", `/knowledge/${entryId}`);
   } finally {
-    for (const id of itemIds) await page.request.delete(`/api/trips/e2e-shanghai/plan/items/${id}`);
-    if (entryId) await page.request.delete(`/api/knowledge/${entryId}`);
+    for (const id of itemIds) await fixtureRequest(page, "DELETE", `/api/trips/e2e-shanghai/plan/items/${id}`);
+    if (entryId) await fixtureRequest(page, "DELETE", `/api/knowledge/${entryId}`);
   }
 });
 
 test("partial photo uploads keep successes and retry only the failed attachment", async ({ page }) => {
   test.setTimeout(60_000);
-  const created = await page.request.post("/api/albums", { data: { title: `上传-${randomUUID()}`, tripId: "trip-e2e" } });
+  const created = await fixtureRequest(page, "POST", "/api/albums", { title: `上传-${randomUUID()}`, tripId: "trip-e2e" });
   expect(created.status()).toBe(201);
   const { album } = await created.json();
   let attachments = 0, authorizations = 0;
@@ -117,7 +117,7 @@ test("partial photo uploads keep successes and retry only the failed attachment"
     await page.locator(".album-selection-bar").getByRole("button", { name: "收藏", exact: true }).click();
     await page.getByRole("navigation", { name: "照片筛选" }).getByRole("button", { name: "收藏", exact: true }).click();
     await expect(page.locator(".album-photo-tile")).toHaveCount(2);
-  } finally { await page.request.delete(`/api/albums/${album.id}`); }
+  } finally { await fixtureRequest(page, "DELETE", `/api/albums/${album.id}`); }
 });
 
 test("map configuration failure stays local and leaves chapter navigation usable", async ({ page }) => {
