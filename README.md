@@ -25,7 +25,7 @@ pnpm dev
 
 ## 数据库迁移
 
-迁移文件按编号保存在 `drizzle/`。先在 Preview 数据库执行并完成迁移与权限测试；正式执行前记录 D1 Time Travel 书签并导出备份。迁移必须保持向前兼容：先加表或字段，再切换读取，最后在后续版本停用旧字段。
+Wrangler 部署迁移按编号保存在 `migrations/`；`drizzle/` 保留对应的模型迁移来源。先在 Preview 数据库执行并完成迁移与权限测试；正式执行前记录 D1 Time Travel 书签并导出备份。迁移必须保持向前兼容：先加表或字段，再切换读取，最后在后续版本停用旧字段。若历史上手动执行过 SQL，先比较真实表结构、索引和数据关联，再补登记迁移记录；不要直接重复执行建表或加列。
 
 ```bash
 pnpm wrangler d1 migrations apply <database> --remote
@@ -33,7 +33,9 @@ pnpm wrangler d1 migrations apply <database> --remote
 
 ## 预览、发布与回滚
 
-Pull Request 必须通过 lint、typecheck、回归测试和生产构建，并在 Cloudflare Preview 检查手机与桌面关键路径。正式分支由 Cloudflare 自动发布。发布后检查首页、旅行书架、规划、地图、费用、相册、留言和上传授权。
+Pull Request 必须通过 lint、typecheck、回归测试和生产构建，并在 Cloudflare Preview 检查手机与桌面关键路径。多台电脑协作时，发布前执行 `git fetch`，确认当前提交与约定远程分支一致，并核对 Cloudflare 实际生产版本。GitHub 推送与正式流量切换分开记录，不能把上传版本当作已发布。
+
+使用同一 Git 提交的独立发布快照构建、测试和部署预览，完成数据库备份与迁移后，通过 `wrangler versions upload` 上传正式候选。配置补齐后核对候选的代码摘要与绑定名称，再使用 `wrangler versions deploy <version-id>@100` 激活明确版本。密钥变更也会创建版本，应检查它继承的代码版本，避免把其他电脑上传的未验收代码一起发布。发布后检查首页、旅行书架、规划、地图、费用、相册、留言和上传授权；公开登录页冒烟不能代替登录后的检查。
 
 应用回滚使用 Cloudflare Workers Versions 恢复到上一稳定版本。数据回滚使用发布前记录的 D1 书签；媒体恢复依赖 R2 备份与数据库对象清单。应用版本和数据库恢复必须分开判断，避免旧代码写入不兼容的数据。
 

@@ -4,7 +4,7 @@
 
 ## 第一批：可靠性和数据
 
-- [ ] 正式地图配置恢复并验证手机、桌面。
+- [x] 正式地图配置恢复并验证手机、桌面（5730f33e，见 2026-10-27 发布记录）。
 - [ ] 知识保存先校验、后原子写入，故障回滚测试。
 - [ ] 所有会话可撤销；旧 Cookie 不再绕过撤销。
 - [ ] 知识最新引用、手动名称覆盖、解除关联。
@@ -99,3 +99,7 @@
 - 冻结第一批重新构建并通过93项测试，已发布预览版本1f2241b3-bb13-4b28-8eb0-e996c0187691；来源/文件哈希见repair/batch1-map-readiness-preview-manifest.json。Chrome1280桌面和390手机首次打开均显示4个行程地点标记，适配视野可用，规划桌面小地图滚动可见后成功加载。截图repair/preview-map-readiness-mobile.jpg、preview-planning-map-success-desktop.jpg。路线实测18.4公里/64分钟/约7元，规划另一段37.8公里/88分钟/约8元；未把浏览器工具等待时间当作网站性能。
 - 诊断更正：先前无认证HTTP检查自动跟随到登录页，看到的DENY来自登录页，不能据此认定地图部署头错误。关闭重定向后，原始/api/amap/canvas响应302且SAMEORIGIN、frame-ancestors self，符合认证与隔离要求。浏览器扩展inspector的XHR日志不归因为网站错误。
 - 全量源代码生产构建、112项回归、typecheck与lint通过（repair/map-readiness-full-tests.log）。cd7f27a的GitHub Quality运行40444534111已success。新增相册统一编辑器仍在本地验证中，未包含于本轮预览发布。正式恢复点/备份、0011正式迁移、第一批正式发布和后两批远程验收仍待完成。
+- 2026-10-27 发布核对发现正式站存在其他电脑发布的版本。此前将全部记录解释成自动部署不准确；用户已说明在另一台电脑发布，并明确“已全部推送，以当前GitHub为准”。重新fetch后HEAD与origin/v2.4-r1均为cfda7df，独立Git快照重新构建及112项测试通过，GitHub Quality40478746164的verify/browser均success。
+- 正式/预览导出备份经本地内存SQLite恢复，完整性ok、外键错误0；0010八张表、列、外键和索引与迁移一致，旧攻略与事项映射缺失0。补登记已实际存在的迁移后，预览和正式均完成至0014；没有重复建表或覆盖已有内容。正式发布前另存最新D1恢复书签和完整备份。
+- 完整预览99f9476d-41ab-42fb-ae63-5a54627a8d33验收后，上传正式代码候选48a01a30，再仅补原JS地图Key生成5730f33e；两版本script etag一致，原R2/会话/高德配置保留。正式5730f33e已100%激活，已核验deployments status。实际版本与数据变更记录见docs/release-20261027-cfda7df.md。
+- Chrome正式只读核对首页/书架/规划/地图/费用/桂林19张照片/留言/知识库/杭州搜索及城市页/不存在行程导航均正常。390px地图截图repair/production-cfda7df-map-390.jpg，页面明细repair/production-cfda7df-authenticated-read-checks.json，公开冒烟也通过。发布前后旅行/相册/照片/事项/知识数量一致。尚未进行正式写入测试、上传授权专项或真实LCP/INP/CLS测量；未把三批整体标为完成。
