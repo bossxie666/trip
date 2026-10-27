@@ -23,10 +23,14 @@
 .workspace-editor-form { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; overflow: hidden; }
 .workspace-editor-fields { display: grid; gap: 14px; min-width: 0; min-height: 0; margin: 0; padding: 18px 22px; overflow: auto; border: 0; }
 .workspace-editor-fields>label { display: grid; gap: 7px; min-width: 0; font-size: 13px; line-height: 1.5; }
+.workspace-editor-fields>.inline-check { display: flex; align-items: center; gap: 8px; min-height: 32px; }
 .workspace-editor-fields input:not([type=checkbox]):not([type=radio]),.workspace-editor-fields select,.workspace-editor-fields textarea { width: 100%; min-width: 0; min-height: 40px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper2); font: inherit; }
 .workspace-editor-fields input[type=checkbox],.workspace-editor-fields input[type=radio] { flex: none; width: 18px; height: 18px; }
 .workspace-editor-fields fieldset { min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 6px; }
 .workspace-editor-fields legend { font-size: 13px; font-weight: 700; }
+.workspace-editor-fields .trip-date-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.workspace-editor-fields .trip-date-fields label { display: grid; min-width: 0; gap: 7px; font-size: 13px; }
+@media (max-width: 360px) { .workspace-editor-fields .trip-date-fields { grid-template-columns: 1fr; } }
 .workspace-editor-fields .participant-checkboxes label { min-height: 32px; font-size: 13px!important; }
 .workspace-editor-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; flex: 0 0 auto; padding: 14px 22px; border-top: 1px solid var(--line); background: var(--paper2); }
 .workspace-editor-actions button { min-height: 40px; padding: 9px 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); font-size: 13px; cursor: pointer; }

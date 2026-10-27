@@ -360,7 +360,7 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   const overlay = readFileSync(new URL("../components/trip/WorkspaceOverlay.tsx", import.meta.url), "utf8");
   const header = readFileSync(new URL("../components/site/SiteHeader.tsx", import.meta.url), "utf8");
   const desktopMap = readFileSync(new URL("../components/trip/PlanningDesktopMap.tsx", import.meta.url), "utf8");
-  const tripEditor = readFileSync(new URL("../components/trip/EditTripForm.tsx", import.meta.url), "utf8");
+  const tripEditor = readFileSync(new URL("../components/trip/EditTripDialog.tsx", import.meta.url), "utf8");
   const mediaService = readFileSync(new URL("../services/media-service.server.ts", import.meta.url), "utf8");
   const recommendationCreator = readFileSync(new URL("../components/trip/RecommendationCreateControl.tsx", import.meta.url), "utf8");
   const recommendationRoute = readFileSync(new URL("../app/api/trips/[slug]/recommendations/route.ts", import.meta.url), "utf8");
@@ -426,7 +426,7 @@ test("releases save state after success, API errors, refresh errors, and request
   const files = [
     "PlanAddControl.tsx", "PlaceDiscoveryControl.tsx", "RecommendationAddControl.tsx",
     "BookingCreateControl.tsx", "BookingEditControl.tsx", "BookingPlaceControl.tsx",
-    "BudgetWorkspace.tsx", "DayPresenceControl.tsx", "EditTripForm.tsx",
+    "BudgetWorkspace.tsx", "DayPresenceControl.tsx", "EditTripDialog.tsx",
     "ItineraryItemControl.tsx", "ItineraryItemPlaceControl.tsx", "ItineraryOrderControls.tsx",
     "NewTripForm.tsx", "PlanMap.tsx",
   ];

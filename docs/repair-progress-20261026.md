@@ -107,3 +107,6 @@
 - 生产构建与112项回归、typecheck、ESLint通过（repair/album-editors-tests.log）。新增手机/桌面E2E覆盖创建失败、等待期间重复提交保护、重试、编辑放弃/保存、关联旅行、关闭焦点恢复、居中纯色和删除确认取消；发现16条用例，尚未实际运行新增用例，待GitHub门禁结果。
 - Chrome本地隔离D1/R2实际验证：取消删除保留标题，放弃修改恢复原值，简介保存后重开正确。320/375/390/430/1280宽下弹窗居中误差0，无横向溢出、无背景图片；390px为362×441，x14/y201.5。证据repair/album-unified-editor-sizes.json和album-unified-editor-390.jpg。临时浏览尺寸已恢复；本轮未改预览/正式业务数据。
 - 8b3ab58真实CI结果：verify成功，browser中相册新增用例的手机/桌面都失败于保存后getByLabel("简介",exact)定位。下载隔离测试快照确认弹窗仍在，标题/旅行/简介均已保存，简介值为合成相册资料；Chrome本地同样复现该标签匹配0、按textbox可访问名匹配1。测试改为getByRole("textbox",{name:"简介",exact:true})，未改产品保存逻辑；等待新一轮CI验证。
+- 2026-10-27 相册修正后 GitHub Quality 40514135505 success，原失败为测试定位问题；相册新增流程已通过实际浏览器门禁。
+- 旅行书本三点编辑迁入共享 EditorDialog，支持名称、状态、日期、成员、封面与删除确认；补未保存保护、15秒请求超时、失败保留输入、封面上传成功后的重试复用。移除旧独立编辑和删除组件，权限沿用服务端。
+- 生产构建、112项回归、typecheck、ESLint通过。新增日期冲突、重试、成员、取消删除及放弃修改用例，在本地隔离库手机/桌面实际运行2项全部通过（repair/trip-editor-browser-tests.log）。Chrome 320/375/390/430/1280宽居中误差0，无横向溢出和内部背景图；本地合成旅行修改保存并恢复。证据repair/trip-unified-editor-sizes.json、trip-unified-editor-390.jpg。本轮旅行弹窗尚未远程发布。

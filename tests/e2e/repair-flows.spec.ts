@@ -5,6 +5,62 @@ import { enterTestSession, fixtureRequest } from "./session";
 
 test.beforeEach(async ({ page }) => enterTestSession(page));
 
+test("trip book editing preserves dates and members across conflict, cancellation and retry", async ({ page }) => {
+  const title = `旅行资料-${randomUUID()}`;
+  const response = await fixtureRequest(page, "POST", "/api/trips", {
+    title, status: "planning", cities: [], startDate: "2027-02-01", endDate: "2027-02-02", people: 1, memberIds: ["member-nini"],
+  });
+  expect(response.status()).toBe(201);
+  const { trip } = await response.json();
+  const apiPath = `/api/trips/${encodeURIComponent(trip.slug)}`;
+  let updates = 0;
+  await page.route(`**${apiPath}`, route => {
+    if (route.request().method() !== "PUT") return route.continue();
+    updates += 1;
+    if (updates === 1) return route.fulfill({ status: 409, json: { error: "测试日期冲突，请保留当前输入。" } });
+    return route.continue();
+  });
+  try {
+    await page.goto("/trips");
+    await page.getByRole("button", { name: `编辑旅行：${title}`, exact: true }).click();
+    const editor = page.getByRole("dialog", { name: "编辑旅行", exact: true });
+    await editor.getByRole("textbox", { name: "名称", exact: true }).fill(`${title}-修改`);
+    await editor.getByLabel("结束日期", { exact: true }).fill("2027-02-03");
+    await editor.getByRole("checkbox", { name: "kiki", exact: true }).check();
+    await editor.getByRole("button", { name: `删除行程：${title}`, exact: true }).click();
+    const deletion = page.getByRole("dialog", { name: "删除行程", exact: true });
+    await expect(deletion.getByRole("button", { name: "确认删除", exact: true })).toBeVisible();
+    await deletion.getByRole("button", { name: "取消", exact: true }).click();
+    await expect(editor.getByRole("textbox", { name: "名称", exact: true })).toHaveValue(`${title}-修改`);
+    await expect(editor.getByLabel("结束日期", { exact: true })).toHaveValue("2027-02-03");
+    await expect(editor.getByRole("checkbox", { name: "kiki", exact: true })).toBeChecked();
+    await editor.getByRole("button", { name: "关闭编辑旅行", exact: true }).click();
+    await page.getByRole("dialog", { name: "放弃未保存修改", exact: true }).getByRole("button", { name: "继续编辑", exact: true }).click();
+    await editor.getByRole("button", { name: "保存修改", exact: true }).click();
+    await expect(editor.getByRole("alert")).toHaveText("测试日期冲突，请保留当前输入。");
+    await expect(editor.getByLabel("结束日期", { exact: true })).toHaveValue("2027-02-03");
+    await expect(editor.getByRole("checkbox", { name: "kiki", exact: true })).toBeChecked();
+    await editor.getByRole("button", { name: "保存修改", exact: true }).click();
+    await expect(editor).toHaveCount(0);
+    await page.getByRole("button", { name: `编辑旅行：${title}-修改`, exact: true }).click();
+    await expect(editor.getByRole("textbox", { name: "名称", exact: true })).toHaveValue(`${title}-修改`);
+    await expect(editor.getByLabel("开始日期", { exact: true })).toHaveValue("2027-02-01");
+    await expect(editor.getByLabel("结束日期", { exact: true })).toHaveValue("2027-02-03");
+    await expect(editor.getByRole("checkbox", { name: "nini", exact: true })).toBeChecked();
+    await expect(editor.getByRole("checkbox", { name: "kiki", exact: true })).toBeChecked();
+    await editor.getByRole("checkbox", { name: "日期未定", exact: true }).check();
+    await expect(editor.getByLabel("开始日期", { exact: true })).toHaveCount(0);
+    await editor.getByRole("button", { name: "取消", exact: true }).click();
+    await page.getByRole("dialog", { name: "放弃未保存修改", exact: true }).getByRole("button", { name: "放弃修改", exact: true }).click();
+    await page.getByRole("button", { name: `编辑旅行：${title}-修改`, exact: true }).click();
+    await expect(editor.getByRole("checkbox", { name: "日期未定", exact: true })).not.toBeChecked();
+    const box = await editor.boundingBox(), viewport = page.viewportSize()!;
+    expect(Math.abs(box!.x + box!.width / 2 - viewport.width / 2)).toBeLessThan(2);
+    expect(Math.abs(box!.y + box!.height / 2 - viewport.height / 2)).toBeLessThan(2);
+    await expect(editor).toHaveCSS("background-image", "none");
+  } finally { await fixtureRequest(page, "DELETE", apiPath); }
+});
+
 test("album editors guard unsaved input, retry failures and require a separate delete confirmation", async ({ page }) => {
   const title = `相册-${randomUUID()}`;
   let albumId: string | undefined, creations = 0;

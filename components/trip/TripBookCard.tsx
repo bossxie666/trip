@@ -1,14 +1,12 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { MoreHorizontal, Users, X } from "lucide-react";
+import { MoreHorizontal, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, type ChangeEvent, type MouseEvent as ReactMouseEvent, type PointerEvent } from "react";
 import { uploadMediaFile } from "@/components/media/client-upload";
 import type { TripStatus } from "@/models/travel";
-import { TripDeleteButton } from "./TripDeleteButton";
-import { WorkspaceOverlay } from "./WorkspaceOverlay";
-import { EditTripForm } from "./EditTripForm";
+import { EditTripDialog } from "./EditTripDialog";
 
 type Props = {
   trip: { slug: string; title: string; cover: string | null; status: TripStatus; statusLabel: string; participantSummary: string; cities: string[]; startDate: string | null; endDate: string | null; people: number; memberIds: string[] };
@@ -85,6 +83,6 @@ export function TripBookCard({ trip, index, canDelete, members }: Props) {
     </a>
     <button className="trip-book-menu-trigger" type="button" aria-label={`编辑旅行：${trip.title}`} aria-haspopup="dialog" aria-expanded={editOpen} onClick={() => setEditOpen(true)}><MoreHorizontal size={18} /></button>
     {coverError && <p className="form-error" role="alert">{coverError}</p>}
-    <WorkspaceOverlay open={editOpen} onClose={() => setEditOpen(false)} mode="modal" ariaLabel={`编辑旅行：${trip.title}`} className="book-edit-dialog"><header className="editor-dialog-heading"><h2>编辑旅行</h2><button type="button" aria-label="关闭" onClick={() => setEditOpen(false)}><X size={20}/></button></header><EditTripForm trip={{ ...trip, cities: trip.cities.map((name) => ({ name })), members: trip.memberIds.map((id) => ({ id })) }} members={members} onSaved={() => setEditOpen(false)} /><div className="book-edit-danger"><TripDeleteButton slug={trip.slug} title={trip.title} canDelete={canDelete} /></div></WorkspaceOverlay>
+    {editOpen && <EditTripDialog trip={{ ...trip, cities: trip.cities.map(name => ({ name })), members: trip.memberIds.map(id => ({ id })) }} members={members} canDelete={canDelete} onClose={() => setEditOpen(false)} />}
   </article>;
 }
