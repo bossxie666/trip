@@ -36,3 +36,9 @@ This document is the long-lived performance boundary for the trip workspace. It 
 ## Deferred condition
 
 D1 read replication is not enabled by default. Evaluate Sessions API plus read replication only after this work is deployed and repeated production measurements still show Worker/D1 TTFB as the dominant bottleneck.
+
+## Request authentication and report validity
+
+Worker authentication and application authentication reuse a verified session only through AsyncLocalStorage, with both token and D1 binding matched. New requests still query the revocable session. `sessionReuses` is a request-local counter, not a count of all D1 statements. The runtime mechanism follows [Cloudflare AsyncLocalStorage](https://developers.cloudflare.com/workers/runtime-apis/nodejs/asynclocalstorage/).
+
+Lighthouse runs on pushes to v2.4-r1 as well as pull requests and manual dispatch. Reports must contain two successful runs for each protected target and retain the requested route after login. A redirect to /unlock is a failed measurement regardless of its performance score. Lab results are distinct from production field data; see [Lighthouse authenticated pages](https://github.com/GoogleChrome/lighthouse/blob/main/docs/authenticated-pages.md).

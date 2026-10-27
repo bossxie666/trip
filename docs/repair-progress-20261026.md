@@ -115,3 +115,7 @@
 - 新增住宿和住宿/交通编辑迁入共享弹窗，取消删除保留输入，关闭提示未保存；住宿移除显示名称与时间字段，交通保留。地点选择后显示已选地点；住宿名称仅换地点时随新地点更新，修改其他字段保留原名称和原有时间数据。
 - 浏览器测试揭示保存后立刻重开会读旧备注：编辑入口现先采用成功接口返回记录，再刷新工作台数据。新增流程验证创建失败重试、日期/金额/成员/备注、删除取消、立即重开和知识保存/删除失败。生产构建、112项回归、typecheck、ESLint通过；完整浏览器21项通过、1项桌面跳过手机检查（repair/knowledge-accommodation-full-browser-tests.log）。
 - Chrome本地320/375/390/430/1280：知识、新增和编辑住宿居中误差0，无横向溢出，纯色不透明且无内部背景图/装饰伪元素，页脚可见。新增手机日期框同x同宽；编辑桌面480px。证据repair/knowledge-accommodation-dialog-sizes.json、accommodation-edit-unified-390.jpg。本轮尚未推送/远程发布，正式写入、上传授权与性能专项仍未完成。
+- 2026-10-28 请求内身份复用：修改前真实构建的/api/trips会话SELECT为2次（repair/request-auth-before.log）；AsyncLocalStorage限定令牌和D1绑定后，API、首页、旅行书架、规划每次均1次。没有跨请求缓存、没有信任客户端身份头；保留新请求撤销检查。新增并发隔离、错误退出清理、伪造头、两成员并发和撤销后重访回归，115项通过，typecheck/ESLint通过。
+- 本地实际Workers完整手机/桌面流程21通过、1项桌面跳过手机专用检查（repair/request-auth-browser-tests.log）。新增sessionReuses仅记录当前请求内复用次数，用于远程核验，不记录令牌或密码；新增计数后的生产构建与115项测试再次通过。
+- 只读Chrome触发正式站现有请求，Worker日志采到优化前首页157ms、书架176ms、规划241ms；这些仅为服务器处理样本，不代表网络、LCP/INP或整体页面完成时间。证据repair/production-auth-context-before-timings.json。浏览器工具不提供性能API，未用工具等待时间替代网站性能。
+- Lighthouse原工作流只在PR/手动运行；已补当前分支push、最小权限和并发取消，并核验每个报告最终地址确为目标登录后页面、每页至少2次，防止登录页分数冒充。失败时保留原始LHR报告；尚待实际CI运行与后续修正，不能宣称性能目标达标。

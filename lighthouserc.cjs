@@ -1,7 +1,7 @@
 module.exports = {
   ci: {
     collect: {
-      startServerCommand: "npx wrangler dev --local --port 8787",
+      startServerCommand: "pnpm exec wrangler dev --local --port 8787",
       startServerReadyPattern: "Ready on|http://localhost:8787",
       url: [
         "http://127.0.0.1:8787/",

@@ -5,6 +5,7 @@ import { readCookie, sessionCookieName, verifySessionMemberId } from "../service
 import { safeInternalReturnTo } from "../services/return-to";
 import { drainMediaDeletionQueue } from "../services/media-deletion.server";
 import { mapCanvasPath, mapCanvasCsp, mapCanvasResponse } from "../services/map-canvas";
+import { runWithVerifiedSession } from "../services/session-request-context.server";
 
 interface Env {
   ASSETS: Fetcher;
@@ -70,10 +71,11 @@ const worker = {
     const url = new URL(request.url);
     const requestId = crypto.randomUUID();
     const startedAt = Date.now();
+    const sessionStats = { reuses: 0 };
 
     const finish = (response: Response, failureCategory?: string) => {
       const secured = withSecurityHeaders(response, url, requestId);
-      console.log(JSON.stringify({ type: "request", requestId, method: request.method, route: url.pathname, status: secured.status, durationMs: Date.now() - startedAt, failureCategory: failureCategory || null }));
+      console.log(JSON.stringify({ type: "request", requestId, method: request.method, route: url.pathname, status: secured.status, durationMs: Date.now() - startedAt, sessionReuses: sessionStats.reuses, failureCategory: failureCategory || null }));
       return secured;
     };
 
@@ -90,8 +92,10 @@ const worker = {
         return finish(response);
       }
 
+      const token = readCookie(request, sessionCookieName);
+      let memberId: string | null = null;
       if (!isPublicPath(url.pathname)) {
-        const memberId = await verifySessionMemberId(readCookie(request, sessionCookieName), env.TRIP_SPACE_SESSION_SECRET, env.DB);
+        memberId = await verifySessionMemberId(token, env.TRIP_SPACE_SESSION_SECRET, env.DB);
         // Session verification already joins the member and checks enabled status.
         if (!memberId) {
           if (url.pathname.startsWith("/api/")) return finish(Response.json({ code: "UNAUTHORIZED", message: "登录已失效，请重新登录。", error: "登录已失效，请重新登录。", requestId }, { status: 401, headers: { "cache-control": "no-store" } }), "authentication");
@@ -103,7 +107,8 @@ const worker = {
 
       const appHeaders = new Headers(request.headers); appHeaders.set("x-request-id", requestId);
       if (url.pathname === mapCanvasPath) return finish(mapCanvasResponse());
-      return finish(await handler.fetch(new Request(request, { headers: appHeaders }), env, ctx));
+      const serve = () => handler.fetch(new Request(request, { headers: appHeaders }), env, ctx);
+      return finish(await (memberId ? runWithVerifiedSession({ token, database: env.DB, memberId, stats: sessionStats }, serve) : serve()));
     } catch (caught) {
       console.error(JSON.stringify({ type: "request_error", requestId, method: request.method, route: url.pathname, durationMs: Date.now() - startedAt, error: caught instanceof Error ? caught.name : "UnknownError" }));
       return finish(Response.json({ code: "INTERNAL_ERROR", message: "服务暂时不可用，请稍后重试。", requestId }, { status: 500, headers: { "cache-control": "no-store" } }), "internal");

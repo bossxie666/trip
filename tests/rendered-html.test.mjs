@@ -12,6 +12,22 @@ import { runAlbumUploadQueue } from "../components/media/album-upload-queue.ts";
 import { drainMediaDeletionQueue } from "../services/media-deletion.server.ts";
 import { editorRequest } from "../components/trip/editor-request.ts";
 import { waitForMapDocument } from "../components/trip/map-frame-document.ts";
+import { runWithVerifiedSession, verifiedRequestMemberId } from "../services/session-request-context.server.ts";
+
+test("keeps verified session context isolated by concurrent request, token and database", async () => {
+  const database = {};
+  assert.equal(verifiedRequestMemberId("one", database), undefined);
+  const run = (token, memberId, delay) => runWithVerifiedSession({ token, database, memberId }, async () => {
+    await new Promise(resolve => setTimeout(resolve, delay));
+    assert.equal(verifiedRequestMemberId("wrong-token", database), undefined);
+    assert.equal(verifiedRequestMemberId(token, {}), undefined);
+    return verifiedRequestMemberId(token, database);
+  });
+  assert.deepEqual(await Promise.all([run("one", "member-one", 5), run("two", "member-two", 1)]), ["member-one", "member-two"]);
+  assert.equal(verifiedRequestMemberId("one", database), undefined);
+  assert.throws(() => runWithVerifiedSession({ token: "failed", database, memberId: "member-failed" }, () => { throw new Error("cancelled"); }), /cancelled/);
+  assert.equal(verifiedRequestMemberId("failed", database), undefined);
+});
 
 test("map frame waits for its real document even when load is early or missing", async () => {
   const frame = new EventTarget();
@@ -118,8 +134,8 @@ class TestD1Statement {
 }
 
 class TestD1Database {
-  constructor() { this.database = new DatabaseSync(":memory:"); this.database.exec("PRAGMA foreign_keys = ON"); this.prepareCount = 0; this.failBatchAt = null; }
-  prepare(sql) { this.prepareCount += 1; return new TestD1Statement(this.database, sql); }
+  constructor() { this.database = new DatabaseSync(":memory:"); this.database.exec("PRAGMA foreign_keys = ON"); this.prepareCount = 0; this.sessionSelectCount = 0; this.failBatchAt = null; }
+  prepare(sql) { this.prepareCount += 1; if (/FROM member_sessions s INNER JOIN members m/.test(sql)) this.sessionSelectCount += 1; return new TestD1Statement(this.database, sql); }
   async batch(statements) { this.database.exec("BEGIN IMMEDIATE"); try { const results = []; for (const [index, statement] of statements.entries()) { if (index === this.failBatchAt) { this.failBatchAt = null; throw new Error("INJECTED_BATCH_FAILURE"); } results.push(await statement.all()); } this.database.exec("COMMIT"); return results; } catch (error) { this.database.exec("ROLLBACK"); throw error; } finally { this.failBatchAt = null; } }
 }
 
@@ -172,6 +188,40 @@ async function loginAs(memberName) {
 }
 
 await login();
+
+test("avoids repeated session verification within a protected request", async () => {
+  for (const path of ["/api/trips", "/", "/trips", "/trips/shanghai-hangzhou-2026/plan?view=planning"]) {
+    DB.sessionSelectCount = 0;
+    const response = await render(path);
+    assert.equal(response.status, 200);
+    await response.text();
+    console.log(JSON.stringify({ path, protectedRequestSessionLookups: DB.sessionSelectCount }));
+    assert.equal(DB.sessionSelectCount, 1, path);
+  }
+});
+
+test("rejects forged identity headers and revoked sessions on the next request", async () => {
+  const original = sessionCookie;
+  try {
+    const forged = await render("/api/trips", { headers: { cookie: "", "x-authenticated-member-id": "member-nini", "x-request-id": "forged" } });
+    assert.equal(forged.status, 401);
+    assert.notEqual(forged.headers.get("x-request-id"), "forged");
+    await loginAs("kiki");
+    const temporary = sessionCookie;
+    const members = await Promise.all([original, temporary].map(async cookie => {
+      const response = await render("/api/member", { headers: { cookie } });
+      assert.equal(response.status, 200);
+      return (await response.json()).member.id;
+    }));
+    assert.deepEqual(members, ["member-nini", "member-zhu-jingqi"]);
+    assert.equal((await render("/api/trips")).status, 200);
+    assert.equal((await render("/api/session", { method: "DELETE" })).status, 200);
+    sessionCookie = temporary;
+    assert.equal((await render("/api/trips")).status, 401);
+    sessionCookie = original;
+    assert.equal((await render("/api/trips")).status, 200);
+  } finally { sessionCookie = original; }
+});
 
 test("loads album gallery CSS only through the album route", async () => {
   const savedSession = sessionCookie;

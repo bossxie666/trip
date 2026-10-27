@@ -1,3 +1,5 @@
+import { verifiedRequestMemberId } from "./session-request-context.server.ts";
+
 export const sessionCookieName = "trip_space_session";
 const encoder = new TextEncoder();
 
@@ -60,6 +62,8 @@ export async function sessionTokenDigest(token: string) { return sha256(token); 
  * with their invite, but old signed cookies require a fresh login. */
 export async function verifySessionMemberId(token: string | undefined, _legacySecret: string | undefined, db?: D1Database) {
   void _legacySecret; // Kept in the public helper signature for callers.
+  const verified = verifiedRequestMemberId(token, db);
+  if (verified !== undefined) return verified;
   if (token?.startsWith("v2.") && db) {
     try {
       const now = new Date().toISOString();

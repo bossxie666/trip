@@ -1,8 +1,16 @@
 name: Performance baseline
 
 on:
+  push:
+    branches: [v2.4-r1]
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: performance-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lighthouse:
@@ -28,9 +36,15 @@ jobs:
       - run: pnpm build:self-hosted
       - name: Lighthouse production-like routes
         run: pnpm dlx @lhci/cli@0.15.1 autorun
+      - name: Verify authenticated performance reports
+        if: always()
+        run: node scripts/check-lighthouse-reports.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: lighthouse-reports
-          path: .lighthouseci/reports
+          path: |
+            .lighthouseci/reports
+            .lighthouseci/lhr-*.json
+          include-hidden-files: true
           retention-days: 14
