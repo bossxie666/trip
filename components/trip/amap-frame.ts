@@ -1,25 +1,16 @@
 import type { AMapNamespace } from "./amap-client-types";
 import { bridgeAMapRealm } from "./amap-realm";
+import { waitForMapDocument } from "./map-frame-document";
 
 export async function createAMapFrame(host: HTMLDivElement, signal: AbortSignal) {
   const frame = document.createElement("iframe");
   frame.title = "高德地图";
+  frame.loading = "eager";
   frame.style.cssText = "display:block;width:100%;height:100%;border:0";
   const dispose = () => frame.remove();
   signal.addEventListener("abort", dispose, { once: true });
   try {
-    const loaded = new Promise<void>((resolve, reject) => {
-      const timer = window.setTimeout(() => finish(new Error("地图容器加载超时，请重试。")), 8000);
-      const onAbort = () => finish(new Error("地图加载已取消。"));
-      function finish(error?: Error) {
-        window.clearTimeout(timer); signal.removeEventListener("abort", onAbort);
-        frame.onload = null; frame.onerror = null;
-        if (error) reject(error); else resolve();
-      }
-      frame.onload = () => finish(); frame.onerror = () => finish(new Error("地图容器加载失败。"));
-      signal.addEventListener("abort", onAbort, { once: true });
-      if (signal.aborted) onAbort();
-    });
+    const loaded = waitForMapDocument(frame, signal);
     frame.src = "/api/amap/canvas";
     host.appendChild(frame);
     const configPromise = fetch("/api/amap/config", { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) }).then(async (response) => {

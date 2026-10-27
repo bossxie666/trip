@@ -11,6 +11,35 @@ import { knowledgeHref } from "../services/knowledge-navigation.ts";
 import { runAlbumUploadQueue } from "../components/media/album-upload-queue.ts";
 import { drainMediaDeletionQueue } from "../services/media-deletion.server.ts";
 import { editorRequest } from "../components/trip/editor-request.ts";
+import { waitForMapDocument } from "../components/trip/map-frame-document.ts";
+
+test("map frame waits for its real document even when load is early or missing", async () => {
+  const frame = new EventTarget();
+  let ready = false;
+  frame.contentDocument = { querySelector: () => ready ? {} : null };
+  const loading = waitForMapDocument(frame, new AbortController().signal, 1000, 5);
+  frame.dispatchEvent(new Event("load"));
+  await new Promise(resolve => setTimeout(resolve, 2));
+  ready = true; // No second load event: the readiness check must still complete.
+  await loading;
+});
+
+test("map frame cancellation and timeouts cannot accept a blank or login document", async () => {
+  const frame = new EventTarget();
+  frame.contentDocument = { querySelector: () => null };
+  const controller = new AbortController();
+  const cancelled = waitForMapDocument(frame, controller.signal, 1000, 5);
+  controller.abort();
+  await assert.rejects(cancelled, /地图加载已取消/);
+  await assert.rejects(waitForMapDocument(frame, new AbortController().signal, 10, 2), /地图容器加载超时/);
+});
+
+test("map frame transport failure is recoverable without waiting for its timeout", async () => {
+  const frame = new EventTarget();
+  const loading = waitForMapDocument(frame, new AbortController().signal, 1000, 5);
+  frame.dispatchEvent(new Event("error"));
+  await assert.rejects(loading, /地图容器加载失败/);
+});
 
 test("editor requests preserve form payloads and expose recoverable failures", async (context) => {
   const fetchMock = context.mock.method(globalThis, "fetch");

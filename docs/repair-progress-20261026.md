@@ -94,3 +94,8 @@
 - 2026-10-27 相册专用样式已按原有顺序从globals/home-journal提取到app/albums/gallery-base.css和gallery-theme.css，由新增路由layout加载；保留共享书本及弹窗规则。生产相册CSS独立包17,841字节，新实际HTML资源图回归确认首页/旅行不请求照片网格样式，相册仍包含照片网格和书封样式。
 - Chrome在390×844和1110×791分别记录100个相册元素的几何与computed style，拆分前后完全一致（repair/album-css-before.json、album-css-after.json）；全屏预览覆盖整个视口，手机编辑弹窗362×439、x14/y202.5，所有后代无背景图。另修正相册次要按钮浅底白字的问题，截图repair/album-editor-css-after-390.jpg。
 - 新生产构建和109项测试全部通过（repair/album-css-final-tests.log），资源隔离测试通过；lint/typecheck通过。本次仅完成相册CSS路由拆分，其他页面样式拆分、真实地图配置与验收、远程迁移和最终发布仍未完成。正式站及远程业务数据未改动。
+- 2026-10-27 用户已在预览添加高德安全码和Web服务Key；初次路线返回10009，用户随后修正Web服务Key。更新过程中JS Key被删除（deployments记录19bd918d），已仅在预览恢复此前核验的原Key，未输出密钥。保留全部配置后重新发布冻结第一批包；未修改正式站或远程业务数据。
+- Chrome真实复测：旧加载器首次出现“地图容器加载超时”，重试后显示地图。新增waitForMapDocument，检查隔离文档实际#map就绪，不把about:blank/登录页当成成功；兼容提前或缺失load事件，保留取消/超时/失败恢复，并显式eager加载。只在隔离地图文档允许动态编译，主页面CSP不变。
+- 冻结第一批重新构建并通过93项测试，已发布预览版本1f2241b3-bb13-4b28-8eb0-e996c0187691；来源/文件哈希见repair/batch1-map-readiness-preview-manifest.json。Chrome1280桌面和390手机首次打开均显示4个行程地点标记，适配视野可用，规划桌面小地图滚动可见后成功加载。截图repair/preview-map-readiness-mobile.jpg、preview-planning-map-success-desktop.jpg。路线实测18.4公里/64分钟/约7元，规划另一段37.8公里/88分钟/约8元；未把浏览器工具等待时间当作网站性能。
+- 诊断更正：先前无认证HTTP检查自动跟随到登录页，看到的DENY来自登录页，不能据此认定地图部署头错误。关闭重定向后，原始/api/amap/canvas响应302且SAMEORIGIN、frame-ancestors self，符合认证与隔离要求。浏览器扩展inspector的XHR日志不归因为网站错误。
+- 全量源代码生产构建、112项回归、typecheck与lint通过（repair/map-readiness-full-tests.log）。cd7f27a的GitHub Quality运行40444534111已success。新增相册统一编辑器仍在本地验证中，未包含于本轮预览发布。正式恢复点/备份、0011正式迁移、第一批正式发布和后两批远程验收仍待完成。
