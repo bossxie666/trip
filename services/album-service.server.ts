@@ -47,19 +47,64 @@ export async function listAlbums(memberId: string): Promise<AlbumSummary[]> {
   return rows.map((row) => ({ ...row, canEditAlbum: !row.tripId || row.createdByMemberId === memberId }));
 }
 
-export async function getAlbum(id: string, memberId: string) {
-  const album = await requireAlbumAccess(id, memberId);
-  const [trip, photos, tags, photoTags] = await Promise.all([
-    album.tripId ? getDb().select({ title: tripRecords.title }).from(tripRecords).where(eq(tripRecords.id, album.tripId)).limit(1) : [],
-    getDb().select({ assetId: mediaAssetRecords.id, filename: mediaAssetRecords.originalFilename, width: mediaAssetRecords.width, height: mediaAssetRecords.height, uploadedByMemberId: albumMediaRecords.uploadedByMemberId, sortOrder: albumMediaRecords.sortOrder, capturedAt: albumMediaRecords.capturedAt, createdAt: albumMediaRecords.createdAt, isFavorite: albumMediaRecords.isFavorite })
-      .from(albumMediaRecords).innerJoin(mediaAssetRecords, eq(mediaAssetRecords.id, albumMediaRecords.mediaAssetId))
-      .where(and(eq(albumMediaRecords.albumId, id), eq(mediaAssetRecords.status, "ready"))).orderBy(desc(albumMediaRecords.capturedAt), asc(albumMediaRecords.sortOrder)),
-    getDb().select().from(albumTagRecords).where(eq(albumTagRecords.albumId, id)).orderBy(asc(albumTagRecords.name)),
-    getDb().select().from(albumMediaTagRecords).where(eq(albumMediaTagRecords.albumId, id)),
-  ]);
-  return { ...album, tripTitle: trip[0]?.title || null, tags, photos: photos.map((photo) => ({ ...photo, capturedAt: photo.capturedAt || photo.createdAt, tagIds: photoTags.filter((item) => item.mediaAssetId === photo.assetId).map((item) => item.tagId) })), canEditAlbum: !album.tripId || album.createdByMemberId === memberId };
+type AlbumPhotoQuery = { filter?: string; cursor?: string | null; limit?: number };
+const albumPhotoDate = sql<string>`substr(coalesce(${albumMediaRecords.capturedAt},${albumMediaRecords.createdAt}),1,10)`;
+function photoFilter(albumId: string, filter = "all") {
+  if (filter.length > 180) throw new Error("INVALID_ALBUM_FILTER");
+  return filter === "all" || !filter ? undefined : filter === "favorite" ? eq(albumMediaRecords.isFavorite, true)
+    : sql`EXISTS (SELECT 1 FROM album_media_tags mt WHERE mt.album_id=${albumId} AND mt.media_asset_id=${albumMediaRecords.mediaAssetId} AND mt.tag_id=${filter})`;
+}
+function photoCursor(value?: string | null) {
+  if (!value) return null;
+  try {
+    if (value.length > 512) throw new Error();
+    const cursor = JSON.parse(value) as { date?: unknown; order?: unknown; id?: unknown };
+    if (typeof cursor.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(cursor.date) || !Number.isSafeInteger(cursor.order) || typeof cursor.id !== "string" || !cursor.id || cursor.id.length > 180) throw new Error();
+    return { date: cursor.date, order: cursor.order as number, id: cursor.id };
+  } catch { throw new Error("INVALID_ALBUM_CURSOR"); }
 }
 
+export async function getAlbum(id: string, memberId: string, query: AlbumPhotoQuery = {}) {
+  const album = await requireAlbumAccess(id, memberId), db = getDb();
+  const filter = query.filter || "all", cursor = photoCursor(query.cursor), limit = query.limit ?? 60;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 80) throw new Error("INVALID_ALBUM_PAGE_SIZE");
+  const baseWhere = and(eq(albumMediaRecords.albumId, id), eq(mediaAssetRecords.status, "ready"));
+  const filteredWhere = and(baseWhere, photoFilter(id, filter));
+  const after = cursor ? sql`(${albumPhotoDate}<${cursor.date} OR (${albumPhotoDate}=${cursor.date} AND (${albumMediaRecords.sortOrder}>${cursor.order} OR (${albumMediaRecords.sortOrder}=${cursor.order} AND ${albumMediaRecords.mediaAssetId}>${cursor.id}))))` : undefined;
+  const [trip, rows, tags, dateCounts, counts] = await Promise.all([
+    album.tripId ? db.select({ title: tripRecords.title }).from(tripRecords).where(eq(tripRecords.id, album.tripId)).limit(1) : [],
+    db.select({ assetId: mediaAssetRecords.id, filename: mediaAssetRecords.originalFilename, width: mediaAssetRecords.width, height: mediaAssetRecords.height, uploadedByMemberId: albumMediaRecords.uploadedByMemberId, sortOrder: albumMediaRecords.sortOrder, capturedAt: albumMediaRecords.capturedAt, createdAt: albumMediaRecords.createdAt, isFavorite: albumMediaRecords.isFavorite })
+      .from(albumMediaRecords).innerJoin(mediaAssetRecords, eq(mediaAssetRecords.id, albumMediaRecords.mediaAssetId))
+      .where(and(filteredWhere, after)).orderBy(desc(albumPhotoDate), asc(albumMediaRecords.sortOrder), asc(albumMediaRecords.mediaAssetId)).limit(limit + 1),
+    db.select().from(albumTagRecords).where(eq(albumTagRecords.albumId, id)).orderBy(asc(albumTagRecords.name)),
+    db.select({ date: albumPhotoDate, count: sql<number>`count(*)` }).from(albumMediaRecords)
+      .innerJoin(mediaAssetRecords, eq(mediaAssetRecords.id, albumMediaRecords.mediaAssetId))
+      .where(filteredWhere).groupBy(albumPhotoDate).orderBy(desc(albumPhotoDate)),
+    db.select({ count: sql<number>`count(*)` }).from(albumMediaRecords)
+      .innerJoin(mediaAssetRecords, eq(mediaAssetRecords.id, albumMediaRecords.mediaAssetId)).where(baseWhere),
+  ]);
+  const photos = rows.slice(0, limit), ids = photos.map(photo => photo.assetId);
+  const photoTags = ids.length ? await db.select().from(albumMediaTagRecords)
+    .where(and(eq(albumMediaTagRecords.albumId, id), inArray(albumMediaTagRecords.mediaAssetId, ids))) : [];
+  const tagsByPhoto = new Map<string, string[]>();
+  for (const row of photoTags) { const selected = tagsByPhoto.get(row.mediaAssetId) || []; selected.push(row.tagId); tagsByPhoto.set(row.mediaAssetId, selected); }
+  const last = photos.at(-1);
+  return { ...album, tripTitle: trip[0]?.title || null, tags,
+    photos: photos.map(photo => ({ ...photo, capturedAt: photo.capturedAt || photo.createdAt, tagIds: tagsByPhoto.get(photo.assetId) || [] })),
+    canEditAlbum: !album.tripId || album.createdByMemberId === memberId,
+    pagination: { filter, total: dateCounts.reduce((sum, row) => sum + row.count, 0), totalPhotos: counts[0]?.count || 0, dateCounts,
+      nextCursor: rows.length > limit && last ? JSON.stringify({ date: (last.capturedAt || last.createdAt).slice(0, 10), order: last.sortOrder, id: last.assetId }) : null },
+  };
+}
+
+export async function getAlbumPhotoSelection(id: string, memberId: string, filter = "all") {
+  await requireAlbumAccess(id, memberId);
+  // IDs only: selection covers the entire filter, not just rendered thumbnails.
+  const rows = await getDb().select({ id: albumMediaRecords.mediaAssetId }).from(albumMediaRecords)
+    .innerJoin(mediaAssetRecords, eq(mediaAssetRecords.id, albumMediaRecords.mediaAssetId))
+    .where(and(eq(albumMediaRecords.albumId, id), eq(mediaAssetRecords.status, "ready"), photoFilter(id, filter)));
+  return { assetIds: rows.map(row => row.id), total: rows.length };
+}
 export async function createAlbum(memberId: string, input: { title?: string; description?: string | null; tripId?: string | null }) {
   const title = input.title?.trim() || "";
   if (!title || title.length > 80) throw new Error("INVALID_ALBUM_TITLE");
@@ -101,8 +146,7 @@ export async function attachAlbumMedia(id: string, memberId: string, assetIds: s
   if (assets.length !== unique.length || assets.some((asset) => asset.purpose !== "album" || asset.status !== "ready" || asset.uploaderMemberId !== memberId)) throw new Error("INVALID_ALBUM_MEDIA");
   const reused = await getDb().select({ id: albumMediaRecords.mediaAssetId, albumId: albumMediaRecords.albumId }).from(albumMediaRecords).where(inArray(albumMediaRecords.mediaAssetId, unique));
   if (reused.some((row) => row.albumId !== id)) throw new Error("INVALID_ALBUM_MEDIA");
-  const existing = await getDb().select().from(albumMediaRecords).where(eq(albumMediaRecords.albumId, id));
-  const existingIds = new Set(existing.map((row) => row.mediaAssetId));
+  const existingIds = new Set(reused.map((row) => row.id));
   const additions = unique.filter((assetId) => !existingIds.has(assetId));
   if (additions.length) {
     const now = new Date().toISOString(), d1 = getRuntimeEnv().DB;
@@ -121,7 +165,7 @@ function validCapturedAt(value?: string | null) {
 
 function mediaIdGroups(assetIds: string[]) {
   const unique = [...new Set(assetIds)];
-  if (!unique.length || unique.length > 10000) throw new Error("INVALID_ALBUM_MEDIA");
+  if (!unique.length || unique.some(id => !id || id.length > 180)) throw new Error("INVALID_ALBUM_MEDIA");
   const groups: string[][] = [];
   for (let offset = 0; offset < unique.length; offset += 80) groups.push(unique.slice(offset, offset + 80));
   return groups;

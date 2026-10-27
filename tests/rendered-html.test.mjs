@@ -75,7 +75,7 @@ class TestD1Database {
 const DB = new TestD1Database();
 globalThis.__TRIP_TEST_D1__ = DB;
 globalThis.__TRIP_TEST_ENV__ = { TRIP_SPACE_INVITE_CODE: "test-invite", TRIP_SPACE_SESSION_SECRET: "test-session-secret-at-least-32-characters", AMAP_JS_API_KEY: "test-js-key", AMAP_JS_SECURITY_CODE: "test-js-code", AMAP_WEB_SERVICE_KEY: "test-web-key" };
-for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql", "0014_v2_2_1_confirmed_facts.sql", "0015_v2_4_r1_booking_endpoint_labels.sql", "0016_recommendation_v2.sql", "0017_home_media_guestbook.sql", "0018_recommendation_member_authoring.sql", "0019_albums.sql", "0020_city_centers.sql", "0021_security_rate_limits.sql", "0022_album_photo_management.sql", "0023_member_identity.sql", "0024_knowledge_library.sql", "0025_knowledge_reference_titles.sql", "0026_knowledge_legacy_favorites.sql", "0027_media_deletion_queue.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
+for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql", "0014_v2_2_1_confirmed_facts.sql", "0015_v2_4_r1_booking_endpoint_labels.sql", "0016_recommendation_v2.sql", "0017_home_media_guestbook.sql", "0018_recommendation_member_authoring.sql", "0019_albums.sql", "0020_city_centers.sql", "0021_security_rate_limits.sql", "0022_album_photo_management.sql", "0023_member_identity.sql", "0024_knowledge_library.sql", "0025_knowledge_reference_titles.sql", "0026_knowledge_legacy_favorites.sql", "0027_media_deletion_queue.sql", "0028_album_calendar_indexes.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
 
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
@@ -1784,4 +1784,81 @@ test("routes AMap style and REST proxy requests to their fixed official hosts wi
   assert.equal(styles.searchParams.getAll("jscode").length, 1);
   assert.equal(amapProxyUrl("v3/place/text", incoming, "server-only-code").hostname, "restapi.amap.com");
   for (const path of ["https://evil.example", "v3/../../evil", "v3/foo?redirect=evil", "v3/foo#x", "v3/%2e%2e/x", "v6/place/text"]) assert.equal(amapProxyUrl(path, incoming, "server-only-code"), null);
+});
+
+test("paginates album dates and filters without missing photos or limiting full selection to loaded pages", async () => {
+  await loginAs("nini");
+  const trip = await createTrip({ title: "分页相册权限测试", status: "planning", cities: [], startDate: "2032-05-01", endDate: "2032-05-01", memberIds: ["member-nini"] });
+  const { album } = await (await render("/api/albums", { method: "POST", body: { title: "分页与全选", tripId: trip.id } })).json();
+  const ids = Array.from({ length: 245 }, (_, index) => `album-page-regression-${String(index).padStart(3, "0")}`), now = "2026-08-19T12:00:00.000Z", tagId = "album-page-regression-tag";
+  const asset = DB.database.prepare("INSERT INTO media_assets(id,uploader_member_id,purpose,object_key,original_filename,content_type,byte_size,status,created_at,updated_at) VALUES (?,'member-nini','album',?,?,'image/jpeg',100,?,?,?)");
+  const photo = DB.database.prepare("INSERT INTO album_media(album_id,media_asset_id,uploaded_by_member_id,sort_order,captured_at,is_favorite,created_at) VALUES (?,?,'member-nini',?,?,?,?)");
+  DB.database.prepare("INSERT INTO album_tags(id,album_id,name,created_at) VALUES (?,?,?,?)").run(tagId, album.id, "跨页标签", now);
+  try {
+    for (const [index, id] of ids.entries()) {
+      const day = index < 120 ? "21" : "20";
+      asset.run(id, `album/${id}.jpg`, `${id}.jpg`, "ready", now, now);
+      // Different times on the same day must still retain original upload order.
+      photo.run(album.id, id, index, index === 244 ? null : `2026-08-${day}T${String(23-index%24).padStart(2,"0")}:00:00.000Z`, index % 3 === 0 ? 1 : 0, now);
+      if (index % 5 === 0) DB.database.prepare("INSERT INTO album_media_tags(album_id,media_asset_id,tag_id) VALUES (?,?,?)").run(album.id, id, tagId);
+    }
+    asset.run("album-page-regression-pending", "album/page-pending.jpg", "pending.jpg", "pending", now, now);
+    photo.run(album.id, "album-page-regression-pending", 245, now, 1, now);
+    const migration = readFileSync(new URL("../drizzle/0028_album_calendar_indexes.sql", import.meta.url), "utf8");
+    assert.equal(migration, readFileSync(new URL("../migrations/0014_album_calendar_indexes.sql", import.meta.url), "utf8"));
+    const queryPlan = favorite => DB.database.prepare(`EXPLAIN QUERY PLAN SELECT am.media_asset_id FROM album_media am JOIN media_assets m ON m.id=am.media_asset_id WHERE am.album_id=? AND m.status='ready' ${favorite ? "AND am.is_favorite=1" : ""} ORDER BY substr(coalesce(am.captured_at,am.created_at),1,10) DESC,am.sort_order,am.media_asset_id LIMIT 61`).all(album.id).map(row => row.detail);
+    DB.database.exec("DROP INDEX idx_album_media_calendar; DROP INDEX idx_album_media_favorite_calendar;");
+    const before = queryPlan(false);
+    DB.database.exec(migration); DB.database.exec(migration);
+    const after = queryPlan(false), favoritesPlan = queryPlan(true);
+    assert.match(after.join(" "), /idx_album_media_calendar/);
+    assert.doesNotMatch(after.join(" "), /TEMP B-TREE/);
+    assert.match(favoritesPlan.join(" "), /idx_album_media_favorite_calendar/);
+    console.info(JSON.stringify({ type: "album_query_plan", before, after, favoritesPlan }));
+    const path = `/api/albums/${album.id}`;
+    const first = (await (await render(`${path}?limit=40`)).json()).album;
+    assert.equal(first.photos.length, 40);
+    assert.equal(first.pagination.total, 245);
+    assert.deepEqual(first.pagination.dateCounts, [{ date: "2026-08-21", count: 120 }, { date: "2026-08-20", count: 124 }, { date: "2026-08-19", count: 1 }]);
+    const seen = first.photos.map(photo => photo.assetId);
+    let cursor = first.pagination.nextCursor;
+    while (cursor) {
+      const response = await render(`${path}?${new URLSearchParams({ limit: "40", cursor })}`);
+      assert.equal(response.status, 200);
+      const page = (await response.json()).album;
+      assert.ok(page.photos.length <= 40);
+      seen.push(...page.photos.map(photo => photo.assetId)); cursor = page.pagination.nextCursor;
+    }
+    assert.deepEqual(seen, ids);
+    const full = await (await render(`${path}/selection`)).json();
+    assert.equal(full.total, 245); assert.deepEqual(new Set(full.assetIds), new Set(ids));
+    const favorites = (await (await render(`${path}?filter=favorite`)).json()).album;
+    assert.equal(favorites.photos.length, 60); assert.equal(favorites.pagination.total, 82);
+    assert.ok(favorites.photos.every(photo => photo.isFavorite));
+    assert.deepEqual(new Set((await (await render(`${path}/selection?filter=favorite`)).json()).assetIds), new Set(ids.filter((_, i) => i % 3 === 0)));
+    const tagged = (await (await render(`${path}?filter=${tagId}&limit=20`)).json()).album;
+    assert.equal(tagged.photos.length, 20); assert.equal(tagged.pagination.total, 49);
+    assert.ok(tagged.photos.every(photo => photo.tagIds.includes(tagId)));
+    assert.equal((await (await render(`${path}/selection?filter=${tagId}`)).json()).total, 49);
+    assert.equal((await (await render(`${path}?filter=other-album-tag`)).json()).album.pagination.total, 0);
+    assert.equal((await render(`${path}?cursor=not-json`)).status, 400);
+    assert.equal((await render(`${path}?limit=81`)).status, 400);
+    assert.equal((await render(`${path}?limit=NaN`)).status, 400);
+    DB.database.prepare("DELETE FROM album_media WHERE album_id=? AND media_asset_id=?").run(album.id, ids[0]);
+    const stable = (await (await render(`${path}?${new URLSearchParams({ limit: "40", cursor: first.pagination.nextCursor })}`)).json()).album;
+    assert.equal(stable.photos[0].assetId, ids[40], "deletion before the cursor must not skip a photo");
+    await loginAs("kiki");
+    assert.equal((await render(`${path}/selection`)).status, 403);
+    assert.equal((await render(`${path}?limit=40`)).status, 403);
+    await loginAs("nini");
+    const html = await (await render(`/albums/${album.id}`)).text();
+    assert.equal((html.match(/class="album-photo-tile/g) || []).length, 60);
+    assert.doesNotMatch(html, /album-page-regression-200\.jpg/);
+  } finally {
+    await loginAs("nini");
+    DB.database.prepare("DELETE FROM album_media_tags WHERE album_id=?").run(album.id);
+    DB.database.prepare("DELETE FROM albums WHERE id=?").run(album.id);
+    DB.database.prepare("DELETE FROM media_assets WHERE id LIKE 'album-page-regression-%'").run();
+    await render(`/api/trips/${trip.slug}`, { method: "DELETE" });
+  }
 });

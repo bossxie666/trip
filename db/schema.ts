@@ -1,4 +1,5 @@
 import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 
 export const memberRecords = sqliteTable("members", {
   id: text("id").primaryKey(),
@@ -317,6 +318,8 @@ export const albumMediaRecords = sqliteTable("album_media", {
   primaryKey({ columns: [table.albumId, table.mediaAssetId] }),
   uniqueIndex("idx_album_media_order").on(table.albumId, table.sortOrder),
   index("idx_album_media_asset").on(table.mediaAssetId),
+  index("idx_album_media_calendar").on(table.albumId, sql`substr(coalesce(captured_at,created_at),1,10) DESC`, table.sortOrder, table.mediaAssetId),
+  index("idx_album_media_favorite_calendar").on(table.albumId, table.isFavorite, sql`substr(coalesce(captured_at,created_at),1,10) DESC`, table.sortOrder, table.mediaAssetId),
 ]);
 
 export const albumTagRecords = sqliteTable("album_tags", {

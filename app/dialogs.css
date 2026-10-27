@@ -1,4 +1,23 @@
 /* One centered dialog language shared by profile, trip, album and workspace editors. */
+.workspace-overlay:has(> .album-viewer) { padding: 0; }
+.workspace-surface.workspace-modal.album-viewer {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  max-width: none;
+  height: 100dvh;
+  max-height: 100dvh;
+  margin: 0;
+  padding: 54px 18px 126px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: #050c12;
+  background-image: none;
+  overflow: hidden;
+}
+.album-viewer .album-viewer-tags { max-height: 3em; overflow: auto; line-height: 1.5; }
+
 .workspace-overlay,
 .workspace-overlay-modal,
 .workspace-overlay-drawer,
