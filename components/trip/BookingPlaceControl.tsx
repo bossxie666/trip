@@ -1,77 +1,64 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { requestTripModalOpen, useExclusiveTripModal } from "./modal-events";
 import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
+import { EditorDialog } from "./EditorDialog";
+import { editorRequest } from "./editor-request";
 
 type City = { id: string; name: string };
 type Place = { id: string; name: string; address: string | null; cityId: string } | null;
 type Slot = "place" | "origin" | "destination";
 type SearchResult = { id: string; name: string; address: string | null; district: string | null; longitude: number; latitude: number };
 
-/**
- * Small, reusable booking-location editor.  It deliberately owns no map
- * state: the server remains the source of truth and AMap search results are
- * converted to a Place before the booking is patched.  This control is also
- * used for pending hotel/transport endpoints, so an unknown endpoint is an
- * explicit state rather than a guessed airport.
- */
 export function BookingPlaceControl({ slug, bookingId, slot, cities, currentPlace, currentLabel = null, label = "修改地点", defaultCityId }: { slug: string; bookingId: string; slot: Slot; cities: City[]; currentPlace: Place; currentLabel?: string | null; label?: string; defaultCityId?: string | null }) {
   const { refreshWorkspace } = useWorkspaceNavigation();
-  const [open, setOpen] = useState(false), [cityId, setCityId] = useState(defaultCityId || currentPlace?.cityId || cities[0]?.id || ""), [keywords, setKeywords] = useState(""), [results, setResults] = useState<SearchResult[]>([]), [loading, setLoading] = useState(false), [error, setError] = useState("");
+  const [open, setOpen] = useState(false), [cityId, setCityId] = useState(defaultCityId || currentPlace?.cityId || cities[0]?.id || ""), [keywords, setKeywords] = useState(""), [results, setResults] = useState<SearchResult[]>([]), [loading, setLoading] = useState(false), [saving, setSaving] = useState(false), [error, setError] = useState("");
+  const searching = useRef<AbortController | null>(null), submitting = useRef(false);
   const modalOwner = `booking-place:${bookingId}:${slot}`;
-  useExclusiveTripModal(modalOwner, () => setOpen(false));
-
+  useEffect(() => () => searching.current?.abort(), []);
+  function close() { if (submitting.current) return; searching.current?.abort(); setOpen(false); setLoading(false); }
+  useExclusiveTripModal(modalOwner, close);
+  function show() {
+    requestTripModalOpen(modalOwner); setCityId(defaultCityId || currentPlace?.cityId || cities[0]?.id || "");
+    setKeywords(""); setResults([]); setError(""); setOpen(true);
+  }
   async function search() {
     if (!keywords.trim() || !cityId) { setError("请输入名称并选择城市。"); return; }
-    setLoading(true); setError("");
+    searching.current?.abort(); const controller = new AbortController(); searching.current = controller;
+    setLoading(true); setError(""); setResults([]);
     try {
       const params = new URLSearchParams({ keywords: keywords.trim(), cityId, tripSlug: slug });
-      const response = await fetch(`/api/amap/places/search?${params.toString()}`);
-      const payload = await response.json() as { pois?: SearchResult[]; error?: string };
-      if (!response.ok) throw new Error(payload.error || "高德搜索失败，请稍后重试。");
-      setResults(payload.pois || []);
-      if (!payload.pois?.length) setError("没有找到候选地点，可在地图中选点后再绑定。");
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "高德搜索失败，请稍后重试。"); }
-    finally { setLoading(false); }
+      const payload = await editorRequest<{ pois?: SearchResult[] }>(`/api/amap/places/search?${params}`, { signal: controller.signal });
+      if (!controller.signal.aborted) { setResults(payload.pois || []); if (!payload.pois?.length) setError("没有找到地点，请换个名称搜索。"); }
+    } catch (caught) { if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "地点搜索失败，请重试。"); }
+    finally { if (searching.current === controller) setLoading(false); }
   }
-
-  async function bind(providerPlaceId: string) {
-    setLoading(true); setError("");
+  async function apply(providerPlaceId: string | null) {
+    if (submitting.current) return;
+    submitting.current = true; setSaving(true); setError(""); searching.current?.abort();
     try {
-      const placeResponse = await fetch(`/api/trips/${encodeURIComponent(slug)}/plan/places`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ providerPlaceId, cityId }) });
-      const placePayload = await placeResponse.json() as { place?: { id: string }; error?: string };
-      if (!placeResponse.ok || !placePayload.place) throw new Error(placePayload.error || "地点保存失败。");
+      let placeId: string | null = null;
+      if (providerPlaceId) {
+        const payload = await editorRequest<{ place?: { id: string } }>(`/api/trips/${encodeURIComponent(slug)}/plan/places`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ providerPlaceId, cityId }) });
+        if (!payload.place) throw new Error("地点保存失败，请重试。");
+        placeId = payload.place.id;
+      }
       const field = slot === "origin" ? "origin" : slot === "destination" ? "destination" : "place";
-      const bookingResponse = await fetch(`/api/trips/${encodeURIComponent(slug)}/bookings/${encodeURIComponent(bookingId)}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ [field]: { placeId: placePayload.place.id } }) });
-      const bookingPayload = await bookingResponse.json() as { error?: string };
-      if (!bookingResponse.ok) throw new Error(bookingPayload.error || "订单地点绑定失败。");
-      refreshWorkspace();
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "订单地点绑定失败。"); }
-    finally { setLoading(false); }
+      await editorRequest(`/api/trips/${encodeURIComponent(slug)}/bookings/${encodeURIComponent(bookingId)}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ [field]: placeId ? { placeId } : null }) });
+      setOpen(false); refreshWorkspace();
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "地点更新失败，请重试。"); }
+    finally { submitting.current = false; setSaving(false); setLoading(false); }
   }
-
-  async function clearBinding() {
-    setLoading(true); setError("");
-    try {
-      const field = slot === "origin" ? "origin" : slot === "destination" ? "destination" : "place";
-      const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/bookings/${encodeURIComponent(bookingId)}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ [field]: null }) });
-      const payload = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(payload.error || "清除地点失败。");
-      refreshWorkspace();
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "清除地点失败。"); }
-    finally { setLoading(false); }
-  }
-
-  return <details className="booking-place-control" open={open} onToggle={(event) => setOpen((event.currentTarget as HTMLDetailsElement).open)}>
-    <summary onClick={() => { if (!open) requestTripModalOpen(modalOwner); }}>{label}</summary>
-    <div className="booking-place-editor">
-      <label>城市<select value={cityId} onChange={(event) => setCityId(event.target.value)}>{cities.map((city) => <option key={city.id} value={city.id}>{city.name}</option>)}</select></label>
-      <div className="booking-place-search"><input value={keywords} onChange={(event) => setKeywords(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void search(); } }} placeholder={currentPlace?.name || currentLabel || "输入酒店 / 机场 / 车站"} aria-label="搜索绑定地点"/><button type="button" onClick={() => void search()} disabled={loading}>{loading ? "搜索中…" : "搜索"}</button></div>
-      {results.length ? <ul className="booking-place-results">{results.map((result) => <li key={result.id}><div><b>{result.name}</b><small>{[result.district, result.address].filter(Boolean).join(" · ") || "暂无地址"}</small></div><button type="button" onClick={() => void bind(result.id)} disabled={loading}>绑定</button></li>)}</ul> : null}
-      {currentPlace && <button type="button" className="booking-place-clear" onClick={() => void clearBinding()} disabled={loading}>清除具体地点</button>}
-      {error ? <p className="form-error" role="alert">{error}</p> : null}
-      <small>未找到时可保留文字标签；绑定不会改变订单日期、金额或费用分摊。</small>
-    </div>
-  </details>;
+  return <>
+    <button type="button" className="inline-edit-trigger" aria-haspopup="dialog" aria-expanded={open} onClick={show}>{label}</button>
+    <EditorDialog open={open} title={label} onClose={close} busy={saving}>
+      {currentPlace && <p>当前地点：{currentPlace.name}</p>}
+      <label>城市<select value={cityId} onChange={event => { searching.current?.abort(); setCityId(event.target.value); setResults([]); }}>{cities.map(city => <option key={city.id} value={city.id}>{city.name}</option>)}</select></label>
+      <div className="booking-place-search"><input value={keywords} onChange={event => { searching.current?.abort(); setKeywords(event.target.value); setResults([]); }} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); void search(); } }} placeholder={currentPlace?.name || currentLabel || "输入酒店、机场或车站"} aria-label="搜索绑定地点" /><button type="button" disabled={loading} onClick={() => void search()}>{loading ? "搜索中…" : "搜索"}</button></div>
+      {results.length > 0 && <ul className="booking-place-results">{results.map(result => <li key={result.id}><div><b>{result.name}</b><small>{[result.district, result.address].filter(Boolean).join(" · ")}</small></div><button type="button" onClick={() => void apply(result.id)}>绑定</button></li>)}</ul>}
+      {currentPlace && <button type="button" onClick={() => void apply(null)}>解除地点关联</button>}
+      {error && <p className="form-error" role="alert">{error}</p>}
+    </EditorDialog>
+  </>;
 }

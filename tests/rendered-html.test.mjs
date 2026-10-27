@@ -10,6 +10,28 @@ import { selectUpcomingTrip } from "../services/upcoming-trip.ts";
 import { knowledgeHref } from "../services/knowledge-navigation.ts";
 import { runAlbumUploadQueue } from "../components/media/album-upload-queue.ts";
 import { drainMediaDeletionQueue } from "../services/media-deletion.server.ts";
+import { editorRequest } from "../components/trip/editor-request.ts";
+
+test("editor requests preserve form payloads and expose recoverable failures", async (context) => {
+  const fetchMock = context.mock.method(globalThis, "fetch");
+  try {
+    fetchMock.mock.mockImplementation(async (_url, init) => {
+      assert.equal(init.method, "PATCH");
+      assert.equal(init.body, '{"title":"旅行"}');
+      assert.ok(init.signal instanceof AbortSignal);
+      return Response.json({ saved: true });
+    });
+    assert.deepEqual(await editorRequest("https://example.test/editor", { method: "PATCH", body: '{"title":"旅行"}' }), { saved: true });
+    fetchMock.mock.mockImplementation(async () => Response.json({ code: "DATE_CONFLICT", message: "日期与住宿冲突。" }, { status: 409 }));
+    await assert.rejects(editorRequest("https://example.test/editor"), /日期与住宿冲突/);
+    fetchMock.mock.mockImplementation(async () => new Response("<html>unavailable</html>", { status: 503 }));
+    await assert.rejects(editorRequest("https://example.test/editor"), /服务响应异常，请重试/);
+    fetchMock.mock.mockImplementation(async () => { throw new TypeError("Failed to fetch"); });
+    await assert.rejects(editorRequest("https://example.test/editor"), /网络异常，请重试/);
+    fetchMock.mock.mockImplementation(async (_url, init) => { init.signal.throwIfAborted(); });
+    await assert.rejects(editorRequest("https://example.test/editor", { signal: AbortSignal.abort(new DOMException("Timed out", "TimeoutError")) }), /请求超时，请重试/);
+  } finally { fetchMock.mock.restore(); }
+});
 
 test("derives one accommodation summary without double-counting booking totals", () => {
   const summary = summarizeAccommodation([
@@ -786,7 +808,9 @@ test("retires the old Shanghai Hangzhou detail behind the planning workspace", a
   const plan = await render("/trips/shanghai-hangzhou-2026/plan?view=planning");
   assert.equal(plan.status, 200);
   const html = await plan.text();
-  assert.match(html, /TRIP CONSOLE/); assert.match(html, /上海迪士尼/); assert.match(html, /参与成员/);
+  assert.match(html, /TRIP CONSOLE/); assert.match(html, /上海迪士尼/);
+  assert.match(html, /<button[^>]*aria-haspopup="dialog"[^>]*aria-expanded="false"[^>]*>编辑事项<\/button>/);
+  assert.doesNotMatch(html, /<textarea[^>]*>[^<]*<\/textarea>/);
   assert.doesNotMatch(html, /Starter Project|react-loading-skeleton|简单方位图/);
 });
 
