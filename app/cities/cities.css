@@ -1,0 +1,11 @@
+.city-page { max-width: 1240px; margin: auto; padding: 32px 24px 110px; }
+.city-page > a { color: var(--ink); }
+.city-page h1 { margin: 18px 0 28px; font-size: clamp(28px,4vw,42px); overflow-wrap: anywhere; }
+.city-page > section { margin: 26px 0; }
+.city-page > section > h2 { margin-bottom: 14px; font-size: 19px; }
+.city-link-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(240px,100%),1fr)); gap: 16px; }
+.city-link-grid > a { display: grid; align-content: start; gap: 10px; min-width: 0; padding: 20px; color: var(--ink); background: var(--paper2); border: 1px solid var(--line); border-radius: 12px; text-decoration: none; }
+.city-link-grid h2,.city-link-grid h3 { margin: 0; font-size: 20px; line-height: 1.5; overflow-wrap: anywhere; }
+.city-link-grid span,.city-empty { font-size: 14px; line-height: 1.6; color: var(--muted); overflow-wrap: anywhere; }
+.city-link-grid img { width: 80px; height: 80px; object-fit: cover; border-radius: 6px; }
+@media(max-width:430px) { .city-page { padding: 24px 16px 110px; } }

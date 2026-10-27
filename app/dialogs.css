@@ -19,6 +19,7 @@
 .album-viewer .album-viewer-tags { max-height: 3em; overflow: auto; line-height: 1.5; }
 .workspace-surface.workspace-modal.workspace-editor-dialog { display: flex; flex-direction: column; width: min(560px,calc(100vw - 28px)); max-width: calc(100vw - 28px); padding: 0; overflow: hidden; }
 .workspace-editor-dialog > header { flex: 0 0 auto; }
+.editor-discard-message { margin: 0; padding: 20px 22px; font-size: 14px; }
 .workspace-editor-form { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; overflow: hidden; }
 .workspace-editor-fields { display: grid; gap: 14px; min-width: 0; min-height: 0; margin: 0; padding: 18px 22px; overflow: auto; border: 0; }
 .workspace-editor-fields>label { display: grid; gap: 7px; min-width: 0; font-size: 13px; line-height: 1.5; }

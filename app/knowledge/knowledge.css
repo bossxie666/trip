@@ -12,6 +12,10 @@
 .knowledge-page-heading{grid-template-columns:minmax(0,1fr) minmax(320px,620px)}
 .knowledge-page-heading form{display:grid;grid-template-columns:minmax(120px,2fr) minmax(80px,1fr) auto;gap:6px}
 .knowledge-page-heading input{width:100%}.knowledge-page-heading button{min-height:44px}
+.knowledge-card-cover.empty{aspect-ratio:auto;min-height:0;padding:16px 18px 0;place-items:start;background:transparent}
+.knowledge-card-cover.empty svg{width:24px;height:24px}
+.knowledge-card:has(.knowledge-card-cover.empty) .knowledge-card-body{padding-top:10px}
+.knowledge-card-meta small{min-width:0;overflow-wrap:anywhere}
 .knowledge-tag-row a.active{background:#123c63;color:#fff}
 .knowledge-pagination{display:flex;align-items:center;justify-content:center;gap:22px;margin:28px 0;padding-bottom:32px}.knowledge-pagination a{padding:10px 15px;border:1px solid #cad0cd;border-radius:8px;color:#123c63;text-decoration:none}
 @media(max-width:900px){.knowledge-page-heading{grid-template-columns:1fr}}

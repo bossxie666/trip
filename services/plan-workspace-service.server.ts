@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, isNull, like, ne } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   bookingCostLineRecords, bookingParticipantRecords, bookingRecords, dayPresenceRecords,
@@ -12,61 +12,23 @@ import { assembleTimeline, type TimelineNode } from "@/services/timeline-assembl
 import type { TripRequestContext } from "@/services/request-data-context.server";
 
 export type PlanWorkspaceView = "planning" | "map" | "budget";
-export type RecommendationQuery = {
-  area: "shanghai" | "hangzhou" | "tonglu";
-  category: "all" | "core" | "attraction" | "food" | "shopping" | "day_trip" | "other" | "cafe" | "guide";
-  query: string;
-  library: boolean;
-  page: number;
-  sort: "core" | "recent";
-};
-
-const defaultRecommendationQuery: RecommendationQuery = { area: "shanghai", category: "all", query: "", library: false, page: 1, sort: "core" };
-const planningRecommendationLimit = 8;
-const libraryRecommendationPageSize = 12;
-
-export async function getPlanWorkspace(slug: string, memberId?: string, loaderOptions: { view?: PlanWorkspaceView; activeDayId?: string; requestContext?: TripRequestContext; recommendations?: RecommendationQuery } = {}) {
+export async function getPlanWorkspace(slug: string, memberId?: string, loaderOptions: { view?: PlanWorkspaceView; activeDayId?: string; requestContext?: TripRequestContext } = {}) {
   if (loaderOptions.requestContext && !loaderOptions.requestContext.permissions.canRead) return null;
   const trip = loaderOptions.requestContext?.trip?.slug === slug ? loaderOptions.requestContext.trip : await findTripBySlug(slug);
   if (!trip) return null;
   const db = getDb();
   const stored = trip;
   const view = loaderOptions.view || "planning";
-  const needsRecommendations = view !== "budget";
-  const paginatesRecommendations = view === "planning";
+  const needsRecommendations = view === "map";
   const needsPresence = true;
   const needsSavedPlaces = view !== "budget";
   // Planning renders the saved decision between adjacent concrete nodes;
   // Map and Costs consume the same row for route execution and estimates.
   const needsRoutes = true;
-  const recommendationQuery = loaderOptions.recommendations || defaultRecommendationQuery;
-  const recommendationConditions = [
-    eq(recommendationRecords.tripId, stored.id),
-    isNull(recommendationRecords.deletedAt),
-  ];
-  if (paginatesRecommendations) {
-    recommendationConditions.push(eq(recommendationRecords.areaKey, recommendationQuery.area));
-    if (recommendationQuery.category === "core") recommendationConditions.push(eq(recommendationRecords.isCore, true));
-    else if (recommendationQuery.category === "day_trip") recommendationConditions.push(and(eq(recommendationRecords.kind, "guide"), eq(recommendationRecords.guideType, "day_trip"))!);
-    else if (recommendationQuery.category === "guide") recommendationConditions.push(eq(recommendationRecords.kind, "guide"));
-    else if (recommendationQuery.category === "other") recommendationConditions.push(inArray(recommendationRecords.category, ["other", "hotel", "experience"]));
-    else if (recommendationQuery.category !== "all") recommendationConditions.push(eq(recommendationRecords.category, recommendationQuery.category));
-    if (recommendationQuery.query) recommendationConditions.push(like(recommendationRecords.title, `%${recommendationQuery.query}%`));
-  }
-  const recommendationWhere = and(...recommendationConditions);
-  const recommendationLimit = recommendationQuery.library ? libraryRecommendationPageSize : planningRecommendationLimit;
-  const recommendationOffset = recommendationQuery.library ? (recommendationQuery.page - 1) * libraryRecommendationPageSize : 0;
-  const recommendationOrder = recommendationQuery.sort === "recent"
-    ? [desc(recommendationRecords.createdAt), desc(recommendationRecords.id)] as const
-    : [desc(recommendationRecords.isCore), asc(recommendationRecords.createdAt), asc(recommendationRecords.id)] as const;
   const recommendationRowsPromise = needsRecommendations
-    ? paginatesRecommendations
-      ? db.select().from(recommendationRecords).where(recommendationWhere).orderBy(...recommendationOrder).limit(recommendationLimit).offset(recommendationOffset)
-      : db.select().from(recommendationRecords).where(recommendationWhere).orderBy(...recommendationOrder)
+    ? db.select().from(recommendationRecords).where(and(eq(recommendationRecords.tripId, stored.id), isNull(recommendationRecords.deletedAt)))
+      .orderBy(desc(recommendationRecords.isCore), asc(recommendationRecords.createdAt), asc(recommendationRecords.id))
     : Promise.resolve([]);
-  const recommendationCountPromise = paginatesRecommendations
-    ? db.select({ value: count() }).from(recommendationRecords).where(recommendationWhere)
-    : Promise.resolve([{ value: 0 }]);
   const days = stored.days.map((day, index) => ({ ...day, dayNumber: index + 1 }));
   const requestedDayId = days.some((day) => day.id === loaderOptions.activeDayId) ? loaderOptions.activeDayId! : days[0]?.id;
   const itemWhere = view === "planning" && requestedDayId
@@ -77,11 +39,9 @@ export async function getPlanWorkspace(slug: string, memberId?: string, loaderOp
     : eq(routePreferenceRecords.tripId, stored.id);
   const budgetPromise = view === "budget" && memberId ? getPersonalBudgetWorkspace(slug, memberId, loaderOptions.requestContext).catch(() => null) : Promise.resolve(null);
 
-  const [recommendations, recommendationCountRows, storedItems, recommendationItemRefs, bookings, bookingParticipants, presenceRows, presenceWindows, dayPresenceRows, participantOverrides, savedPlaceRows, routePreferences, legacyTripPlaces] = await Promise.all([
+  const [recommendations, storedItems, bookings, bookingParticipants, presenceRows, presenceWindows, dayPresenceRows, participantOverrides, savedPlaceRows, routePreferences, legacyTripPlaces] = await Promise.all([
     recommendationRowsPromise,
-    recommendationCountPromise,
     db.select({ item: itineraryItemRecords, place: placeRecords, recommendationTitle: recommendationRecords.title, knowledge: { id: knowledgeEntryRecords.id, title: knowledgeEntryRecords.title, summary: knowledgeEntryRecords.summary, deletedAt: knowledgeEntryRecords.deletedAt } }).from(itineraryItemRecords).leftJoin(placeRecords, eq(placeRecords.id, itineraryItemRecords.placeId)).leftJoin(recommendationRecords, eq(recommendationRecords.id, itineraryItemRecords.recommendationId)).leftJoin(knowledgeEntryRecords, eq(knowledgeEntryRecords.id, itineraryItemRecords.knowledgeEntryId)).where(itemWhere).orderBy(asc(itineraryItemRecords.dayId), asc(itineraryItemRecords.sortOrder), asc(itineraryItemRecords.id)),
-    view === "planning" ? db.select({ recommendationId: itineraryItemRecords.recommendationId, dayId: itineraryItemRecords.dayId, lockedAt: itineraryItemRecords.lockedAt }).from(itineraryItemRecords).where(eq(itineraryItemRecords.tripId, stored.id)) : Promise.resolve([]),
     db.select({ booking: bookingRecords, place: placeRecords }).from(bookingRecords).leftJoin(placeRecords, eq(placeRecords.id, bookingRecords.placeId)).where(and(eq(bookingRecords.tripId, stored.id), isNull(bookingRecords.deletedAt), ne(bookingRecords.status, "cancelled"))).orderBy(asc(bookingRecords.startAt), asc(bookingRecords.startDateLocal), asc(bookingRecords.id)),
     db.select().from(bookingParticipantRecords).innerJoin(bookingRecords, eq(bookingRecords.id, bookingParticipantRecords.bookingId)).where(and(eq(bookingRecords.tripId, stored.id), isNull(bookingRecords.deletedAt))),
     db.select().from(tripMemberRecords).where(eq(tripMemberRecords.tripId, stored.id)),
@@ -211,8 +171,7 @@ export async function getPlanWorkspace(slug: string, memberId?: string, loaderOp
   return {
     trip,
     days: days.map((day) => ({ ...day, items: items.filter(({ item }) => item.dayId === day.id).map(({ item, place, recommendationTitle, knowledge }) => ({ item, place, recommendationTitle, knowledge, participantStates: itemStates(item, day.date), participantOverrides: itemOverrides(item.id) })), timeline: [] })),
-    recommendations: recommendations.map((recommendation) => ({ ...recommendation, options: options.filter(({ option }) => option.recommendationId === recommendation.id), addedDays: (view === "planning" ? recommendationItemRefs : items.map(({ item }) => item)).filter((item) => item.recommendationId === recommendation.id).map((item) => item.dayId), locked: (view === "planning" ? recommendationItemRefs : items.map(({ item }) => item)).some((item) => item.recommendationId === recommendation.id && item.lockedAt != null) })),
-    recommendationPage: { total: Number(recommendationCountRows[0]?.value || 0), page: recommendationQuery.page, pageSize: recommendationLimit, library: recommendationQuery.library },
+    recommendations: recommendations.map((recommendation) => ({ ...recommendation, options: options.filter(({ option }) => option.recommendationId === recommendation.id), addedDays: items.map(({ item }) => item).filter((item) => item.recommendationId === recommendation.id).map((item) => item.dayId), locked: items.map(({ item }) => item).some((item) => item.recommendationId === recommendation.id && item.lockedAt != null) })),
     bookings: bookings.map(({ booking, place }) => ({ booking, place, originPlace: bookingPlace(booking.originPlaceId), destinationPlace: bookingPlace(booking.destinationPlaceId), memberStates: bookingMemberStates(booking.id) })),
     costLines,
     presenceUnknown: days.some((day) => memberIds.some((memberId) => dayPresenceState(day.id, day.date, memberId) === "unknown" || dayPresenceState(day.id, day.date, memberId) === "partial")),

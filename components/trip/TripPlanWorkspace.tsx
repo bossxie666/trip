@@ -1,11 +1,6 @@
 import dynamic from "next/dynamic";
 import { PlanningPanels } from "./PlanningPanels";
 import { WorkspaceNavLink } from "./WorkspaceNavLink";
-import { RecommendationAddControl } from "./RecommendationAddControl";
-import { RecommendationDetailControl } from "./RecommendationDetailControl";
-import { RecommendationCreateControl } from "./RecommendationCreateControl";
-import { RecommendationCover } from "./RecommendationCover";
-import { FieldLabel, RouteSketch, TapeAccent } from "./TravelJournalPrimitives";
 import { DayPresenceControl } from "./DayPresenceControl";
 import { ItineraryItemControl } from "./ItineraryItemControl";
 import { ItineraryOrderControls } from "./ItineraryOrderControls";
@@ -37,12 +32,8 @@ type View = "planning" | "map" | "budget";
 type MapMode = "day" | "library";
 type AreaFilter = "shanghai" | "hangzhou" | "tonglu";
 type CategoryFilter = "all" | "core" | "attraction" | "food" | "shopping" | "day_trip" | "other" | "cafe" | "guide";
-type LibrarySort = "core" | "recent";
 
-const categoryLabels: Record<string, string> = { attraction: "景点", food: "美食", shopping: "购物", cafe: "咖啡（旧）", hotel: "酒店", experience: "体验", other: "其他" };
 const Link = WorkspaceNavLink;
-const areaFilters: { key: AreaFilter; label: string }[] = [{ key: "shanghai", label: "上海" }, { key: "hangzhou", label: "杭州" }, { key: "tonglu", label: "桐庐" }];
-const categoryFilters: { key: CategoryFilter; label: string }[] = [{ key: "all", label: "全部" }, { key: "core", label: "核心" }, { key: "attraction", label: "景点" }, { key: "food", label: "美食" }, { key: "shopping", label: "购物" }, { key: "day_trip", label: "一日游" }, { key: "other", label: "其他" }];
 
 function money(value: number | null | undefined) { return value == null ? "—" : `¥${(value / 100).toFixed(2).replace(/\.00$/, "")}`; }
 function shortDate(date: string | null) { return date ? date.slice(5).replace("-", "/") : "日期未定"; }
@@ -59,16 +50,11 @@ function bookingTime(booking: Workspace["bookings"][number]["booking"]) {
   return `${shortDate(booking.startDateLocal)}–${shortDate(booking.endDateLocal)}`;
 }
 
-export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query, areaFilter, categoryFilter, libraryMode = false, librarySort = "core", libraryPage = 1, memberFilter = "all", costMode = "expected" }: { workspace: Workspace; activeDayId: string; view: View; mapMode: MapMode; query: string; areaFilter: AreaFilter; categoryFilter: CategoryFilter; libraryMode?: boolean; librarySort?: LibrarySort; libraryPage?: number; memberFilter?: string; costMode?: "expected" | "actual" }) {
-  const { trip, days, recommendations, bookings } = workspace;
+export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query, areaFilter, categoryFilter, memberFilter = "all", costMode = "expected" }: { workspace: Workspace; activeDayId: string; view: View; mapMode: MapMode; query: string; areaFilter: AreaFilter; categoryFilter: CategoryFilter; memberFilter?: string; costMode?: "expected" | "actual" }) {
+  const { trip, days, bookings } = workspace;
   const activeDay = days.find((day) => day.id === activeDayId) || days[0];
   const dayLabels = days.map((day) => ({ id: day.id, label: `${shortDate(day.date)} ${dayArea(day, bookings, trip.cities)}` }));
   const stageSummary = trip.stages?.length ? trip.stages.map((stage) => `${stage.city?.name || stage.title}${stage.members?.length || 0}人`).join(" · ") : `${trip.members?.length || trip.people}人参与`;
-
-  const recommendationPage = workspace.recommendationPage || { total: recommendations.length, page: libraryPage, pageSize: 12, library: libraryMode };
-  const totalLibraryPages = Math.max(1, Math.ceil(recommendationPage.total / recommendationPage.pageSize));
-  const currentLibraryPage = Math.min(Math.max(recommendationPage.page, 1), totalLibraryPages);
-  const displayedRecommendations = recommendations;
 
   const link = (nextView: View, dayId = activeDayId, mode = mapMode, nextMember = memberFilter, nextCost = costMode) => {
     const params = new URLSearchParams({ view: nextView, day: dayId, area: areaFilter, category: categoryFilter, member: nextMember });
@@ -77,69 +63,7 @@ export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query
     if (nextView === "budget") params.set("cost", nextCost);
     return `/trips/${trip.slug}/plan?${params}`;
   };
-  const libraryLink = (area = areaFilter, category = categoryFilter, full = false, page = 1) => {
-    const params = new URLSearchParams({ view: "planning", day: activeDayId, area, category, member: memberFilter });
-    if (query) params.set("q", query);
-    if (full) {
-      params.set("library", "all");
-      params.set("sort", librarySort);
-      if (page > 1) params.set("page", String(page));
-    }
-    return `/trips/${trip.slug}/plan?${params}`;
-  };
-  const librarySortLink = (sort: LibrarySort) => {
-    const params = new URLSearchParams({ view: "planning", day: activeDayId, area: areaFilter, category: categoryFilter, member: memberFilter, library: "all", sort });
-    if (query) params.set("q", query);
-    return `/trips/${trip.slug}/plan?${params}`;
-  };
-
   const existingPlaceChoices = [...new Map([...(workspace.savedPlaces || []).map(({ place, city }) => ({ id: place.id, name: place.name, address: place.address, district: place.district, cityName: city.name, source: "existing" as const })), ...(workspace.mapPlaces || []).map(({ place }) => ({ id: place.id, name: place.name, address: place.address, district: place.district, cityName: trip.cities.find((city) => city.id === place.cityId)?.name || null, source: "existing" as const }))].map((place) => [place.id, place])).values()];
-
-  const library = (
-    <>
-      <header className="panel-heading">
-        <div className="panel-heading-title"><div><span>LIBRARY</span><h2>{libraryMode ? "攻略资料库" : "攻略素材"}</h2></div><RecommendationCreateControl slug={trip.slug} cities={trip.cities.map((city) => ({ id: city.id, name: city.name }))} existingPlaces={existingPlaceChoices} /></div>
-        <form>
-          <input type="hidden" name="view" value="planning" />
-          <input type="hidden" name="day" value={activeDayId} />
-          <input type="hidden" name="area" value={areaFilter} />
-          <input type="hidden" name="category" value={categoryFilter} />
-          {libraryMode && <><input type="hidden" name="library" value="all" /><input type="hidden" name="sort" value={librarySort} /></>}
-          <input name="q" defaultValue={query} placeholder="搜索当前地域素材" aria-label="搜索攻略素材" />
-          <button>搜索</button>
-        </form>
-      </header>
-      <nav className="recommendation-area-filters" aria-label="素材地域">
-        {areaFilters.map(({ key, label }) => <Link className={areaFilter === key ? "active" : ""} href={libraryLink(key, categoryFilter, libraryMode)} key={key}>{label}</Link>)}
-      </nav>
-      <nav className="recommendation-filters" aria-label="素材分类">
-        {categoryFilters.map(({ key, label }) => <Link className={categoryFilter === key ? "active" : ""} href={libraryLink(areaFilter, key, libraryMode)} key={key}>{label}</Link>)}
-      </nav>
-      {libraryMode && <div className="library-sort-row"><span>{recommendationPage.total} 条素材</span><span>排序：<Link className={librarySort === "core" ? "active" : ""} href={librarySortLink("core")}>核心推荐</Link> · <Link className={librarySort === "recent" ? "active" : ""} href={librarySortLink("recent")}>最近添加</Link></span></div>}
-      <div className="recommendation-section-title"><b>{areaFilters.find(({ key }) => key === areaFilter)?.label} · {categoryFilters.find(({ key }) => key === categoryFilter)?.label || (categoryFilter === "guide" ? "攻略" : categoryFilter === "cafe" ? "咖啡" : "全部")}</b><span>{libraryMode ? (recommendationPage.total ? `${(currentLibraryPage - 1) * recommendationPage.pageSize + 1}-${Math.min(currentLibraryPage * recommendationPage.pageSize, recommendationPage.total)} / ${recommendationPage.total}` : "0 条") : `${recommendationPage.total} 条`}</span></div>
-      <div className="recommendation-grid">
-        {displayedRecommendations.map((recommendation, recommendationIndex) => {
-          const added = days.map((day) => ({ day, count: recommendation.addedDays.filter((dayId) => dayId === day.id).length })).filter(({ count }) => count > 0);
-          return <article className={`recommendation-card recommendation-card-${recommendation.kind}`} key={recommendation.id}>
-            <TapeAccent tone={recommendation.kind === "guide" ? "green" : "blue"} />
-            <RecommendationCover src={recommendation.coverImageUrl} eager={recommendationIndex < 2} label={recommendation.kind === "guide" ? "GUIDE" : recommendation.areaKey?.toUpperCase() || "PLACE"} kind={recommendation.kind} category={recommendation.category} />
-            <div className="recommendation-card-body">
-              <FieldLabel>{recommendation.kind === "guide" ? "ROUTE NOTE" : "PLACE FILE"} · {String(recommendationIndex + 1).padStart(2, "0")}</FieldLabel>
-              <div className="recommendation-tags"><span>{recommendation.isCore ? "核心" : "灵感"}</span><span>{recommendation.kind === "guide" ? (recommendation.guideType === "day_trip" ? "一日游" : "攻略") : categoryLabels[recommendation.category] || "其他"}</span>{recommendation.areaLabel && <span>{recommendation.areaLabel}</span>}</div>
-              <h3>{recommendation.title}</h3>
-              {recommendation.kind === "guide" && <RouteSketch count={Math.min(3, Math.max(2, recommendation.options.length))} />}
-              {(recommendation.estimatedDurationMinutes != null || recommendation.estimatedCostMinor != null) && <p>{recommendation.estimatedDurationMinutes != null ? `${recommendation.estimatedDurationMinutes} 分钟` : ""}{recommendation.estimatedCostMinor != null ? ` · ${money(recommendation.estimatedCostMinor)}` : ""}</p>}
-              <p className="recommendation-state">{added.length ? `已加入 ${added.map(({ day, count }) => `${shortDate(day.date)}${count > 1 ? ` ×${count}` : ""}`).join(" · ")}` : "尚未加入正式行程"}{recommendation.locked ? " · 已锁定" : ""}</p>
-              <div className="recommendation-card-actions"><RecommendationDetailControl slug={trip.slug} recommendationId={recommendation.id} /><Link className="recommendation-map-link" href={`/trips/${trip.slug}/plan?view=map&day=${activeDayId}&area=${areaFilter}&category=${categoryFilter}&member=${memberFilter}&mode=library&focusRecommendation=${recommendation.id}`}>地图查看</Link><RecommendationAddControl slug={trip.slug} recommendationId={recommendation.id} kind={recommendation.kind} options={recommendation.options.map(({ option, place }) => ({ id: option.id, placeId: place.id, name: place.name }))} placeId={recommendation.options[0]?.place?.id || null} days={dayLabels} defaultDayId={activeDayId} addedDayIds={recommendation.addedDays} /></div>
-            </div>
-          </article>;
-        })}
-      </div>
-      {!displayedRecommendations.length && <div className="plan-empty">当前筛选下还没有攻略素材。</div>}
-      {libraryMode && totalLibraryPages > 1 && <nav className="library-pagination" aria-label="攻略分页">{currentLibraryPage > 1 && <Link href={libraryLink(areaFilter, categoryFilter, true, currentLibraryPage - 1)}>上一页</Link>}{Array.from({ length: totalLibraryPages }, (_, index) => index + 1).map((page) => <Link href={libraryLink(areaFilter, categoryFilter, true, page)} aria-current={page === currentLibraryPage ? "page" : undefined} key={page}>{page}</Link>)}{currentLibraryPage < totalLibraryPages && <Link href={libraryLink(areaFilter, categoryFilter, true, currentLibraryPage + 1)}>下一页</Link>}</nav>}
-      {libraryMode ? <Link className="view-all-materials" href={libraryLink(areaFilter, categoryFilter)}>← 返回规划</Link> : <Link className="view-all-materials" href={libraryLink(areaFilter, categoryFilter, true)}>查看当前地域全部素材 →</Link>}
-    </>
-  );
 
   const existingTransport = workspace.bookings.filter(({ booking, memberStates }) => isTransportBooking(booking) && (!workspace.currentMemberId || memberStates?.[workspace.currentMemberId] !== "absent")).map(({ booking, originPlace, destinationPlace }) => ({ id: booking.id, title: booking.title, origin: originPlace ? { id: originPlace.id, name: originPlace.name, address: originPlace.address, district: originPlace.district, cityName: trip.cities.find((city) => city.id === originPlace.cityId)?.name, source: "existing" as const } : null, destination: destinationPlace ? { id: destinationPlace.id, name: destinationPlace.name, address: destinationPlace.address, district: destinationPlace.district, cityName: trip.cities.find((city) => city.id === destinationPlace.cityId)?.name, source: "existing" as const } : null, type: booking.type, totalAmountMinor: booking.totalAmountMinor }));
 
@@ -248,7 +172,6 @@ export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query
     memberFilter,
   };
 
-  if (libraryMode) return <main className="trip-plan-page recommendation-library-page trip-journal-workspace"><header className="trip-console library-console"><div className="console-title"><Link href={libraryLink(areaFilter, categoryFilter)}>← 返回规划</Link><span>TRIP LIBRARY</span><h1>{trip.title} · 攻略资料库</h1><p>浏览素材与攻略，选择目标 Day 后再加入正式行程。</p></div></header><section className="recommendation-library-full">{library}</section></main>;
 
   const hotelBookings = bookings.filter(({ booking }) => booking.type === "hotel");
   const accommodation = summarizeAccommodation(hotelBookings.map(({ booking }) => booking), workspace.costLines || []);
@@ -259,7 +182,7 @@ export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query
   const chapterIndex = chapterOrder.indexOf(view);
   return <TripBookShell view={view} previousHref={chapterIndex > 0 ? link(chapterOrder[chapterIndex - 1]) : undefined} nextHref={chapterIndex < chapterOrder.length - 1 ? link(chapterOrder[chapterIndex + 1]) : undefined}><main className="trip-plan-page trip-journal-workspace">
     <header className="trip-console">
-      <div className="console-title"><Link href="/trips">← 攻略中心</Link><span>TRIP CONSOLE</span><h1>{trip.title}</h1><p>{fullRange(trip.startDate, trip.endDate)} · {stageSummary}</p></div>
+      <div className="console-title"><Link href="/trips">← 我的旅行</Link><span>TRIP CONSOLE</span><h1>{trip.title}</h1><p>{fullRange(trip.startDate, trip.endDate)} · {stageSummary}</p></div>
       <div className="trip-console-side"><div className="booking-console"><span className="booking-console-label">住宿</span>{hotelBookings.length ? <><div className="accommodation-summary"><strong>{accommodation.count}项 · {accommodation.incomplete && accommodation.amounts.length ? `已记录 ${accommodationAmount}` : accommodationAmount}</strong>{accommodation.tentativeCount ? <small>其中 {accommodation.confirmedCount} 项已确认，{accommodation.tentativeCount} 项计划中</small> : <small>{accommodation.confirmedCount} 项已确认</small>}</div><AccommodationListControl>{hotelBookings.map((record) => <article key={record.booking.id}><b className="booking-summary-title"><TransportIcon kind="hotel" size={15} />{record.booking.title.replace("附近", "")}</b><span>{bookingStatus(record.booking.status, record.booking.type)} · {bookingTime(record.booking)}</span><BookingEditControl slug={trip.slug} booking={record} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} existingPlaces={existingPlaceChoices} /></article>)}</AccommodationListControl></> : <p className="booking-console-empty">还没有添加住宿</p>}<BookingCreateControl slug={trip.slug} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} existingPlaces={existingPlaceChoices} /></div></div>
     </header>
     <DayNavigation items={days.map((day) => ({ id: day.id, href: link(view, day.id), dateLabel: shortDate(day.date), areaLabel: dayArea(day, bookings, trip.cities), active: day.id === activeDayId }))} />

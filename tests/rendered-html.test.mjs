@@ -473,6 +473,39 @@ test("keeps all Stage A routes available", async () => {
   assert.equal(cities.status, 200); assert.equal(city.status, 200); assert.equal(map.status, 200);
 });
 
+test("city pages use actual authorized destinations, trips and linked albums", async () => {
+  const savedSession = sessionCookie;
+  let trip, albumId;
+  try {
+    await loginAs("nini");
+    trip = await createTrip({ title: "城市页面权限验证", status: "planning", cities: ["大阪"], startDate: "2033-04-01", endDate: "2033-04-02", memberIds: ["member-nini"] });
+    const city = DB.database.prepare("SELECT c.slug FROM cities c JOIN trip_cities tc ON tc.city_id=c.id WHERE tc.trip_id=?").get(trip.id);
+    const created = await render("/api/albums", { method: "POST", body: { title: "大阪关联相册验证", tripId: trip.id } });
+    assert.equal(created.status, 201);
+    albumId = (await created.json()).album.id;
+    const index = await render("/cities");
+    assert.equal(index.status, 200);
+    const indexHtml = await index.text();
+    assert.match(indexHtml, new RegExp(`/cities/${city.slug}`));
+    assert.match(indexHtml, /网站主导航/);
+    const detail = await render(`/cities/${city.slug}`);
+    assert.equal(detail.status, 200);
+    const html = await detail.text();
+    assert.match(html, /城市页面权限验证/);
+    assert.match(html, /大阪关联相册验证/);
+    assert.match(html, new RegExp(`/albums/${albumId}`));
+    assert.doesNotMatch(html, /架构已预留|后续阶段加入|archive-placeholder/);
+    await loginAs("kiki");
+    assert.equal((await render(`/cities/${city.slug}`)).status, 404);
+    assert.doesNotMatch(await (await render("/cities")).text(), new RegExp(`/cities/${city.slug}`));
+    assert.doesNotMatch(await (await render(`/cities/${city.slug}`)).text(), /大阪关联相册验证|城市页面权限验证/);
+  } finally {
+    await loginAs("nini");
+    if (trip) await render(`/api/trips/${trip.slug}`, { method: "DELETE" });
+    sessionCookie = savedSession;
+  }
+});
+
 test("keeps desktop home sections while hiding only those sections on mobile", async () => {
   const html = await (await render("/")).text();
   const css = readFileSync(new URL("../app/home-journal.css", import.meta.url), "utf8");
@@ -830,6 +863,30 @@ test("renders the E1 planning workspace from Booking, Recommendation and Itinera
   for (const label of ["灵隐寺", "财神庙", "西湖"]) assert.match(day3Html, new RegExp(label));
   assert.match(await (await render(`/trips/shanghai-hangzhou-2026/plan?view=planning&day=${day4}`)).text(), /桐庐一日攻略 \/ 桐庐往返/);
   assert.match(await (await render(`/trips/shanghai-hangzhou-2026/plan?view=planning&day=${day5}`)).text(), /杭州东酒店/);
+});
+
+test("planning skips the retired material library reads while map candidates remain available", async (context) => {
+  const queries = [], prepare = DB.prepare;
+  const spy = context.mock.method(DB, "prepare", function (sql) { queries.push(sql); return prepare.call(this, sql); });
+  try {
+    const response = await render("/trips/shanghai-hangzhou-2026/plan?view=planning&day=trip-shanghai-hangzhou-2026-day-1&member=all");
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /上海迪士尼/);
+    assert.match(html, /从知识库添加/);
+    assert.ok(!queries.some(sql => /from "recommendations"/i.test(sql)), "planning must not read a retired recommendations list or count");
+    assert.ok(!queries.some(sql => /from "recommendation_place_options"/i.test(sql)), "planning must not preload legacy library options");
+    queries.length = 0;
+    const map = await render("/trips/shanghai-hangzhou-2026/plan?view=map&mode=library");
+    assert.equal(map.status, 200);
+    assert.match(await map.text(), /攻略地图/);
+    assert.ok(queries.some(sql => /from "recommendations"/i.test(sql)), "map still needs candidate metadata");
+    const legacy = await render("/trips/shanghai-hangzhou-2026/plan?library=all&q=外滩");
+    assert.equal(legacy.status, 307);
+    const target = new URL(legacy.headers.get("location"), "http://localhost");
+    assert.equal(target.pathname, "/knowledge");
+    assert.equal(target.searchParams.get("q"), "外滩");
+  } finally { spy.mock.restore(); }
 });
 
 test("renders a long-distance Booking as an edge between endpoint nodes", async () => {

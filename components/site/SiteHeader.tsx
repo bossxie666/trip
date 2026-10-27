@@ -29,7 +29,7 @@ export function SiteMobileNav({ active = "", home = false }: SiteNavProps) {
     </nav>;
 }
 
-export function SiteHeader({ currentMember, active = "", renderMobileNav = true }: { currentMember: SessionMemberSummary; active?: SiteNavProps["active"]; renderMobileNav?: boolean }) {
+export function SiteHeader({ currentMember, active = "", renderMobileNav = true }: { currentMember: SessionMemberSummary | null; active?: SiteNavProps["active"]; renderMobileNav?: boolean }) {
   return <>
     <header className="site-header">
       <div className="site-mobile-tools" aria-label="导航工具"><KnowledgeDrawer /></div>
