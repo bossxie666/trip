@@ -65,13 +65,13 @@ test("album editors guard unsaved input, retry failures and require a separate d
     await expect(editor).toHaveCSS("background-image", "none");
     await editor.getByLabel("标题", { exact: true }).fill(`${title}-已保存`);
     await editor.getByRole("combobox", { name: "关联旅行", exact: true }).selectOption("trip-e2e");
-    await editor.getByLabel("简介", { exact: true }).fill("合成相册资料。");
+    await editor.getByRole("textbox", { name: "简介", exact: true }).fill("合成相册资料。");
     await editor.getByRole("button", { name: "保存", exact: true }).click();
     await expect(editor).toHaveCount(0);
     await page.getByRole("button", { name: `编辑相册：${title}-已保存`, exact: true }).click();
     await expect(editor.getByLabel("标题", { exact: true })).toHaveValue(`${title}-已保存`);
     await expect(editor.getByRole("combobox", { name: "关联旅行", exact: true })).toHaveValue("trip-e2e");
-    await expect(editor.getByLabel("简介", { exact: true })).toHaveValue("合成相册资料。");
+    await expect(editor.getByRole("textbox", { name: "简介", exact: true })).toHaveValue("合成相册资料。");
   } finally {
     releaseFailure?.();
     if (albumId) await fixtureRequest(page, "DELETE", `/api/albums/${albumId}`);
