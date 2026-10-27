@@ -69,9 +69,12 @@ test("shared knowledge can be created, added to a day and read with the latest t
     const added = page.waitForResponse(response => response.url().endsWith("/knowledge-items") && response.request().method() === "POST");
     await row.getByRole("button", { name: "添加", exact: true }).click();
     const addResponse = await added;
-    expect(addResponse.status()).toBe(201);
-    itemIds = (await addResponse.json()).items.map((item: { id: string }) => item.id);
+    expect(addResponse.status()).toBe(200);
+    expect(await addResponse.json()).toMatchObject({ ok: true, count: 1 });
     await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
+    const itemId = await page.locator("article.timeline-node").filter({ has: page.getByRole("heading", { name: title, exact: true }) }).getAttribute("data-timeline-node-id");
+    expect(itemId).toBeTruthy();
+    itemIds = [itemId!];
     const updatedTitle = `${title}-更新`;
     const updated = await fixtureRequest(page, "PATCH", `/api/knowledge/${entryId}`, { section: "travel_guide", title: updatedTitle, body: "更新后的合成正文。" });
     expect(updated.status()).toBe(200);
