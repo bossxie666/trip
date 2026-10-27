@@ -5,6 +5,79 @@ import { enterTestSession, fixtureRequest } from "./session";
 
 test.beforeEach(async ({ page }) => enterTestSession(page));
 
+test("album editors guard unsaved input, retry failures and require a separate delete confirmation", async ({ page }) => {
+  const title = `相册-${randomUUID()}`;
+  let albumId: string | undefined, creations = 0;
+  let releaseFailure: (() => void) | undefined;
+  await page.route("**/api/albums", async route => {
+    if (route.request().method() !== "POST") return route.continue();
+    creations += 1;
+    if (creations === 1) {
+      await new Promise<void>(resolve => { releaseFailure = resolve; });
+      return route.fulfill({ status: 503, json: { message: "测试创建失败，请重试。" } });
+    }
+    return route.continue();
+  });
+  try {
+    await page.goto("/albums");
+    await page.getByRole("button", { name: "添加相册", exact: true }).click();
+    const create = page.getByRole("dialog", { name: "添加相册", exact: true });
+    await create.getByLabel("相册标题", { exact: true }).fill(title);
+    await create.getByRole("button", { name: "取消", exact: true }).click();
+    const discard = page.getByRole("dialog", { name: "放弃未保存修改", exact: true });
+    await expect(discard.getByRole("button", { name: "继续编辑", exact: true })).toBeFocused();
+    await discard.getByRole("button", { name: "继续编辑", exact: true }).click();
+    await expect(create.getByLabel("相册标题", { exact: true })).toHaveValue(title);
+    await create.getByRole("button", { name: "创建相册", exact: true }).click();
+    await expect(create.getByRole("button", { name: "保存中…", exact: true })).toBeDisabled();
+    await expect.poll(() => creations).toBe(1);
+    await page.keyboard.press("Enter");
+    expect(creations).toBe(1);
+    releaseFailure!();
+    await expect(create.getByRole("alert")).toHaveText("测试创建失败，请重试。");
+    await expect(create.getByLabel("相册标题", { exact: true })).toHaveValue(title);
+    const created = page.waitForResponse(response => new URL(response.url()).pathname === "/api/albums" && response.request().method() === "POST");
+    await create.getByRole("button", { name: "创建相册", exact: true }).click();
+    const response = await created;
+    expect(response.status()).toBe(201);
+    albumId = (await response.json()).album.id;
+    await expect(page).toHaveURL(new RegExp(`/albums/${albumId}$`));
+    expect(creations).toBe(2);
+
+    await page.goto("/albums");
+    await page.getByRole("button", { name: `编辑相册：${title}`, exact: true }).click();
+    const editor = page.getByRole("dialog", { name: "编辑相册", exact: true });
+    await editor.getByLabel("标题", { exact: true }).fill(`${title}-未保存`);
+    await editor.getByRole("button", { name: "删除相册", exact: true }).click();
+    const deletion = page.getByRole("dialog", { name: "删除相册", exact: true });
+    await expect(deletion).toContainText("0 张照片");
+    await expect(deletion.getByRole("button", { name: "确认删除", exact: true })).toBeVisible();
+    await deletion.getByRole("button", { name: "取消", exact: true }).click();
+    await expect(editor.getByLabel("标题", { exact: true })).toHaveValue(`${title}-未保存`);
+    await editor.getByRole("button", { name: "取消", exact: true }).click();
+    await discard.getByRole("button", { name: "放弃修改", exact: true }).click();
+    await expect(page.getByRole("button", { name: `编辑相册：${title}`, exact: true })).toBeFocused();
+    await page.getByRole("button", { name: `编辑相册：${title}`, exact: true }).click();
+    await expect(editor.getByLabel("标题", { exact: true })).toHaveValue(title);
+    const box = await editor.boundingBox(), viewport = page.viewportSize()!;
+    expect(Math.abs(box!.x + box!.width / 2 - viewport.width / 2)).toBeLessThan(2);
+    expect(Math.abs(box!.y + box!.height / 2 - viewport.height / 2)).toBeLessThan(2);
+    await expect(editor).toHaveCSS("background-image", "none");
+    await editor.getByLabel("标题", { exact: true }).fill(`${title}-已保存`);
+    await editor.getByRole("combobox", { name: "关联旅行", exact: true }).selectOption("trip-e2e");
+    await editor.getByLabel("简介", { exact: true }).fill("合成相册资料。");
+    await editor.getByRole("button", { name: "保存", exact: true }).click();
+    await expect(editor).toHaveCount(0);
+    await page.getByRole("button", { name: `编辑相册：${title}-已保存`, exact: true }).click();
+    await expect(editor.getByLabel("标题", { exact: true })).toHaveValue(`${title}-已保存`);
+    await expect(editor.getByRole("combobox", { name: "关联旅行", exact: true })).toHaveValue("trip-e2e");
+    await expect(editor.getByLabel("简介", { exact: true })).toHaveValue("合成相册资料。");
+  } finally {
+    releaseFailure?.();
+    if (albumId) await fixtureRequest(page, "DELETE", `/api/albums/${albumId}`);
+  }
+});
+
 test("item editing keeps unsaved input, discards explicitly and saves the selected day", async ({ page }) => {
   const title = `事项-${randomUUID()}`;
   const created = await fixtureRequest(page, "POST", "/api/trips/e2e-shanghai/plan/items", { title, dayId: "trip-e2e-day-1", itemType: "note", timeMode: "all_day" });
