@@ -5,6 +5,100 @@ import { enterTestSession, fixtureRequest } from "./session";
 
 test.beforeEach(async ({ page }) => enterTestSession(page));
 
+test("knowledge editor guards changes and recovers from save and delete failures", async ({ page }) => {
+  const title = `知识弹窗-${randomUUID()}`;
+  let entryId: string | undefined, saves = 0;
+  await page.route("**/api/knowledge", route => {
+    if (route.request().method() === "POST" && ++saves === 1) return route.fulfill({ status: 503, json: { message: "测试保存失败，输入已保留。" } });
+    return route.continue();
+  });
+  try {
+    await page.goto(`/knowledge?q=${encodeURIComponent(title)}`);
+    await page.getByRole("button", { name: "添加知识", exact: true }).first().click();
+    const editor = page.getByRole("dialog", { name: "添加知识", exact: true });
+    await editor.getByRole("textbox", { name: "标题", exact: true }).fill(title);
+    await editor.getByRole("textbox", { name: "正文", exact: true }).fill("合成正文");
+    await editor.getByRole("button", { name: "取消", exact: true }).click();
+    await page.getByRole("dialog", { name: "放弃未保存修改", exact: true }).getByRole("button", { name: "继续编辑", exact: true }).click();
+    await editor.getByRole("button", { name: "保存", exact: true }).click();
+    await expect(editor.getByRole("alert")).toHaveText("测试保存失败，输入已保留。");
+    await expect(editor.getByRole("textbox", { name: "正文", exact: true })).toHaveValue("合成正文");
+    const created = page.waitForResponse(r => new URL(r.url()).pathname === "/api/knowledge" && r.request().method() === "POST");
+    await editor.getByRole("button", { name: "保存", exact: true }).click();
+    const response = await created; expect(response.status()).toBe(201); entryId = (await response.json()).entry.id;
+    await expect(editor).toHaveCount(0);
+    const card = page.locator("article.knowledge-card").filter({ hasText: title });
+    await card.getByRole("button", { name: "编辑知识", exact: true }).click();
+    const edit = page.getByRole("dialog", { name: "编辑知识", exact: true });
+    await edit.getByRole("textbox", { name: "标题", exact: true }).fill(`${title}-未保存`);
+    await edit.getByRole("button", { name: "取消", exact: true }).click();
+    await page.getByRole("dialog", { name: "放弃未保存修改", exact: true }).getByRole("button", { name: "放弃修改", exact: true }).click();
+    await expect(card.getByRole("heading", { name: title, exact: true })).toBeVisible();
+    await card.getByRole("button", { name: "删除", exact: true }).click();
+    const deletion = page.getByRole("dialog", { name: "删除知识", exact: true });
+    await expect(deletion).toHaveCSS("background-image", "none");
+    await deletion.getByRole("button", { name: "取消", exact: true }).click();
+    await expect(card).toBeVisible();
+    await page.route(`**/api/knowledge/${entryId}`, route => route.request().method() === "DELETE" ? route.fulfill({ status: 503, json: { message: "测试删除失败" } }) : route.continue());
+    await card.getByRole("button", { name: "删除", exact: true }).click();
+    await deletion.getByRole("button", { name: "确认删除", exact: true }).click();
+    await expect(deletion.getByRole("alert")).toHaveText("测试删除失败");
+    await deletion.getByRole("button", { name: "取消", exact: true }).click();
+    await expect(card).toBeVisible();
+  } finally { if (entryId) await fixtureRequest(page, "DELETE", `/api/knowledge/${entryId}`); }
+});
+
+test("accommodation dialogs preserve edits and recover from failed creation", async ({ page }) => {
+  const tripResponse = await fixtureRequest(page, "POST", "/api/trips", { title: `住宿弹窗-${randomUUID()}`, status: "planning", cities: [], startDate: "2027-03-01", endDate: "2027-03-03", memberIds: ["member-nini"], people: 1 });
+  expect(tripResponse.status()).toBe(201);
+  const { trip } = await tripResponse.json();
+  const root = `/api/trips/${trip.slug}`;
+  let creations = 0;
+  try {
+    expect((await fixtureRequest(page, "POST", `${root}/saved-places`, { placeId: "place-the-bund" })).status()).toBe(201);
+    await page.route(`**${root}/bookings`, route => {
+      if (route.request().method() === "POST" && ++creations === 1) return route.fulfill({ status: 503, json: { error: "测试住宿保存失败" } });
+      return route.continue();
+    });
+    await page.goto(`/trips/${trip.slug}/plan?view=planning&member=all`);
+    await page.getByRole("button", { name: "＋ 添加住宿", exact: true }).click();
+    const editor = page.getByRole("dialog", { name: "添加住宿", exact: true });
+    await editor.getByRole("searchbox", { name: "搜索真实地点", exact: true }).click();
+    await editor.getByRole("radio", { name: "选择 外滩", exact: true }).click();
+    await expect(editor.getByRole("status")).toHaveText("已选择：外滩");
+    await editor.getByLabel("入住日期", { exact: true }).fill("2027-03-01");
+    await editor.getByLabel("退房日期", { exact: true }).fill("2027-03-03");
+    await editor.getByRole("textbox", { name: "总价（元，可选）", exact: true }).fill("125.50");
+    await editor.getByRole("textbox", { name: "备注（可选）", exact: true }).fill("合成住宿备注");
+    await editor.getByRole("button", { name: "取消", exact: true }).click();
+    await page.getByRole("dialog", { name: "放弃未保存修改", exact: true }).getByRole("button", { name: "继续编辑", exact: true }).click();
+    await editor.getByRole("button", { name: "保存住宿", exact: true }).click();
+    await expect(editor.getByRole("alert")).toHaveText("测试住宿保存失败");
+    await expect(editor.getByRole("textbox", { name: "备注（可选）", exact: true })).toHaveValue("合成住宿备注");
+    const saved = page.waitForResponse(r => new URL(r.url()).pathname === `${root}/bookings` && r.request().method() === "POST");
+    await editor.getByRole("button", { name: "保存住宿", exact: true }).click();
+    const response = await saved; expect(response.status()).toBe(201);
+    await expect(editor).toHaveCount(0);
+    await page.getByRole("button", { name: "查看 / 编辑住宿", exact: true }).click();
+    await page.getByRole("dialog", { name: "住宿", exact: true }).getByRole("button", { name: "编辑住宿", exact: true }).click();
+    const edit = page.getByRole("dialog", { name: "编辑住宿", exact: true });
+    await expect(edit.getByRole("textbox", { name: "显示名称", exact: true })).toHaveCount(0);
+    await expect(edit.locator("input[type=time]")).toHaveCount(0);
+    await expect(edit.getByLabel("入住日期", { exact: true })).toHaveValue("2027-03-01");
+    await edit.getByRole("textbox", { name: "备注（可选）", exact: true }).fill("修改住宿备注");
+    await edit.getByRole("button", { name: "删除住宿", exact: true }).click();
+    await page.getByRole("dialog", { name: "删除住宿", exact: true }).getByRole("button", { name: "取消", exact: true }).click();
+    await expect(edit.getByRole("textbox", { name: "备注（可选）", exact: true })).toHaveValue("修改住宿备注");
+    await edit.getByRole("button", { name: "保存住宿", exact: true }).click();
+    await expect(edit).toHaveCount(0);
+    await page.getByRole("dialog", { name: "住宿", exact: true }).getByRole("button", { name: "编辑住宿", exact: true }).click();
+    await expect(edit.getByRole("textbox", { name: "备注（可选）", exact: true })).toHaveValue("修改住宿备注");
+    const box = await edit.boundingBox(), viewport = page.viewportSize()!;
+    expect(Math.abs(box!.x + box!.width / 2 - viewport.width / 2)).toBeLessThan(2);
+    expect(Math.abs(box!.y + box!.height / 2 - viewport.height / 2)).toBeLessThan(2);
+  } finally { await fixtureRequest(page, "DELETE", root); }
+});
+
 test("trip book editing preserves dates and members across conflict, cancellation and retry", async ({ page }) => {
   const title = `旅行资料-${randomUUID()}`;
   const response = await fixtureRequest(page, "POST", "/api/trips", {

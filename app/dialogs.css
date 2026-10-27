@@ -278,3 +278,7 @@
 .member-identity-notice{margin:0;color:#23704a;font-size:13px}
 .unlock-form .unlock-forgot{border:0;background:transparent;color:#315d83;text-decoration:underline;text-underline-offset:3px}
 .unlock-recovery{margin:0;padding:12px;border-radius:10px;background:#f4efe5;color:#405368;font-size:13px;line-height:1.6}
+.workspace-editor-dialog .accommodation-date-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.workspace-editor-fields .plan-add-two-columns>label{display:grid;min-width:0;gap:7px;font-size:13px;line-height:1.5}
+.generic-place-current{display:block;margin-top:6px;color:var(--ink);font-size:12px;font-weight:500;overflow-wrap:anywhere}
+@media(max-width:680px){.workspace-editor-dialog .accommodation-date-fields{grid-template-columns:minmax(0,1fr)}}

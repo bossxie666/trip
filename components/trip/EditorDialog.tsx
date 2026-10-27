@@ -4,9 +4,9 @@ import { useEffect, useRef, useState, type ReactNode, type FormEvent } from "rea
 import { X } from "lucide-react";
 import { WorkspaceOverlay } from "./WorkspaceOverlay";
 
-export function EditorDialog({ open, title, onClose, dirty = false, busy = false, onSubmit, submitLabel = "保存", children, actions }: {
+export function EditorDialog({ open, title, onClose, dirty = false, busy = false, onSubmit, submitLabel = "保存", children, actions, className = "" }: {
   open: boolean; title: string; onClose: () => void; dirty?: boolean; busy?: boolean;
-  onSubmit?: () => void | Promise<void>; submitLabel?: string; children: ReactNode; actions?: ReactNode;
+  onSubmit?: () => void | Promise<void>; submitLabel?: string; children: ReactNode; actions?: ReactNode; className?: string;
 }) {
   const submitted = useRef(false);
   const [discard, setDiscard] = useState(false);
@@ -28,7 +28,7 @@ export function EditorDialog({ open, title, onClose, dirty = false, busy = false
     submitted.current = true;
     try { await onSubmit(); } finally { submitted.current = false; }
   }
-  return <WorkspaceOverlay open={open} onClose={close} ariaLabel={discard ? "放弃未保存修改" : title} className="workspace-editor-dialog">
+  return <WorkspaceOverlay open={open} onClose={close} ariaLabel={discard ? "放弃未保存修改" : title} className={`workspace-editor-dialog ${className}`.trim()}>
     <header className="editor-dialog-heading"><h2>{discard ? "放弃未保存修改？" : title}</h2><button ref={closeButton} type="button" className="workspace-close" disabled={busy} aria-label={discard ? "返回编辑" : `关闭${title}`} onClick={close}><X size={20} /></button></header>
     {discard ? <><p className="editor-discard-message">本次修改尚未保存。</p><footer className="workspace-editor-actions"><button ref={keepButton} type="button" onClick={keepEditing}>继续编辑</button><button type="button" className="danger" onClick={() => { setDiscard(false); onClose(); }}>放弃修改</button></footer></> : <>
     <form className="workspace-editor-form" onSubmit={submit}>

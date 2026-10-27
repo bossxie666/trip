@@ -6,9 +6,10 @@ import dynamic from "next/dynamic";
 import type { GenericPlaceChoice } from "./GenericPlacePicker";
 import { requestTripModalOpen, useExclusiveTripModal } from "./modal-events";
 import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
+import { EditorDialog } from "./EditorDialog";
+import { editorRequest } from "./editor-request";
 
 const GenericPlacePicker = dynamic(() => import("./GenericPlacePicker").then((module) => module.GenericPlacePicker), { ssr: false });
-const WorkspaceOverlay = dynamic(() => import("./WorkspaceOverlay").then((module) => module.WorkspaceOverlay), { ssr: false });
 
 type MemberOption = { id: string; displayName: string };
 
@@ -27,6 +28,12 @@ export function BookingCreateControl({ slug, members, existingPlaces = [] }: { s
   const [error, setError] = useState("");
   const modalOwner = `accommodation-create:${slug}`;
   useExclusiveTripModal(modalOwner, () => setOpen(false));
+  const dirty = status !== "tentative" || !!place || !!startDate || !!endDate || !!amount || !!notes
+    || memberIds.length !== members.length || members.some(member => !memberIds.includes(member.id));
+  function start() {
+    setStatus("tentative"); setPlace(null); setStartDate(""); setEndDate(""); setAmount(""); setNotes("");
+    setMemberIds(members.map(member => member.id)); setError(""); requestTripModalOpen(modalOwner); setOpen(true);
+  }
 
   const payloadPlace = (value: GenericPlaceChoice) => value.source === "existing"
     ? { placeId: value.id }
@@ -36,7 +43,9 @@ export function BookingCreateControl({ slug, members, existingPlaces = [] }: { s
     setSaving(true); setError("");
     try {
       if (!place || !startDate || !endDate) throw new Error("请选择真实住宿地点和入离店日期。");
-      const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/bookings`, {
+      const amountMinor = amount.trim() ? Math.round(Number(amount) * 100) : null;
+      if (amountMinor !== null && (!Number.isSafeInteger(amountMinor) || amountMinor < 0)) throw new Error("请输入有效金额。");
+      await editorRequest(`/api/trips/${encodeURIComponent(slug)}/bookings`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -48,13 +57,11 @@ export function BookingCreateControl({ slug, members, existingPlaces = [] }: { s
           startAt: null,
           endAt: null,
           place: payloadPlace(place),
-          totalAmountMinor: amount.trim() ? Math.round(Number(amount) * 100) : null,
+          totalAmountMinor: amountMinor,
           participantMemberIds: memberIds,
           notes: notes.trim() || null,
         }),
       });
-      const result = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(result.error || "保存失败。");
       setOpen(false);
       refreshWorkspace();
     } catch (caught) {
@@ -63,9 +70,8 @@ export function BookingCreateControl({ slug, members, existingPlaces = [] }: { s
   }
 
   return <>
-    <button type="button" className="booking-add-button button-primary" onClick={() => { requestTripModalOpen(modalOwner); setOpen(true); }}>＋ 添加住宿</button>
-    {open && <WorkspaceOverlay open={open} onClose={() => setOpen(false)} mode="modal" ariaLabel="添加住宿" className="plan-add-sheet accommodation-create-dialog">
-      <header><div><span>ACCOMMODATION</span><h3>添加住宿</h3><p>先记录计划，预订状态之后也可以修改。</p></div><button type="button" className="workspace-close" aria-label="关闭" onClick={() => setOpen(false)}>×</button></header>
+    <button type="button" className="booking-add-button button-primary" onClick={start}>＋ 添加住宿</button>
+    {open && <EditorDialog open title="添加住宿" className="accommodation-create-dialog" dirty={dirty} busy={saving} onClose={() => setOpen(false)} onSubmit={save} submitLabel="保存住宿">
       <label>住哪里？<GenericPlacePicker slug={slug} existing={existingPlaces} value={place} onChange={setPlace} autoFocus /></label>
       <div className="plan-add-two-columns accommodation-date-fields"><label>入住日期<input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label>退房日期<input type="date" min={startDate} value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label></div>
       <label>状态<select value={status} onChange={(event) => setStatus(event.target.value as typeof status)}><option value="tentative">计划中 / 未预订</option><option value="confirmed">已预订</option></select></label>
@@ -73,7 +79,6 @@ export function BookingCreateControl({ slug, members, existingPlaces = [] }: { s
       <fieldset className="plan-add-participants"><legend>入住成员</legend><div className="participant-checkboxes">{members.map((member) => <label key={member.id}><input type="checkbox" checked={memberIds.includes(member.id)} onChange={() => setMemberIds((current) => current.includes(member.id) ? current.filter((id) => id !== member.id) : [...current, member.id])}/><span>{member.displayName}</span></label>)}</div></fieldset>
       <label>备注（可选）<textarea value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
       {error && <p className="form-error" role="alert">{error}</p>}
-      <footer className="workspace-footer"><button type="button" className="button-secondary" disabled={saving} onClick={() => setOpen(false)}>取消</button><button type="button" className="plan-add-submit button-primary" disabled={saving} onClick={save}>{saving ? "保存中…" : "保存住宿"}</button></footer>
-    </WorkspaceOverlay>}
+    </EditorDialog>}
   </>;
 }

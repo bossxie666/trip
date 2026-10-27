@@ -384,17 +384,17 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   assert.doesNotMatch(transport, /公共交通/);
   assert.match(presence, /modalOwner = `presence:\$\{slug\}:\$\{dayId\}`/);
   assert.match(placeDiscovery, /modalOwner = `place-discovery:\$\{slug\}`/);
-  assert.match(bookingEdit, /modalName = `booking-editor:\$\{booking\.id\}`/);
-  assert.match(accommodation, /WorkspaceOverlay/);
-  assert.match(accommodation, /mode="modal"/);
+  assert.match(bookingEdit, /modalName = `booking-editor:\$\{props\.booking\.booking\.id\}`/);
+  assert.match(accommodation, /EditorDialog/);
+  assert.match(accommodation, /dirty=\{dirty\} busy=\{saving\}/);
   assert.match(transport, /WorkspaceOverlay/);
   assert.match(presence, /WorkspaceOverlay/);
   assert.match(placeDiscovery, /WorkspaceOverlay/);
-  assert.match(bookingEdit, /WorkspaceOverlay/);
-  assert.match(bookingEdit, /mode="modal"/);
-  assert.match(bookingEdit, /booking-danger-zone/);
-  assert.match(bookingEdit, /workspace-close/);
-  assert.match(bookingEdit, /booking-edit-cancel/);
+  assert.match(bookingEdit, /EditorDialog/);
+  assert.match(bookingEdit, /busy=\{saving\}/);
+  assert.match(bookingEdit, /确认删除/);
+  assert.match(bookingEdit, /dirty=\{!deleting && snapshot !== initial\}/);
+  assert.match(bookingEdit, /返回编辑/);
   assert.doesNotMatch(bookingEdit, /<details className="booking-edit-control"/);
   assert.match(budget, /allocationMode: "custom"/);
   assert.match(budget, /自定义金额/);
@@ -1018,11 +1018,11 @@ test("keeps accommodation Bookings out of Day Plan until a Hotel Item is explici
 
 test("renders accommodation editor as an independent modal without an inline details block", () => {
   const source = readFileSync(new URL("../components/trip/BookingEditControl.tsx", import.meta.url), "utf8");
-  assert.match(source, /<WorkspaceOverlay[\s\S]*mode="modal"/);
+  assert.match(source, /<EditorDialog[\s\S]*busy=\{saving\}/);
   assert.match(source, /className=\{`booking-edit-dialog\$\{booking\.type === "hotel" \? " accommodation-edit-dialog" : ""\}`\}/);
-  assert.match(source, /ariaLabelledBy=\{headingId\}/);
-  assert.match(source, /booking-edit-cancel/);
-  assert.match(source, /booking-danger-zone/);
+  assert.match(source, /dirty=\{!deleting && snapshot !== initial\}/);
+  assert.match(source, /返回编辑/);
+  assert.match(source, /确认删除/);
   assert.doesNotMatch(source, /<details className="booking-edit-control"/);
   const dialogCss = readFileSync(new URL("../app/dialogs.css", import.meta.url), "utf8");
   assert.match(dialogCss, /\.workspace-surface\.workspace-modal\.accommodation-edit-dialog \{[\s\S]*?width: min\(480px/);
