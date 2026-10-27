@@ -88,3 +88,9 @@
 - 2026-10-27 GitHub 3c73a51 的verify已真实通过（lint、typecheck、构建和107项测试），browser已运行但6项失败、7项通过、1项不适用跳过。读取repair/github-browser-3c73a51.log及同名zip中的页面快照后确认：测试用APIRequestContext未在HTTP loopback发送Secure cookie，造成合成夹具请求401；知识弹窗已打开，但getByLabel对含option的select做exact匹配失败。现仅在本地测试夹具API显式传入已签发合成会话，限定相对/api路径；真实浏览器请求和生产Secure Cookie不变。select改用可访问combobox名称匹配；确认框关闭按钮区分“返回编辑”与“继续编辑”。
 - 用户关闭卡住的测试页后，Chrome本地重新验证：未保存内容可保留，放弃后恢复原值，事项改名保存成功；320/375/390/430/1280宽下弹窗居中误差0、无横向溢出、无背景图。费用0元被拒绝且可重试，12.34元新增和15.67元修改均成功，订单与酒店地点绑定弹窗纯色居中。截图repair/item-editor-390.jpg。临时视口已成功reset，本地Wrangler已停止。仅合成本地数据变化。
 - 同轮发现全天事项在时间轴仍显示“时间待定”，已改为“全天”并新增实际HTML回归。新生产构建、typecheck、ESLint及108项回归全部通过（repair/batch3-ci-fix-tests.log）。远程浏览器修正仍须下一轮真实运行，未提前判为通过。预览高德两个缺失secret、远程迁移、CSS拆分和最终验收/发布仍待完成。
+- 2026-10-27 bcd7a04 的 GitHub Quality 已完整成功：https://github.com/bossxie666/trip/actions/runs/40441652872 。verify（lint/typecheck/生产构建/108项回归）与browser均success；browser日志repair/github-browser-bcd7a04.log确认13项通过、1项桌面不适用的移动菜单检查跳过，无失败重试，耗时30.2s。覆盖新增事项、知识引用、相册部分失败重试与地图故障局部降级；这不代表真实高德配置或远程发布验收完成。
+- 同轮只读复查预览secret名称，仍只有AMAP_JS_API_KEY和两个会话相关secret，缺AMAP_JS_SECURITY_CODE/AMAP_WEB_SERVICE_KEY。现有版本元数据对这两项仅返回secret_text名称，不含值；本地仅有测试.dev.vars，无法从既有记录恢复真实密钥，仍需负责人补到预览Worker。未尝试暴露或替换正式secret。
+- CSS只读分析发现公共文件含187条、约18.7KB相册专用规则，且旅行/首页/身份/知识组件不引用album-*类；候选列表repair/album-css-candidates.json。后续应按路由拆分并核对级联/纯色弹窗/全屏照片，未直接搬移或声称CSS优化完成。真实地图、远程迁移、CSS拆分、完整验收与正式发布仍待完成。
+- 2026-10-27 相册专用样式已按原有顺序从globals/home-journal提取到app/albums/gallery-base.css和gallery-theme.css，由新增路由layout加载；保留共享书本及弹窗规则。生产相册CSS独立包17,841字节，新实际HTML资源图回归确认首页/旅行不请求照片网格样式，相册仍包含照片网格和书封样式。
+- Chrome在390×844和1110×791分别记录100个相册元素的几何与computed style，拆分前后完全一致（repair/album-css-before.json、album-css-after.json）；全屏预览覆盖整个视口，手机编辑弹窗362×439、x14/y202.5，所有后代无背景图。另修正相册次要按钮浅底白字的问题，截图repair/album-editor-css-after-390.jpg。
+- 新生产构建和109项测试全部通过（repair/album-css-final-tests.log），资源隔离测试通过；lint/typecheck通过。本次仅完成相册CSS路由拆分，其他页面样式拆分、真实地图配置与验收、远程迁移和最终发布仍未完成。正式站及远程业务数据未改动。

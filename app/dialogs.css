@@ -185,6 +185,17 @@
   border-color: var(--line);
 }
 
+/* Secondary album actions must not inherit white primary-button text. */
+.workspace-surface .album-form > div > button[type="button"] {
+  color: var(--ink);
+  background: var(--paper);
+  box-shadow: none;
+}
+.workspace-surface .album-form > div > button.danger {
+  color: #a03930;
+  border-color: #a03930;
+}
+
 .workspace-surface .recommendation-detail-body ul img {
   transform: none;
   border: 0;

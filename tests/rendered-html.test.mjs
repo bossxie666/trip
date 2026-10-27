@@ -144,6 +144,30 @@ async function loginAs(memberName) {
 
 await login();
 
+test("loads album gallery CSS only through the album route", async () => {
+  const savedSession = sessionCookie;
+  try {
+    await loginAs("nini");
+    const pages = {};
+    for (const pathname of ["/", "/trips", "/albums"]) {
+      const response = await render(pathname);
+      assert.equal(response.status, 200);
+      const html = await response.text();
+      const styles = [...html.matchAll(/<link\b[^>]*\bhref="([^"]+\.css)"[^>]*>/g)]
+        .map((match) => match[1]);
+      assert.ok(styles.length, `${pathname} must include its stylesheets`);
+      pages[pathname] = styles.map((href) => readFileSync(new URL(`../dist/client${href}`, import.meta.url), "utf8")).join("\n");
+    }
+    assert.match(pages["/albums"], /\.album-photo-grid\s*\{/);
+    assert.match(pages["/albums"], /\.album-book-meta\s*\{/);
+    assert.doesNotMatch(pages["/"], /\.album-photo-grid\s*\{/);
+    assert.doesNotMatch(pages["/trips"], /\.album-photo-grid\s*\{/);
+    assert.match(pages["/trips"], /\.trip-book-/);
+  } finally {
+    sessionCookie = savedSession;
+  }
+});
+
 test("renames Zhu Jingqi's login and display labels without changing identity or relations", async () => {
   const member = DB.database.prepare("SELECT id, name, display_name FROM members WHERE id = 'member-zhu-jingqi'").get();
   assert.deepEqual({ ...member }, { id: "member-zhu-jingqi", name: "kiki", display_name: "kiki" });

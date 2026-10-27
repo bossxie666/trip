@@ -1,0 +1,3 @@
+/* Album route styles; shared book and dialog styles remain global. */
+.album-info-trigger{margin-top:20px}.album-edit-form>div{display:flex;flex-wrap:wrap;gap:8px}
+@media(max-width:767px){.album-edit-form input,.album-edit-form select,.album-edit-form textarea{width:100%;min-width:0}}.album-book{position:relative}.album-book-menu-trigger{position:absolute;z-index:8;top:10px;left:10px;display:grid;place-items:center;width:36px;height:36px;padding:0;border:0;border-radius:50%;background:rgba(255,255,255,.94);color:var(--ink);box-shadow:0 3px 10px rgba(30,40,45,.18);cursor:pointer}
