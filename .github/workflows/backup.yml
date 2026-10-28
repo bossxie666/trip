@@ -29,7 +29,7 @@ jobs:
           pnpm exec wrangler d1 export DB --remote --output "backups/trip-${stamp}.sql"
           pnpm exec wrangler r2 object put "trip-archive-backups/d1/trip-${stamp}.sql" --remote --file "backups/trip-${stamp}.sql"
           pnpm exec wrangler d1 execute DB --remote --command "PRAGMA foreign_key_check;"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: d1-backup-${{ github.run_id }}
