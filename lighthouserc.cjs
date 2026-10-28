@@ -11,6 +11,7 @@ module.exports = {
       ],
       numberOfRuns: 2,
       puppeteerScript: "./scripts/lighthouse-login.cjs",
+      chromePath: process.env.CHROME_PATH,
       settings: {
         throttlingMethod: "simulate",
         formFactor: "mobile",

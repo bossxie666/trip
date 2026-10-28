@@ -119,3 +119,6 @@
 - 本地实际Workers完整手机/桌面流程21通过、1项桌面跳过手机专用检查（repair/request-auth-browser-tests.log）。新增sessionReuses仅记录当前请求内复用次数，用于远程核验，不记录令牌或密码；新增计数后的生产构建与115项测试再次通过。
 - 只读Chrome触发正式站现有请求，Worker日志采到优化前首页157ms、书架176ms、规划241ms；这些仅为服务器处理样本，不代表网络、LCP/INP或整体页面完成时间。证据repair/production-auth-context-before-timings.json。浏览器工具不提供性能API，未用工具等待时间替代网站性能。
 - Lighthouse原工作流只在PR/手动运行；已补当前分支push、最小权限和并发取消，并核验每个报告最终地址确为目标登录后页面、每页至少2次，防止登录页分数冒充。失败时保留原始LHR报告；尚待实际CI运行与后续修正，不能宣称性能目标达标。
+- abe5083预览eda8aecd已发布，Chrome已登录读取书架、首页、规划。实际Cloudflare日志sessionReuses分别为1/1/2，确认请求内复用在远程生效；预览服务器样本968/187/403ms与正式基线不直接比较。原Quality40538221732最终success。
+- 首次性能CI40538221834失败于Chrome路径检测，未测页面；锁定@lhci/cli 0.15.1和puppeteer-core 25.16.0为开发依赖，固定Ubuntu24.04并显式定位系统Google Chrome，改用锁定CLI。依赖变更后115项回归、typecheck、lint通过。
+- 本地独立Google Chrome+隔离D1实际完成8份登录后报告，最终地址/每页2次校验通过。Lighthouse移动模拟：主页LCP7832/7843ms，书架4788/4709ms，规划5131/5132ms，费用5025/5028ms；CLS均0，TBT0–7ms。门禁如实失败，未修改阈值；结果不是正式站真实用户指标。主要延迟在资源发现/绘制，待继续优化公共样式及首屏资源。报告与日志在本地.lighthouseci和repair/local-authenticated-lighthouse.log，报告目录加入Git忽略。

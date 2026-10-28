@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   lighthouse:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -26,6 +26,12 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Locate Google Chrome
+        run: |
+          repair_chrome_path="$(command -v google-chrome || command -v google-chrome-stable)"
+          test -x "$repair_chrome_path"
+          echo "CHROME_PATH=$repair_chrome_path" >> "$GITHUB_ENV"
+          "$repair_chrome_path" --version
       - name: Configure local-only test credentials
         run: |
           printf '%s\n' 'TRIP_SPACE_INVITE_CODE=test-invite' 'TRIP_SPACE_SESSION_SECRET=test-session-secret-at-least-32-characters' 'AMAP_JS_API_KEY=test-js-key' 'AMAP_JS_SECURITY_CODE=test-js-code' 'AMAP_WEB_SERVICE_KEY=test-web-key' > .dev.vars
@@ -35,7 +41,7 @@ jobs:
           pnpm exec wrangler d1 execute DB --local --file scripts/e2e-seed.sql
       - run: pnpm build:self-hosted
       - name: Lighthouse production-like routes
-        run: pnpm dlx @lhci/cli@0.15.1 autorun
+        run: pnpm exec lhci autorun
       - name: Verify authenticated performance reports
         if: always()
         run: node scripts/check-lighthouse-reports.mjs
