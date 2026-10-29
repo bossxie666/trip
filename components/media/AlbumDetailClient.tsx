@@ -5,6 +5,7 @@ import { Check, Heart, ImagePlus, Plus, Star, Tag, Trash2, X, ChevronLeft, Chevr
 import { readPhotoCapturedAt, uploadMediaFile } from "./client-upload";
 import { runAlbumUploadQueue, type AlbumUploadItem } from "./album-upload-queue";
 import { WorkspaceOverlay } from "@/components/trip/WorkspaceOverlay";
+import { EditorDialog } from "@/components/trip/EditorDialog";
 import type { AlbumDetail, AlbumPhoto as Photo } from "@/models/album";
 import { useAlbumPhotos } from "./useAlbumPhotos";
 
@@ -17,7 +18,8 @@ export function AlbumDetailClient({ album: initial }: { album: AlbumDetail }) {
   const [busy, setBusy] = useState(""), [error, setError] = useState(""), [queue, setQueue] = useState<AlbumUploadItem[]>([]);
   const filter = album.pagination.filter;
   const [selecting, setSelecting] = useState(false), [selected, setSelected] = useState<Set<string>>(new Set()), [viewer, setViewer] = useState<string | null>(null);
-  const [editAction, setEditAction] = useState<"tag" | "date" | null>(null), [tagName, setTagName] = useState(""), [date, setDate] = useState("");
+  const [editAction, setEditAction] = useState<"tag" | "date" | "delete" | null>(null), [tagName, setTagName] = useState(""), [date, setDate] = useState("");
+  const [actionIds, setActionIds] = useState<string[]>([]);
   const visible = album.photos;
   const groups = useMemo(() => { const map = new Map<string, Photo[]>(); for (const p of visible) { const key = p.capturedAt.slice(0, 10); const group = map.get(key) || []; group.push(p); map.set(key, group); } return [...map.entries()]; }, [visible]);
   const activeIndex = viewer ? visible.findIndex(p => p.assetId === viewer) : -1, activePhoto = activeIndex >= 0 ? visible[activeIndex] : null;
@@ -94,12 +96,16 @@ export function AlbumDetailClient({ album: initial }: { album: AlbumDetail }) {
     finally { running.current = false; setBusy(""); }
   }
   async function removeSelected() {
-    const ids = [...selected];
-    if (!ids.length || running.current || !confirm(`确定永久删除选中的 ${ids.length} 张照片吗？删除后无法恢复。`)) return;
+    const ids = actionIds;
+    if (!ids.length || running.current || !album.canEditAlbum) return;
     running.current = true; setBusy("delete"); setError("");
-    try { await json(`/api/albums/${album.id}/media/batch`, { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ assetIds: ids }) }); setSelected(new Set()); setSelecting(false); await refresh(); }
+    try { await json(`/api/albums/${album.id}/media/batch`, { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ assetIds: ids }) }); setSelected(new Set()); setSelecting(false); setEditAction(null); await refresh(); }
     catch (caught) { setError(caught instanceof Error ? caught.message : "删除失败。"); }
     finally { running.current = false; setBusy(""); }
+  }
+  function openAction(action: "tag" | "date" | "delete") {
+    if (!selected.size || busy || loading || (action !== "tag" && !album.canEditAlbum)) return;
+    setActionIds([...selected]); setTagName(""); setDate(""); setError(""); setEditAction(action);
   }
   async function cover(id: string) {
     if (running.current || !album.canEditAlbum) return;
@@ -133,8 +139,29 @@ export function AlbumDetailClient({ album: initial }: { album: AlbumDetail }) {
     {pageError && <p className="form-error" role="alert">{pageError}<button type="button" disabled={!!loading} onClick={() => void refresh()}>重新加载照片</button></p>}
     <div ref={moreRef} className="album-page-loader" aria-live="polite">{loading && <span>正在读取照片…</span>}{album.pagination.nextCursor && <button type="button" disabled={!!loading || !!busy} onClick={() => void loadMore()}>加载更多 · {visible.length} / {album.pagination.total}</button>}</div>
     <input ref={inputRef} className="album-floating-input" type="file" tabIndex={-1} aria-hidden="true" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" multiple disabled={!!busy || !!loading} onChange={upload} />{!selecting && <button type="button" className={`album-floating-add${busy === "upload" ? " busy" : ""}`} aria-label={busy === "upload" ? "照片上传中" : "添加照片"} disabled={!!busy || !!loading} onClick={() => inputRef.current?.click()}>{busy === "upload" ? <span>{uploaded}/{queue.length}</span> : <Plus size={30} />}</button>}
-    {selecting && <aside className="album-selection-bar"><b>已选 {selected.size} 张</b><button disabled={!!busy || !!loading || !album.pagination.total} onClick={() => void selectAll()}>{allSelected ? "取消全选" : "全选"}</button><button disabled={!selected.size || !!busy || !!loading} onClick={() => batch("favorite", { isFavorite: true })}><Heart size={18} />收藏</button><button disabled={!selected.size || !!busy || !!loading} onClick={() => batch("favorite", { isFavorite: false })}>取消收藏</button><button disabled={!selected.size || !!busy || !!loading} onClick={() => setEditAction("tag")}><Tag size={18} />标签</button>{album.canEditAlbum && <><button disabled={!selected.size || !!busy || !!loading} onClick={() => setEditAction("date")}>日期</button><button className="danger" disabled={!selected.size || !!busy || !!loading} onClick={removeSelected}><Trash2 size={18} />删除</button></>}</aside>}
-    <WorkspaceOverlay open={editAction !== null} onClose={() => !busy && setEditAction(null)} ariaLabel={editAction === "tag" ? "管理照片标签" : "修改拍摄日期"} className="clean-dialog album-action-dialog"><header className="editor-dialog-heading"><h2>{editAction === "tag" ? "管理照片标签" : "修改拍摄日期"}</h2><button disabled={!!busy || !!loading} aria-label="关闭" onClick={() => setEditAction(null)}><X size={20} /></button></header>{editAction === "tag" ? <div><label>添加标签<input maxLength={24} value={tagName} onChange={event => setTagName(event.target.value)} /></label><button disabled={!!busy || !tagName.trim()} onClick={() => batch("addTag", { tagName: tagName.trim() })}>添加到选中照片</button><p>移除标签</p>{album.tags.map(tag => <button key={tag.id} disabled={!!busy || !!loading} onClick={() => batch("removeTag", { tagId: tag.id })}>{tag.name} ×</button>)}</div> : <form onSubmit={event => { event.preventDefault(); if (date) void batch("date", { capturedAt: `${date}T12:00:00` }); }}><label>拍摄日期<input type="date" required value={date} onChange={event => setDate(event.target.value)} /></label><button disabled={!!busy || !date}>保存</button></form>}{error && <p role="alert">{error}</p>}</WorkspaceOverlay>
+    {selecting && <aside className="album-selection-bar"><b>已选 {selected.size} 张</b><button disabled={!!busy || !!loading || !album.pagination.total} onClick={() => void selectAll()}>{allSelected ? "取消全选" : "全选"}</button><button disabled={!selected.size || !!busy || !!loading} onClick={() => batch("favorite", { isFavorite: true })}><Heart size={18} />收藏</button><button disabled={!selected.size || !!busy || !!loading} onClick={() => batch("favorite", { isFavorite: false })}>取消收藏</button><button disabled={!selected.size || !!busy || !!loading} onClick={() => openAction("tag")}><Tag size={18} />标签</button>{album.canEditAlbum && <><button disabled={!selected.size || !!busy || !!loading} onClick={() => openAction("date")}>日期</button><button className="danger" disabled={!selected.size || !!busy || !!loading} onClick={() => openAction("delete")}><Trash2 size={18} />删除</button></>}</aside>}
+    {editAction && <EditorDialog key={editAction} open title={editAction === "tag" ? "管理照片标签" : editAction === "date" ? "修改拍摄日期" : "删除照片"}
+      onClose={() => setEditAction(null)} busy={!!busy || !!loading} dirty={editAction === "tag" ? Boolean(tagName) : editAction === "date" ? Boolean(date) : false}
+      className="album-action-dialog" submitLabel={editAction === "tag" ? "添加到选中照片" : editAction === "delete" ? `永久删除 ${actionIds.length} 张照片` : "保存"}
+      onSubmit={() => {
+        if (editAction === "delete") return removeSelected();
+        if (editAction === "tag") {
+          if (!tagName.trim()) { setError("请输入标签名称。"); return; }
+          return batch("addTag", { tagName: tagName.trim() }, actionIds);
+        }
+        if (!date) { setError("请选择拍摄日期。"); return; }
+        return batch("date", { capturedAt: `${date}T12:00:00` }, actionIds);
+      }}>
+      {editAction === "delete" ? <p>确定永久删除选中的 {actionIds.length} 张照片吗？删除后无法恢复。</p> : <>
+        <p>已选 {actionIds.length} 张照片</p>
+        {editAction === "tag" ? <>
+          <label>添加标签<input maxLength={24} value={tagName} onChange={event => setTagName(event.target.value)} /></label>
+          {album.tags.length > 0 && <><p>移除标签</p><div className="album-tag-actions">{album.tags.map(tag => <button type="button" key={tag.id} onClick={() => batch("removeTag", { tagId: tag.id }, actionIds)}>{tag.name} ×</button>)}</div></>}
+        </> : <label>拍摄日期<input type="date" required value={date} onChange={event => setDate(event.target.value)} /></label>}
+      </>}
+      {error && <p role="alert">{error}</p>}
+    </EditorDialog>}
+
     <WorkspaceOverlay open={!!activePhoto} onClose={() => setViewer(null)} ariaLabel="照片预览" className="album-viewer">{activePhoto && <><button className="album-viewer-close" aria-label="关闭" onClick={() => setViewer(null)}><X /></button><img src={`/api/media/${activePhoto.assetId}?variant=display`} alt={activePhoto.filename} onPointerDown={event => { swipeStart.current = { x: event.clientX, y: event.clientY }; }} onPointerUp={swipeEnd} onPointerCancel={() => { swipeStart.current = null; }} draggable={false} /><button className="album-viewer-prev" aria-label="上一张" disabled={!!busy || !!loading || activeIndex <= 0} onClick={() => setViewer(visible[activeIndex - 1].assetId)}><ChevronLeft /></button><button className="album-viewer-next" aria-label="下一张" disabled={!!loading || (activeIndex >= visible.length - 1 && !album.pagination.nextCursor)} onClick={() => void nextPhoto()}><ChevronRight /></button><footer><div className="album-viewer-info"><span>{activeIndex + 1} / {album.pagination.total}</span><time dateTime={activePhoto.capturedAt}>{dateLabel(activePhoto.capturedAt)}</time><span className="album-viewer-tags">{album.tags.filter(tag => activePhoto.tagIds.includes(tag.id)).map(tag => `#${tag.name}`).join(" ")}</span></div><button disabled={!!busy || !!loading} className={activePhoto.isFavorite ? "active" : ""} onClick={() => batch("favorite", { isFavorite: !activePhoto.isFavorite }, [activePhoto.assetId])}><Heart fill={activePhoto.isFavorite ? "currentColor" : "none"} />{activePhoto.isFavorite ? "取消收藏" : "收藏"}</button>{album.canEditAlbum && <button disabled={!!busy || !!loading} onClick={() => cover(activePhoto.assetId)}><Star fill={album.coverMediaAssetId === activePhoto.assetId ? "currentColor" : "none"} />设为封面</button>}</footer>{(error || pageError) && <p className="album-viewer-error" role="alert">{error || pageError}</p>}</>}</WorkspaceOverlay>
   </>;
 }
