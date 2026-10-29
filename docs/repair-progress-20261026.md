@@ -122,3 +122,4 @@
 - abe5083预览eda8aecd已发布，Chrome已登录读取书架、首页、规划。实际Cloudflare日志sessionReuses分别为1/1/2，确认请求内复用在远程生效；预览服务器样本968/187/403ms与正式基线不直接比较。原Quality40538221732最终success。
 - 首次性能CI40538221834失败于Chrome路径检测，未测页面；锁定@lhci/cli 0.15.1和puppeteer-core 25.16.0为开发依赖，固定Ubuntu24.04并显式定位系统Google Chrome，改用锁定CLI。依赖变更后115项回归、typecheck、lint通过。
 - 本地独立Google Chrome+隔离D1实际完成8份登录后报告，最终地址/每页2次校验通过。Lighthouse移动模拟：主页LCP7832/7843ms，书架4788/4709ms，规划5131/5132ms，费用5025/5028ms；CLS均0，TBT0–7ms。门禁如实失败，未修改阈值；结果不是正式站真实用户指标。主要延迟在资源发现/绘制，待继续优化公共样式及首屏资源。报告与日志在本地.lighthouseci和repair/local-authenticated-lighthouse.log，报告目录加入Git忽略。
+- 2026-10-29：再次 fetch，远程基线仍为285eb9e。首屏增加高质量AVIF和响应式尺寸，删除隐藏装饰请求，拆分首页/书架/工作台CSS。生产构建与117项回归、typecheck、lint通过；实际浏览器21通过、1项桌面跳过手机专用检查。Chrome六种屏宽核验书架列数与标题、规划无横向溢出、纯色居中相册弹窗；没有操作正式业务数据。首页实验室传输量约减少46%，LCP仍未稳定达标，性能门禁保持失败；完整记录见performance-resources-20261029.md。本轮尚未正式部署，三批总验收仍未完成。

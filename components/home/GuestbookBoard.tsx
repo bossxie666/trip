@@ -66,7 +66,7 @@ export function GuestbookBoard({ initialMessages, currentMemberId, compact = fal
         {!!message.media.length && <div className="guestbook-images">{message.media.map((media) => <img key={media.id} src={`/api/media/${media.id}?variant=thumb`} alt="留言参考图" loading="lazy" width={240} height={180} />)}</div>}
         {message.author.id === currentMemberId && <footer>{editing === message.id ? <><button disabled={busy} onClick={() => void update(message.id)}>保存</button><button onClick={() => setEditing(null)}>取消</button></> : <><button onClick={() => { setEditing(message.id); setEditBody(message.body || ""); }}><Pencil size={13} />编辑</button><button disabled={busy} onClick={() => void remove(message.id)}><Trash2 size={13} />删除</button></>}</footer>}
       </article>)}
-      {!messages.length && <div className="guestbook-empty"><img className="guestbook-empty-paper" src="/assets/homepage-v3/paper-note-01.webp" alt="" aria-hidden="true" /><strong>还没有留言</strong></div>}
+      {!messages.length && <div className="guestbook-empty"><img loading="lazy" className="guestbook-empty-paper" src="/assets/homepage-v3/paper-note-01.webp" alt="" aria-hidden="true" /><strong>还没有留言</strong></div>}
     </div>
   </div>;
 }

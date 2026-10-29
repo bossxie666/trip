@@ -1,4 +1,8 @@
 import { notFound, redirect } from "next/navigation";
+import "../../../workspace-base.css";
+import "../../../budget-overrides.css";
+import "../../../participant-presence.css";
+import "../../../trip-workspace-visuals.css";
 import type { Metadata } from "next";
 import { getPlanWorkspace } from "@/services/plan-workspace-service.server";
 import { findTripMetadataBySlug } from "@/services/trip-repository.server";

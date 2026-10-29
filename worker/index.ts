@@ -80,6 +80,7 @@ const worker = {
     };
 
     try {
+      if (url.pathname === "/favicon.ico") return finish(Response.redirect(new URL("/favicon.svg", request.url), 308));
       if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
       const response = await handleImageOptimization(request, {

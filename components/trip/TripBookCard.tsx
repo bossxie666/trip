@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
+import "@/app/trip-books.css";
 
 import { MoreHorizontal, Users } from "lucide-react";
 import { useRouter } from "next/navigation";

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import "./home-visuals.css";
 import "./reference-home.css";
 import "./home-page.css";
 import { ReferenceHome } from "@/components/home/ReferenceHome";

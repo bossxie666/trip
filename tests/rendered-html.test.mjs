@@ -189,6 +189,14 @@ async function loginAs(memberName) {
 
 await login();
 
+test("serves the browser favicon fallback without authentication or a missing page", async () => {
+  DB.sessionSelectCount = 0;
+  const response = await render("/favicon.ico", { headers: { cookie: "" } });
+  assert.equal(response.status, 308);
+  assert.equal(new URL(response.headers.get("location")).pathname, "/favicon.svg");
+  assert.equal(DB.sessionSelectCount, 0);
+});
+
 test("avoids repeated session verification within a protected request", async () => {
   for (const path of ["/api/trips", "/", "/trips", "/trips/shanghai-hangzhou-2026/plan?view=planning"]) {
     DB.sessionSelectCount = 0;
@@ -221,6 +229,23 @@ test("rejects forged identity headers and revoked sessions on the next request",
     sessionCookie = original;
     assert.equal((await render("/api/trips")).status, 200);
   } finally { sessionCookie = original; }
+});
+
+test("loads homepage, book and workspace presentation only on their own routes", async () => {
+  const pages = {};
+  for (const [key, path] of Object.entries({ home: "/", books: "/trips", workspace: "/trips/shanghai-hangzhou-2026/plan?view=planning" })) {
+    const response = await render(path); assert.equal(response.status, 200);
+    const html = await response.text();
+    const hrefs = [...html.matchAll(/<link\b[^>]*\bhref="([^"]+\.css)"[^>]*>/g)].map(match => match[1]);
+    pages[key] = hrefs.map(href => readFileSync(new URL(`../dist/client${href}`, import.meta.url), "utf8")).join("\n");
+  }
+  assert.match(pages.home, /\.home-hero/);
+  assert.doesNotMatch(pages.home, /\.trip-journal-workspace\s*\{/);
+  assert.match(pages.books, /\.trip-book-cover/);
+  assert.doesNotMatch(pages.books, /\.home-hero/);
+  assert.doesNotMatch(pages.books, /\.trip-journal-workspace\s*\{/);
+  assert.match(pages.workspace, /\.trip-journal-workspace\s*\{/);
+  assert.doesNotMatch(pages.workspace, /\.home-hero/);
 });
 
 test("loads album gallery CSS only through the album route", async () => {
@@ -400,7 +425,7 @@ test("lets an administrator disable a member and revoke every active session", a
 });
 
 test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership consistent", () => {
-  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const css = ["globals.css", "workspace-base.css", "trip-books.css"].map(file => readFileSync(new URL(`../app/${file}`, import.meta.url), "utf8")).join("\n");
   const accommodation = readFileSync(new URL("../components/trip/BookingCreateControl.tsx", import.meta.url), "utf8");
   const transport = readFileSync(new URL("../components/trip/PlanAddControl.tsx", import.meta.url), "utf8");
   const presence = readFileSync(new URL("../components/trip/DayPresenceControl.tsx", import.meta.url), "utf8");

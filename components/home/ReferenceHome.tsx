@@ -30,16 +30,13 @@ export function ReferenceHome({ current, dashboard }: { current: SessionMemberSu
     return preferred.length === 2 ? preferred : names;
   })() : [];
   return <>
+    <link rel="preload" as="image" type="image/avif" href="/assets/homepage-v4/mobile-background.avif" media="(max-width: 767px)" fetchPriority="high" />
+    <link rel="preload" as="image" type="image/avif" href="/assets/homepage-v4/desktop-background.avif" media="(min-width: 768px)" fetchPriority="high" />
     <SiteHeader renderMobileNav={false} active="home" currentMember={{ id: current.id, displayName: current.displayName, avatar: current.avatar, role: current.role }} />
     <main className="home-journal mobile-home reference-home">
-      <div className="home-decor-layer" aria-hidden="true">
-        <img className="home-decor home-decor-botanical" src="/assets/homepage-v3/botanical-small.webp" alt="" />
-        <img className="home-decor home-decor-plane" src="/assets/homepage-v3/sticker-paper-plane.webp" alt="" />
-        <img className="home-decor home-decor-airmail" src="/assets/homepage-v3/sticker-airmail.webp" alt="" />
-      </div>
       <section className="home-hero mobile-book-page">
         <article className="home-manifesto">
-          <h1 className="home-title-heading"><picture className="home-title-picture"><source media="(max-width: 767px)" srcSet="/assets/homepage-v3/title-mobile.webp" /><img className="home-title-asset" src="/assets/homepage-v3/title-desktop.webp" alt="跳进地理书的旅行" width={2172} height={724} fetchPriority="high" /></picture></h1>
+          <h1 className="home-title-heading"><picture className="home-title-picture"><source media="(max-width: 767px)" type="image/avif" srcSet="/assets/homepage-v3/title-mobile-600.avif 600w, /assets/homepage-v3/title-mobile.avif 1086w" sizes="62vw" /><source media="(max-width: 767px)" srcSet="/assets/homepage-v3/title-mobile.webp" /><source type="image/avif" srcSet="/assets/homepage-v3/title-desktop-960.avif 960w, /assets/homepage-v3/title-desktop.avif 1600w" sizes="24.6vw" /><img className="home-title-asset" src="/assets/homepage-v3/title-desktop.webp" alt="跳进地理书的旅行" width={2172} height={724} fetchPriority="high" /></picture></h1>
           <p className="home-manifesto-line"><span>已点亮城市 <b>{dashboard.stats.cityCount}</b></span><span>已完成旅行 <b>{dashboard.stats.completed}</b></span><span>下一站 <b>{nextCityNames.join("·") || "等待决定"}</b></span></p>
           <div className="home-actions"><Link className="home-primary-action" href={next ? `/trips/${next.slug}/plan` : "/trips/new"}><Plane size={18} />{next ? "打开行程" : "新建行程"}<ArrowRight size={17} /></Link></div>
         </article>
