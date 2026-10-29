@@ -115,7 +115,7 @@ test("keeps public ferry as a transit leg presentation", () => {
 });
 
 test("keeps add-to-day models explicit and booking reference semantically separate", () => {
-  const source = readFileSync(new URL("../components/trip/PlanAddControl.tsx", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../components/trip/PlanAddEditor.tsx", import.meta.url), "utf8");
   assert.match(source, /地点 \/ 活动/);
   assert.match(source, /班次 \/ 票务交通/);
   assert.doesNotMatch(source, /添加长途交通|跨城交通/);
@@ -427,7 +427,7 @@ test("lets an administrator disable a member and revoke every active session", a
 test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership consistent", () => {
   const css = ["globals.css", "workspace-base.css", "trip-books.css"].map(file => readFileSync(new URL(`../app/${file}`, import.meta.url), "utf8")).join("\n");
   const accommodation = readFileSync(new URL("../components/trip/BookingCreateControl.tsx", import.meta.url), "utf8");
-  const transport = readFileSync(new URL("../components/trip/PlanAddControl.tsx", import.meta.url), "utf8");
+  const transport = ["PlanAddControl.tsx", "PlanAddEditor.tsx"].map(file => readFileSync(new URL(`../components/trip/${file}`, import.meta.url), "utf8")).join("\n");
   const presence = readFileSync(new URL("../components/trip/DayPresenceControl.tsx", import.meta.url), "utf8");
   const placeDiscovery = readFileSync(new URL("../components/trip/PlaceDiscoveryControl.tsx", import.meta.url), "utf8");
   const bookingEdit = readFileSync(new URL("../components/trip/BookingEditControl.tsx", import.meta.url), "utf8");
@@ -452,9 +452,9 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   assert.match(css, /\.button-primary\{border:1px solid var\(--ink\);background:var\(--ink\);color:#fff/);
   assert.doesNotMatch(accommodation, /添加长途交通/);
   assert.match(transport, /modalOwner = `plan-add:\$\{slug\}`/);
-  assert.match(transport, /添加到 \{targetDayLabel\}/);
-  assert.match(transport, /想把什么加入今天/);
-  assert.match(transport, /明确选择的一趟服务会保存为 Booking Edge/);
+  assert.match(transport, /submitLabel=\{`加入 \$\{targetDayLabel\}`\}/);
+  assert.match(transport, /dynamic\(\(\) => import\("\.\/PlanAddEditor"\)/);
+  assert.match(transport, /dirty=\{dirty\} busy=\{saving\}/);
   assert.match(transport, /finally \{ setSaving\(false\); \}/);
   assert.doesNotMatch(transport, /公共交通/);
   assert.match(presence, /modalOwner = `presence:\$\{slug\}:\$\{dayId\}`/);
@@ -462,7 +462,7 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   assert.match(bookingEdit, /modalName = `booking-editor:\$\{props\.booking\.booking\.id\}`/);
   assert.match(accommodation, /EditorDialog/);
   assert.match(accommodation, /dirty=\{dirty\} busy=\{saving\}/);
-  assert.match(transport, /WorkspaceOverlay/);
+  assert.match(transport, /EditorDialog/);
   assert.match(presence, /WorkspaceOverlay/);
   assert.match(placeDiscovery, /WorkspaceOverlay/);
   assert.match(bookingEdit, /EditorDialog/);
@@ -499,7 +499,7 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
 
 test("releases save state after success, API errors, refresh errors, and request failures", () => {
   const files = [
-    "PlanAddControl.tsx", "PlaceDiscoveryControl.tsx", "RecommendationAddControl.tsx",
+    "PlanAddEditor.tsx", "PlaceDiscoveryControl.tsx", "RecommendationAddControl.tsx",
     "BookingCreateControl.tsx", "BookingEditControl.tsx", "BookingPlaceControl.tsx",
     "BudgetWorkspace.tsx", "DayPresenceControl.tsx", "EditTripDialog.tsx",
     "ItineraryItemControl.tsx", "ItineraryItemPlaceControl.tsx", "ItineraryOrderControls.tsx",
@@ -547,7 +547,7 @@ test("keeps the performance boundaries for metadata, workspace views, and client
   assert.doesNotMatch(budgetWorkspace, /<a\b[^>]*href=/);
   assert.match(planMap, /WorkspaceNavLink as Link/);
   assert.doesNotMatch(planMap, /<a\b[^>]*href=/);
-  for (const file of ["PlanAddControl.tsx", "ItineraryItemControl.tsx", "ItineraryOrderControls.tsx", "BookingCreateControl.tsx", "BookingEditControl.tsx", "BookingPlaceControl.tsx", "DayPresenceControl.tsx", "PlaceDiscoveryControl.tsx", "ItineraryItemPlaceControl.tsx", "RecommendationAddControl.tsx", "BudgetWorkspace.tsx", "PlanMap.tsx"]) {
+  for (const file of ["PlanAddControl.tsx", "PlanAddEditor.tsx", "ItineraryItemControl.tsx", "ItineraryOrderControls.tsx", "BookingCreateControl.tsx", "BookingEditControl.tsx", "BookingPlaceControl.tsx", "DayPresenceControl.tsx", "PlaceDiscoveryControl.tsx", "ItineraryItemPlaceControl.tsx", "RecommendationAddControl.tsx", "BudgetWorkspace.tsx", "PlanMap.tsx"]) {
     const source = readFileSync(new URL(`../components/trip/${file}`, import.meta.url), "utf8");
     assert.doesNotMatch(source, /location\.(reload|assign)/, `${file} should use router invalidation`);
   }
@@ -1105,14 +1105,15 @@ test("renders accommodation editor as an independent modal without an inline det
 });
 
 test("keeps Add Itinerary types focused on place activities and ticketed transport", () => {
-  const source = readFileSync(new URL("../components/trip/PlanAddControl.tsx", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../components/trip/PlanAddEditor.tsx", import.meta.url), "utf8");
   const picker = readFileSync(new URL("../components/trip/GenericPlacePicker.tsx", import.meta.url), "utf8");
   assert.match(source, /role="tablist" aria-label="添加类型"/);
   assert.match(source, /地点 \/ 活动/);
   assert.match(source, /班次 \/ 票务交通/);
   assert.match(source, /无地点普通活动/);
   assert.doesNotMatch(source, /添加长途交通|跨城交通/);
-  assert.match(source, /showExisting=\{false\}/);
+  assert.match(source, /existing=\{existingPlaces\}/);
+  assert.doesNotMatch(source, /当前可直接使用|showExisting=\{false\}/);
   assert.match(picker, /showExisting = true/);
   assert.match(picker, /autoFocus = false/);
   assert.match(picker, /placeholder=\{placeholder \|\|/);
