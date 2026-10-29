@@ -23,6 +23,7 @@
 .workspace-editor-form { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; overflow: hidden; }
 .workspace-editor-fields { display: grid; gap: 14px; min-width: 0; min-height: 0; margin: 0; padding: 18px 22px; overflow: auto; border: 0; }
 .workspace-editor-fields>label { display: grid; gap: 7px; min-width: 0; font-size: 13px; line-height: 1.5; }
+.workspace-editor-fields p { min-width: 0; overflow-wrap: anywhere; }
 .workspace-editor-fields>.inline-check { display: flex; align-items: center; gap: 8px; min-height: 32px; }
 .workspace-editor-fields input:not([type=checkbox]):not([type=radio]),.workspace-editor-fields select,.workspace-editor-fields textarea { width: 100%; min-width: 0; min-height: 40px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper2); font: inherit; }
 .workspace-editor-fields input[type=checkbox],.workspace-editor-fields input[type=radio] { flex: none; width: 18px; height: 18px; }
