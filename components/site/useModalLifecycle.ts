@@ -4,6 +4,7 @@ import { useEffect, useRef, type RefObject } from "react";
 
 const openDialogs: symbol[] = [];
 let restoreBody: (() => void) | null = null;
+let rootTrigger: HTMLElement | null = null;
 
 /** One shared focus/scroll owner for modal dialogs, including nested dialogs. */
 export function useModalLifecycle(open: boolean, surface: RefObject<HTMLElement | null>, onClose: () => void) {
@@ -14,6 +15,7 @@ export function useModalLifecycle(open: boolean, surface: RefObject<HTMLElement 
     if (!open || !dialog) return;
     const token = Symbol("dialog"), trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     if (!openDialogs.length) {
+      rootTrigger = trigger;
       const overflow = document.body.style.overflow, paddingRight = document.body.style.paddingRight;
       const gutter = window.innerWidth - document.documentElement.clientWidth;
       if (gutter > 0) document.body.style.paddingRight = `${parseFloat(getComputedStyle(document.body).paddingRight) + gutter}px`;
@@ -50,8 +52,13 @@ export function useModalLifecycle(open: boolean, surface: RefObject<HTMLElement 
       if (index >= 0) openDialogs.splice(index, 1);
       document.removeEventListener("keydown", keydown);
       document.removeEventListener("focusin", focusin);
-      if (!openDialogs.length) { restoreBody?.(); restoreBody = null; }
-      if (wasTop && trigger?.isConnected) trigger.focus({ preventScroll: true });
+      if (!openDialogs.length) {
+        restoreBody?.(); restoreBody = null;
+        // A confirmation can unmount both itself and its parent in one commit.
+        // Restore the outer trigger even if the parent cleaned up first.
+        const target = rootTrigger; rootTrigger = null;
+        if (target?.isConnected) target.focus({ preventScroll: true });
+      } else if (wasTop && trigger?.isConnected) trigger.focus({ preventScroll: true });
     };
   }, [open, surface]);
 }
