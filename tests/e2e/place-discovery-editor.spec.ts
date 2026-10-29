@@ -14,7 +14,7 @@ test("place discovery opens on the selected day, preserves failed additions and 
       if (route.request().method() === "POST" && ++attempts === 1) return route.fulfill({ status: 503, json: { error: "测试加入日期失败" } });
       return route.continue();
     });
-    await page.goto(`/trips/${trip.slug}/plan?view=planning&day=${trip.days[1].id}&member=all`);
+    await page.goto(`/trips/${trip.slug}/plan?view=planning&day=${trip.days[1].id}&member=all&area=hangzhou&category=food&mode=library&cost=actual&q=%E8%A5%BF%E6%B9%96`);
     const trigger = page.getByRole("button", { name: "找想去的地方", exact: true });
     await trigger.click();
     const editor = page.getByRole("dialog", { name: "找想去的地方", exact: true });
@@ -44,6 +44,8 @@ test("place discovery opens on the selected day, preserves failed additions and 
     const response = await saved; expect(response.status()).toBe(201);
     expect((await response.json()).item).toMatchObject({ dayId: trip.days[1].id, placeId: "place-the-bund" });
     await expect(editor).toHaveCount(0);
+    const location = new URL(page.url());
+    for (const [key, value] of Object.entries({ member: "all", area: "hangzhou", category: "food", mode: "library", cost: "actual", q: "西湖" })) expect(location.searchParams.get(key)).toBe(value);
     await trigger.click();
     await expect(editor.getByRole("status")).toHaveCount(0);
     await editor.getByRole("searchbox").click(); await editor.getByRole("radio", { name: "选择 外滩", exact: true }).click();

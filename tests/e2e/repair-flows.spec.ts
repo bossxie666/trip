@@ -234,7 +234,7 @@ test("item editing keeps unsaved input, discards explicitly and saves the select
   expect(created.status()).toBe(201);
   const { item } = await created.json();
   try {
-    await page.goto("/trips/e2e-shanghai/plan?view=planning&day=trip-e2e-day-1&member=all");
+    await page.goto("/trips/e2e-shanghai/plan?view=planning&day=trip-e2e-day-1&member=all&area=hangzhou&category=food&mode=library&cost=actual");
     const record = page.locator("article.timeline-node").filter({ has: page.getByRole("heading", { name: title, exact: true }) });
     await record.getByRole("button", { name: "编辑事项", exact: true }).click();
     const editor = page.getByRole("dialog", { name: "编辑事项", exact: true });
@@ -261,6 +261,8 @@ test("item editing keeps unsaved input, discards explicitly and saves the select
     await editor.getByRole("combobox", { name: "日期", exact: true }).selectOption("trip-e2e-day-2");
     await editor.getByRole("button", { name: "保存并移动", exact: true }).click();
     await expect(page).toHaveURL(/day=trip-e2e-day-2/);
+    const movedLocation = new URL(page.url());
+    for (const [key, value] of Object.entries({ member: "all", area: "hangzhou", category: "food", mode: "library", cost: "actual" })) expect(movedLocation.searchParams.get(key)).toBe(value);
     await expect(page.getByRole("heading", { name: `${title}-已保存`, exact: true })).toBeVisible();
     await page.reload();
     await expect(page.getByRole("heading", { name: `${title}-已保存`, exact: true })).toBeVisible();

@@ -13,7 +13,24 @@ import { drainMediaDeletionQueue } from "../services/media-deletion.server.ts";
 import { editorRequest } from "../components/trip/editor-request.ts";
 import { waitForMapDocument } from "../components/trip/map-frame-document.ts";
 import { presenceLocalTime } from "../services/presence-time.ts";
+import { planningDayHref } from "../services/workspace-navigation.ts";
 import { runWithVerifiedSession, verifiedRequestMemberId } from "../services/session-request-context.server.ts";
+
+test("opens a planning day without losing this trip's filters or carrying another trip's state", () => {
+  const source = "https://trip.bossxie.win/trips/shared-trip/plan?view=map&day=old&member=all&mode=library&cost=actual&area=hangzhou&category=food&q=%E8%A5%BF%E6%B9%96#day-presence-old";
+  const target = new URL(planningDayHref(source, "shared-trip", "new-day"), "https://trip.bossxie.win");
+  assert.equal(target.pathname, "/trips/shared-trip/plan");
+  assert.equal(target.hash, "");
+  assert.deepEqual(Object.fromEntries(target.searchParams), { view: "planning", day: "new-day", member: "all", mode: "library", cost: "actual", area: "hangzhou", category: "food", q: "西湖" });
+  const other = new URL(planningDayHref(source, "another-trip", "another-day"), "https://trip.bossxie.win");
+  assert.deepEqual(Object.fromEntries(other.searchParams), { view: "planning", day: "another-day" });
+  assert.equal(planningDayHref(null, "trip / one", "day & one"), "/trips/trip%20%2F%20one/plan?view=planning&day=day+%26+one");
+  assert.equal(planningDayHref("http://[", "trip", "day"), "/trips/trip/plan?view=planning&day=day");
+  const repeated = new URL(planningDayHref("/trips/trip/plan/?view=map&view=budget&day=one&day=two&member=member-nini", "trip", "chosen"), "https://trip.bossxie.win");
+  assert.deepEqual(repeated.searchParams.getAll("view"), ["planning"]);
+  assert.deepEqual(repeated.searchParams.getAll("day"), ["chosen"]);
+  assert.equal(repeated.searchParams.get("member"), "member-nini");
+});
 
 test("renders presence instants in the trip timezone without shifting stored local times", () => {
   assert.equal(presenceLocalTime("2027-03-01T02:15:00.000Z", "Asia/Shanghai"), "10:15");

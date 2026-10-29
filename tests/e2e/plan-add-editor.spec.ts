@@ -14,7 +14,7 @@ test("add itinerary preserves drafts, retries place notes and resets on reopenin
       if (route.request().method() === "POST" && ++attempts === 1) return route.fulfill({ status: 503, json: { error: "测试事项保存失败" } });
       return route.continue();
     });
-    await page.goto(`/trips/${trip.slug}/plan?view=planning&member=all`);
+    await page.goto(`/trips/${trip.slug}/plan?view=planning&member=all&area=hangzhou&category=food&mode=library&cost=actual&q=%E8%A5%BF%E6%B9%96`);
     const trigger = page.getByRole("button", { name: "＋ 添加行程", exact: true });
     await trigger.click();
     const editor = page.getByRole("dialog", { name: "添加行程", exact: true });
@@ -49,6 +49,8 @@ test("add itinerary preserves drafts, retries place notes and resets on reopenin
     const response = await saved; expect(response.status()).toBe(201);
     expect((await response.json()).item.note).toBe("真实地点备注必须保留");
     await expect(editor).toHaveCount(0); await expect(trigger).toBeFocused();
+    const location = new URL(page.url());
+    for (const [key, value] of Object.entries({ member: "all", area: "hangzhou", category: "food", mode: "library", cost: "actual", q: "西湖" })) expect(location.searchParams.get(key)).toBe(value);
     await trigger.click();
     await expect(editor.getByRole("textbox", { name: "备注（可选）", exact: true })).toHaveValue("");
     await editor.getByRole("textbox", { name: "无地点普通活动", exact: true }).fill("应放弃的活动");
