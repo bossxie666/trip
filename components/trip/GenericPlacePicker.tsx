@@ -37,12 +37,14 @@ export function GenericPlacePicker({ slug, existing = [], value, onChange, autoF
     if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
   }
   function keyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key !== "Escape") return;
+    if (event.key !== "Escape" || !showPopover) return;
+    event.preventDefault();
+    event.stopPropagation();
+    (event.currentTarget.querySelector("input[type=search]") as HTMLInputElement | null)?.focus({ preventScroll: true });
     setFocused(false);
-    (event.currentTarget.querySelector("input[type=search]") as HTMLInputElement | null)?.blur();
   }
   return <div className="generic-place-picker" role="group" aria-label="地点选择" onFocus={() => setFocused(true)} onBlur={leave} onKeyDown={keyDown}>
-    <input type="search" value={query} onChange={(event) => { setQuery(event.target.value); onChange(null); }} placeholder={placeholder || "搜索酒店、机场、车站、景点、餐厅…"} aria-label="搜索真实地点" autoComplete="off" autoFocus={autoFocus} />
+    <input type="search" value={query} onClick={() => setFocused(true)} onChange={(event) => { setFocused(true); setQuery(event.target.value); onChange(null); }} placeholder={placeholder || "搜索酒店、机场、车站、景点、餐厅…"} aria-label="搜索真实地点" autoComplete="off" autoFocus={autoFocus} />
     {value && <small className="generic-place-current" role="status">已选择：{value.name}</small>}
     {showPopover && <div className="generic-place-popover">
       {!query.trim() && showExisting && choices.length > 0 && <small className="generic-place-popover-title">最近使用 · 当前住宿 · 想去地点</small>}

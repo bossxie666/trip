@@ -25,9 +25,14 @@ export function useModalLifecycle(open: boolean, surface: RefObject<HTMLElement 
     const targets = () => [...dialog.querySelectorAll<HTMLElement>('a[href],button,input,select,textarea,summary,[tabindex],[contenteditable="true"]')]
       .filter(node => node.tabIndex >= 0 && !node.matches(':disabled,[hidden],[aria-hidden="true"]') && node.getClientRects().length > 0 && getComputedStyle(node).visibility !== "hidden");
     const focusFirst = () => (targets()[0] || dialog).focus({ preventScroll: true });
-    const frame = requestAnimationFrame(() => { if (isTop()) focusFirst(); });
+    const frame = requestAnimationFrame(() => {
+      // Autofocus or a quick keyboard action may already have placed focus.
+      if (isTop() && !dialog.contains(document.activeElement)) focusFirst();
+    });
     const keydown = (event: KeyboardEvent) => {
-      if (!isTop()) return;
+      // Let a focused child (for example a place-search popup) consume Escape
+      // before dismissing the enclosing dialog. The stack still owns Tab.
+      if (!isTop() || event.defaultPrevented) return;
       if (event.key === "Escape") { event.preventDefault(); event.stopImmediatePropagation(); closeRef.current(); }
       if (event.key !== "Tab") return;
       const items = targets(), first = items[0], last = items.at(-1), active = document.activeElement;
@@ -37,13 +42,13 @@ export function useModalLifecycle(open: boolean, surface: RefObject<HTMLElement 
       }
     };
     const focusin = (event: FocusEvent) => { if (isTop() && event.target instanceof Node && !dialog.contains(event.target)) focusFirst(); };
-    document.addEventListener("keydown", keydown, true);
+    document.addEventListener("keydown", keydown);
     document.addEventListener("focusin", focusin);
     return () => {
       cancelAnimationFrame(frame);
       const wasTop = isTop(), index = openDialogs.indexOf(token);
       if (index >= 0) openDialogs.splice(index, 1);
-      document.removeEventListener("keydown", keydown, true);
+      document.removeEventListener("keydown", keydown);
       document.removeEventListener("focusin", focusin);
       if (!openDialogs.length) { restoreBody?.(); restoreBody = null; }
       if (wasTop && trigger?.isConnected) trigger.focus({ preventScroll: true });
