@@ -12,7 +12,18 @@ import { runAlbumUploadQueue } from "../components/media/album-upload-queue.ts";
 import { drainMediaDeletionQueue } from "../services/media-deletion.server.ts";
 import { editorRequest } from "../components/trip/editor-request.ts";
 import { waitForMapDocument } from "../components/trip/map-frame-document.ts";
+import { presenceLocalTime } from "../services/presence-time.ts";
 import { runWithVerifiedSession, verifiedRequestMemberId } from "../services/session-request-context.server.ts";
+
+test("renders presence instants in the trip timezone without shifting stored local times", () => {
+  assert.equal(presenceLocalTime("2027-03-01T02:15:00.000Z", "Asia/Shanghai"), "10:15");
+  assert.equal(presenceLocalTime("2027-03-01T02:15:00.000Z", "Asia/Tokyo"), "11:15");
+  assert.equal(presenceLocalTime("2027-03-01T16:00:00.000Z", "Asia/Shanghai"), "00:00");
+  assert.equal(presenceLocalTime("2027-03-01T02:15:00.000Z", "UTC"), "02:15");
+  assert.equal(presenceLocalTime("10:15", "Asia/Shanghai"), "10:15");
+  assert.equal(presenceLocalTime("invalid", "Asia/Shanghai"), "");
+  assert.equal(presenceLocalTime(null, "Asia/Shanghai"), "");
+});
 
 test("keeps verified session context isolated by concurrent request, token and database", async () => {
   const database = {};
@@ -428,8 +439,8 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   const css = ["globals.css", "workspace-base.css", "trip-books.css"].map(file => readFileSync(new URL(`../app/${file}`, import.meta.url), "utf8")).join("\n");
   const accommodation = readFileSync(new URL("../components/trip/BookingCreateControl.tsx", import.meta.url), "utf8");
   const transport = ["PlanAddControl.tsx", "PlanAddEditor.tsx"].map(file => readFileSync(new URL(`../components/trip/${file}`, import.meta.url), "utf8")).join("\n");
-  const presence = readFileSync(new URL("../components/trip/DayPresenceControl.tsx", import.meta.url), "utf8");
-  const placeDiscovery = readFileSync(new URL("../components/trip/PlaceDiscoveryControl.tsx", import.meta.url), "utf8");
+  const presence = ["DayPresenceControl.tsx", "DayPresenceEditor.tsx"].map(file => readFileSync(new URL(`../components/trip/${file}`, import.meta.url), "utf8")).join("\n");
+  const placeDiscovery = ["PlaceDiscoveryControl.tsx", "PlaceDiscoveryEditor.tsx"].map(file => readFileSync(new URL(`../components/trip/${file}`, import.meta.url), "utf8")).join("\n");
   const bookingEdit = readFileSync(new URL("../components/trip/BookingEditControl.tsx", import.meta.url), "utf8");
   const budget = readFileSync(new URL("../components/trip/BudgetWorkspace.tsx", import.meta.url), "utf8");
   const overlay = readFileSync(new URL("../components/trip/WorkspaceOverlay.tsx", import.meta.url), "utf8");
@@ -463,8 +474,10 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   assert.match(accommodation, /EditorDialog/);
   assert.match(accommodation, /dirty=\{dirty\} busy=\{saving\}/);
   assert.match(transport, /EditorDialog/);
-  assert.match(presence, /WorkspaceOverlay/);
-  assert.match(placeDiscovery, /WorkspaceOverlay/);
+  assert.match(presence, /EditorDialog/);
+  assert.match(presence, /dirty=\{dirty\} busy=\{saving\}/);
+  assert.match(placeDiscovery, /EditorDialog/);
+  assert.match(placeDiscovery, /dirty=\{dirty\} busy=\{saving\}/);
   assert.match(bookingEdit, /EditorDialog/);
   assert.match(bookingEdit, /busy=\{saving\}/);
   assert.match(bookingEdit, /确认删除/);
@@ -499,9 +512,9 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
 
 test("releases save state after success, API errors, refresh errors, and request failures", () => {
   const files = [
-    "PlanAddEditor.tsx", "PlaceDiscoveryControl.tsx", "RecommendationAddControl.tsx",
+    "PlanAddEditor.tsx", "PlaceDiscoveryEditor.tsx", "RecommendationAddControl.tsx",
     "BookingCreateControl.tsx", "BookingEditControl.tsx", "BookingPlaceControl.tsx",
-    "BudgetWorkspace.tsx", "DayPresenceControl.tsx", "EditTripDialog.tsx",
+    "BudgetWorkspace.tsx", "DayPresenceEditor.tsx", "EditTripDialog.tsx",
     "ItineraryItemControl.tsx", "ItineraryItemPlaceControl.tsx", "ItineraryOrderControls.tsx",
     "NewTripForm.tsx", "PlanMap.tsx",
   ];
@@ -547,7 +560,7 @@ test("keeps the performance boundaries for metadata, workspace views, and client
   assert.doesNotMatch(budgetWorkspace, /<a\b[^>]*href=/);
   assert.match(planMap, /WorkspaceNavLink as Link/);
   assert.doesNotMatch(planMap, /<a\b[^>]*href=/);
-  for (const file of ["PlanAddControl.tsx", "PlanAddEditor.tsx", "ItineraryItemControl.tsx", "ItineraryOrderControls.tsx", "BookingCreateControl.tsx", "BookingEditControl.tsx", "BookingPlaceControl.tsx", "DayPresenceControl.tsx", "PlaceDiscoveryControl.tsx", "ItineraryItemPlaceControl.tsx", "RecommendationAddControl.tsx", "BudgetWorkspace.tsx", "PlanMap.tsx"]) {
+  for (const file of ["PlanAddControl.tsx", "PlanAddEditor.tsx", "ItineraryItemControl.tsx", "ItineraryOrderControls.tsx", "BookingCreateControl.tsx", "BookingEditControl.tsx", "BookingPlaceControl.tsx", "DayPresenceControl.tsx", "DayPresenceEditor.tsx", "PlaceDiscoveryControl.tsx", "PlaceDiscoveryEditor.tsx", "ItineraryItemPlaceControl.tsx", "RecommendationAddControl.tsx", "BudgetWorkspace.tsx", "PlanMap.tsx"]) {
     const source = readFileSync(new URL(`../components/trip/${file}`, import.meta.url), "utf8");
     assert.doesNotMatch(source, /location\.(reload|assign)/, `${file} should use router invalidation`);
   }
@@ -955,6 +968,23 @@ test("creates and persists inspiration and planning trips", async () => {
 test("avoids duplicate slugs", async () => {
   const duplicate = await createTrip({ title: "Tokyo Spring", status: "planning", cities: ["东京"], startDate: "2027-04-10", endDate: "2027-04-10", people: 1 });
   assert.equal(duplicate.slug, "tokyo-spring-2027-2");
+});
+
+test("rejects nonexistent trip members before creating or changing any trip data", async () => {
+  const snapshot = () => JSON.stringify(["trips", "cities", "trip_cities", "days", "trip_members"].map(table => DB.database.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()));
+  const missingMember = `missing-${crypto.randomUUID()}`;
+  const beforeCreate = snapshot();
+  const invalid = { title: "不得残留的新行程", status: "planning", cities: ["不得创建的城市"], startDate: "2035-01-01", endDate: "2035-01-03", memberIds: [missingMember], people: 1 };
+  const createResponse = await render("/api/trips", { method: "POST", body: invalid });
+  assert.equal(createResponse.status, 400);
+  assert.equal((await createResponse.json()).code, "INVALID_TRIP_MEMBERS");
+  assert.equal(snapshot(), beforeCreate);
+  const trip = await createTrip({ title: "保留原行程", status: "planning", cities: [], startDate: "2035-01-01", endDate: "2035-01-02", memberIds: ["member-nini"] });
+  const beforeUpdate = snapshot();
+  const updateResponse = await render(`/api/trips/${trip.slug}`, { method: "PUT", body: invalid });
+  assert.equal(updateResponse.status, 400);
+  assert.match((await updateResponse.json()).error, /所选成员不存在/);
+  assert.equal(snapshot(), beforeUpdate);
 });
 
 test("returns a normal Not Found page for an unknown trip", async () => {

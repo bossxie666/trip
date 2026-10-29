@@ -31,7 +31,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     const state = row.presenceCoverage !== "complete" || !Number.isFinite(start) ? "unknown" : memberWindows.some((window) => window.start <= start && end <= window.end) ? "present" : memberWindows.some((window) => window.start < end && window.end > start) ? "unknown" : "absent";
     return [row.memberId, { state, startsAt: null, endsAt: null }];
   }));
-  return Response.json({ day: { id: day.id, title: day.title, date: day.date }, members, states: Object.fromEntries(Object.entries(details).map(([id, value]) => [id, (value as { state: string }).state])), details });
+  return Response.json({ day: { id: day.id, title: day.title, date: day.date }, timezone, members, states: Object.fromEntries(Object.entries(details).map(([id, value]) => [id, (value as { state: string }).state])), details });
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ slug: string }> }) {

@@ -287,6 +287,12 @@
 .plan-add-editor .plan-add-kind{margin:0;grid-template-columns:repeat(2,minmax(0,1fr))}
 .plan-add-editor .plan-add-kind button{font-size:13px;line-height:1.5;overflow-wrap:anywhere}
 .plan-add-fields{display:grid;gap:14px;min-width:0}
+.presence-editor-members{display:grid;gap:12px;min-width:0}
+.presence-editor-options,.presence-shortcuts{display:flex;flex-wrap:wrap;gap:8px}
+.presence-editor-options label{display:flex;align-items:center;gap:6px;min-height:36px;padding:5px;font-size:13px;line-height:1.5}
+.presence-shortcuts button{min-height:36px;border:1px solid var(--line);border-radius:6px;background:var(--paper);padding:7px 10px;font-size:13px}
+.presence-editor-times{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:10px}
+.presence-editor-times label{display:grid;gap:7px;min-width:0;font-size:13px;line-height:1.5}
 .plan-add-fields>label,.plan-add-place-field{display:grid;gap:7px;min-width:0;font-size:13px;line-height:1.5}
 .plan-add-editor .plan-add-two-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 @media(max-width:680px){.plan-add-editor .plan-add-two-columns{grid-template-columns:minmax(0,1fr)}}

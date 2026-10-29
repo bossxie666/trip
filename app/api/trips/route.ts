@@ -38,7 +38,8 @@ export async function POST(request: Request) {
 
     const trip = await createTrip({ title, status: status as CreateTripInput["status"], cities, startDate, endDate, people: Math.max(1, memberIds.length || people), cover, memberIds }, actor.id);
     return Response.json({ trip }, { status: 201 });
-  } catch {
-    return Response.json({ error: "创建失败，行程没有保存，请重试。" }, { status: 500 });
+  } catch (error) {
+    if (error instanceof Error && error.message === "INVALID_TRIP_MEMBERS") return Response.json({ error: "所选成员不存在，请刷新成员列表后重试。", code: "INVALID_TRIP_MEMBERS" }, { status: 400 });
+    return Response.json({ error: "创建失败，请刷新列表确认后重试。" }, { status: 500 });
   }
 }

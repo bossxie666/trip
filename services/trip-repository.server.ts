@@ -326,8 +326,17 @@ async function uniqueSlug(base: string) {
   throw new Error("无法生成唯一行程地址，请稍后重试。");
 }
 
+async function validatedTripMemberIds(input: string[], actorMemberId: string) {
+  const ids = [...new Set([...input, actorMemberId])];
+  const members = await getDb().select({ id: memberRecords.id }).from(memberRecords).where(inArray(memberRecords.id, ids));
+  if (members.length !== ids.length) throw new Error("INVALID_TRIP_MEMBERS");
+  return ids;
+}
+
 export async function createTrip(input: CreateTripInput, actorMemberId: string) {
   const db = getDb();
+  // Validate the whole member set before inserting a trip, cities or days.
+  const memberIds = await validatedTripMemberIds(input.memberIds, actorMemberId);
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const slug = await uniqueSlug(createStableSlugBase(input.title, input.startDate, id));
@@ -372,7 +381,6 @@ export async function createTrip(input: CreateTripInput, actorMemberId: string) 
     })));
   }
 
-  const memberIds = [...new Set([...input.memberIds, actorMemberId])];
   if (memberIds.length) await db.insert(tripMemberRecords).values(memberIds.map((memberId) => ({ tripId: id, memberId })));
 
   return (await findTripBySlug(slug))!;
@@ -433,7 +441,7 @@ export async function updateTrip(slug: string, input: UpdateTripInput, actorMemb
     .where(and(eq(tripMemberRecords.tripId, row.id), eq(tripMemberRecords.memberId, actorMemberId)))
     .limit(1);
   if (!actorMembership[0]) throw new Error("TRIP_MEMBER_FORBIDDEN");
-  const memberIds = [...new Set([...input.memberIds, actorMemberId])];
+  const memberIds = await validatedTripMemberIds(input.memberIds, actorMemberId);
   const currentMembers = await db.select().from(tripMemberRecords).where(eq(tripMemberRecords.tripId, row.id));
   const currentIds = new Set(currentMembers.map((member) => member.memberId)), requestedIds = new Set(memberIds);
   const d1 = getRuntimeEnv().DB;
