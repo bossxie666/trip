@@ -1,3 +1,4 @@
+import { TripMapToolbar } from "./TripMapToolbar";
 import dynamic from "next/dynamic";
 import { PlanningPanels } from "./PlanningPanels";
 import { WorkspaceNavLink } from "./WorkspaceNavLink";
@@ -50,7 +51,7 @@ function bookingTime(booking: Workspace["bookings"][number]["booking"]) {
   return `${shortDate(booking.startDateLocal)}–${shortDate(booking.endDateLocal)}`;
 }
 
-export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query, areaFilter, categoryFilter, memberFilter = "all", costMode = "expected" }: { workspace: Workspace; activeDayId: string; view: View; mapMode: MapMode; query: string; areaFilter: AreaFilter; categoryFilter: CategoryFilter; memberFilter?: string; costMode?: "expected" | "actual" }) {
+export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query, areaFilter, categoryFilter, memberFilter = "all", costMode = "expected", mapTrips = [] }: { mapTrips?: { slug: string; title: string }[]; workspace: Workspace; activeDayId: string; view: View; mapMode: MapMode; query: string; areaFilter: AreaFilter; categoryFilter: CategoryFilter; memberFilter?: string; costMode?: "expected" | "actual" }) {
   const { trip, days, bookings } = workspace;
   const activeDay = days.find((day) => day.id === activeDayId) || days[0];
   const dayLabels = days.map((day) => ({ id: day.id, label: `${shortDate(day.date)} ${dayArea(day, bookings, trip.cities)}` }));
@@ -173,6 +174,8 @@ export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query
   };
 
 
+  if (view === "map") return <main className="standalone-map"><TripMapToolbar slug={trip.slug} trips={mapTrips} days={workspace.days} dayId={activeDayId} mode={mapMode} /><PlanMap slug={trip.slug} places={[]} workspace={mapWorkspace} activeDayId={activeDayId} mapMode={mapMode} /></main>;
+
   const hotelBookings = bookings.filter(({ booking }) => booking.type === "hotel");
   const accommodation = summarizeAccommodation(hotelBookings.map(({ booking }) => booking), workspace.costLines || []);
   const accommodationAmount = accommodation.amounts.length === 1
@@ -186,7 +189,6 @@ export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query
     <DayNavigation items={days.map((day) => ({ id: day.id, href: link(view, day.id), dateLabel: shortDate(day.date), areaLabel: dayArea(day, bookings, trip.cities), active: day.id === activeDayId }))} />
     <nav className="plan-view-tabs" aria-label="工作台视图"><WorkspaceNavLink className={view === "planning" ? "active" : ""} href={link("planning")}>规划</WorkspaceNavLink><WorkspaceNavLink className={view === "budget" ? "active" : ""} href={link("budget")}>费用</WorkspaceNavLink></nav>
     {view === "planning" && <><div className="empty-trip-actions"><PlaceDiscoveryControl slug={trip.slug} days={dayLabels} defaultDayId={activeDayId} existingPlaces={existingPlaceChoices} /></div><PlanningPanels library={<KnowledgeTripPicker slug={trip.slug} days={dayLabels} defaultDayId={activeDayId} />} itinerary={itinerary} map={<PlanningDesktopMap slug={trip.slug} workspace={mapWorkspace} activeDayId={activeDayId} mapMode="day" fullHref={link("map", activeDayId, "day")} />} /></>}
-    {view === "map" && <section className="map-view"><header className="workspace-view-heading"><div><span>MAP</span><h2>{mapMode === "day" ? "行程路线" : "攻略地图"}</h2></div><nav><Link className={mapMode === "day" ? "active" : ""} href={link("map", activeDayId, "day")}>行程路线</Link><Link className={mapMode === "library" ? "active" : ""} href={link("map", activeDayId, "library")}>攻略地图</Link></nav></header><PlanMap slug={trip.slug} places={[]} workspace={mapWorkspace} activeDayId={activeDayId} mapMode={mapMode} /></section>}
     {view === "budget" && <BudgetWorkspace slug={trip.slug} budget={workspace.budget} members={(trip.members || []).map((member) => ({ id: member.id, displayName: member.displayName }))} days={dayLabels} cities={trip.cities.map((city) => ({ id: city.id, name: city.name }))} routeSegmentsByDay={workspace.routeSegmentsByDay} routePreferences={workspace.routePreferences} costMode={costMode} />}
   </main></TripBookShell>;
 }

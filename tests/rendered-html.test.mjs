@@ -228,6 +228,13 @@ test("opens the current trip map from the main navigation while keeping workspac
     assert.match(primary, /member=all/);
     assert.match(primary, /day=/);
     const tabs = html.match(/<nav class="plan-view-tabs"[\s\S]*?<\/nav>/)?.[0];
+    if (view === "map") {
+      assert.equal(tabs, undefined);
+      assert.match(html, /standalone-map/);
+      assert.match(html, /选择地图行程/);
+      assert.doesNotMatch(html, /class="trip-console"/);
+      continue;
+    }
     assert.ok(tabs);
     assert.match(tabs, />规划<\/a>/);
     assert.match(tabs, />费用<\/a>/);
@@ -235,7 +242,8 @@ test("opens the current trip map from the main navigation while keeping workspac
     if (view === "map") assert.match(primary, /class="active" href="[^"]*view=map/);
   }
   const mapIndex = await render("/map");
-  assert.match(await mapIndex.text(), /class="active" href="\/map"/);
+  assert.ok([302, 307].includes(mapIndex.status));
+  assert.match(mapIndex.headers.get("location"), /\/trips\/[^/]+\/plan\?view=map/);
 });
 
 // Each test represents an independent client window; requests within a test share counters.
@@ -710,7 +718,7 @@ test("keeps all Stage A routes available", async () => {
   assert.match(homeHtml, /<a[^>]+href="\/trips"[^>]*>[\s\S]*?我的旅行[\s\S]*?<\/a>/);
   assert.match(homeHtml, /<h2>照片<\/h2>/);
   assert.match(homeHtml, /留言板/);
-  assert.equal(cities.status, 200); assert.equal(city.status, 200); assert.equal(map.status, 200);
+  assert.equal(cities.status, 200); assert.equal(city.status, 200); assert.ok([302, 307].includes(map.status));
 });
 
 test("city pages use actual authorized destinations, trips and linked albums", async () => {
@@ -1275,7 +1283,8 @@ test("keeps production workspace navigation targets and member perspective seman
     for (const response of [planning, map, budget, nextDay, memberView]) assert.equal(response.status, 200);
     const [planningHtml, mapHtml, budgetHtml, nextDayHtml, memberHtml] = await Promise.all([planning.text(), map.text(), budget.text(), nextDay.text(), memberView.text()]);
     assert.match(planningHtml, /aria-label="工作台视图"[\s\S]*view=map/);
-    assert.match(mapHtml, /<h2>行程路线<\/h2>/);
+    assert.match(mapHtml, /standalone-map/);
+    assert.match(mapHtml, /选择地图视图/);
     assert.match(budgetHtml, /<h2>我的费用<\/h2>/);
     assert.match(nextDayHtml, /<h2>09\/24/);
     assert.match(memberHtml, /<a(?=[^>]*member=member-liu-xu)(?=[^>]*class="active")[^>]*>刘徐<\/a>/);
