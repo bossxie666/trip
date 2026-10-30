@@ -217,6 +217,67 @@ async function loginAs(memberName) {
 
 await login();
 
+// Each test represents an independent client window; requests within a test share counters.
+test.beforeEach(() => DB.database.exec("DELETE FROM rate_limits"));
+
+test("invited registration creates a normal member, signs in and rejects duplicate identities", async () => {
+  const savedSession = sessionCookie;
+  const body = { memberName: "新旅伴", inviteCode: "test-invite", password: "registration-pass-2026", confirmPassword: "registration-pass-2026", role: "admin" };
+  let id;
+  try {
+    sessionCookie = "";
+    const page = await render("/register?returnTo=%2Ftrips");
+    assert.equal(page.status, 200);
+    assert.match(await page.text(), /注册并进入旅行空间/);
+    const loginPage = await render("/unlock");
+    assert.match(await loginPage.text(), /还没有账号？注册加入/);
+    assert.equal((await render("/api/register", { method: "POST", body: null })).status, 400);
+    assert.equal((await render("/api/register", { method: "POST", body: { ...body, memberName: 123 } })).status, 400);
+    assert.equal((await render("/api/register", { method: "POST", body: { ...body, password: "short" } })).status, 400);
+    assert.equal((await render("/api/register", { method: "POST", body: { ...body, confirmPassword: "different" } })).status, 400);
+    assert.equal((await render("/api/register", { method: "POST", body: { ...body, inviteCode: "wrong" } })).status, 403);
+    assert.equal((await render("/api/register", { method: "POST", body, headers: { origin: "https://evil.example" } })).status, 403);
+    const created = await render("/api/register", { method: "POST", body });
+    assert.equal(created.status, 201);
+    id = (await created.json()).member.id;
+    const cookie = created.headers.get("set-cookie");
+    assert.match(cookie, /HttpOnly; Secure; SameSite=Lax/);
+    sessionCookie = cookie.split(";")[0];
+    assert.equal((await render("/api/member")).status, 200);
+    assert.equal(DB.database.prepare("SELECT role FROM members WHERE id=?").get(id).role, "member");
+    assert.notEqual(DB.database.prepare("SELECT password_digest FROM member_credentials WHERE member_id=?").get(id).password_digest, body.password);
+    assert.equal((await render("/api/register", { method: "POST", body })).status, 409);
+    assert.equal((await render("/api/session", { method: "POST", body: { memberName: body.memberName, password: body.password } })).status, 200);
+    assert.equal((await render("/api/session", { method: "POST", body: { memberName: body.memberName, password: "incorrect" } })).status, 401);
+    assert.equal((await render("/api/register", { method: "POST", body: { ...body, memberName: "NINI" } })).status, 409);
+    for (let attempt = 0; attempt < 2; attempt += 1) assert.equal((await render("/api/register", { method: "POST", body: { ...body, inviteCode: "wrong" } })).status, 403);
+    assert.equal((await render("/api/register", { method: "POST", body: { ...body, memberName: "其他成员" } })).status, 429);
+    // Already blocked counters must remain blocked on subsequent attempts.
+    assert.equal((await render("/api/register", { method: "POST", body })).status, 429);
+  } finally {
+    sessionCookie = savedSession;
+    DB.database.exec("DELETE FROM rate_limits");
+    if (id) { DB.database.prepare("DELETE FROM member_sessions WHERE member_id=?").run(id); DB.database.prepare("DELETE FROM member_credentials WHERE member_id=?").run(id); DB.database.prepare("DELETE FROM members WHERE id=?").run(id); }
+  }
+});
+
+test("registration storage failure rolls back the member and permits a clean retry", async () => {
+  const body = { memberName: "rollback-traveler", inviteCode: "test-invite", password: "registration-pass-2026", confirmPassword: "registration-pass-2026" };
+  let id;
+  try {
+    DB.failBatchAt = 2;
+    assert.equal((await render("/api/register", { method: "POST", body })).status, 503);
+    assert.equal(DB.database.prepare("SELECT id FROM members WHERE name=?").get(body.memberName), undefined);
+    const retry = await render("/api/register", { method: "POST", body });
+    assert.equal(retry.status, 201);
+    id = (await retry.json()).member.id;
+  } finally {
+    DB.failBatchAt = null;
+    DB.database.exec("DELETE FROM rate_limits");
+    if (id) { DB.database.prepare("DELETE FROM member_sessions WHERE member_id=?").run(id); DB.database.prepare("DELETE FROM member_credentials WHERE member_id=?").run(id); DB.database.prepare("DELETE FROM members WHERE id=?").run(id); }
+  }
+});
+
 test("serves the browser favicon fallback without authentication or a missing page", async () => {
   DB.sessionSelectCount = 0;
   const response = await render("/favicon.ico", { headers: { cookie: "" } });

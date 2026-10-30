@@ -39,6 +39,8 @@ const publicAssetFiles = new Set(["/favicon.svg", "/file.svg", "/globe.svg", "/w
 
 function isPublicPath(pathname: string) {
   return pathname === "/unlock"
+    || pathname === "/register"
+    || pathname === "/api/register"
     || pathname === "/api/session"
     || publicAssetFiles.has(pathname)
     || publicAssetPrefixes.some((prefix) => pathname.startsWith(prefix));

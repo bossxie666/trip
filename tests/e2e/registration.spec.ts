@@ -1,0 +1,33 @@
+import { test, expect } from "@playwright/test";
+import { fixtureRequest } from "./session";
+
+test("registers an invited member, preserves the destination and supports later password login", async ({ page }, info) => {
+  const name = `traveler-${info.project.name}-${Date.now()}`, password = "local-traveler-pass-2026";
+  await page.goto("/unlock?returnTo=%2Ftrips");
+  await page.getByRole("link", { name: "还没有账号？注册加入" }).click();
+  await expect(page).toHaveURL(/\/register\?returnTo=%2Ftrips/);
+  await page.getByLabel("你的名字", { exact: true }).fill(name);
+  await page.getByLabel("邀请码", { exact: true }).fill("test-invite");
+  await page.getByLabel("个人密码", { exact: true }).fill(password);
+  await page.getByLabel("确认个人密码", { exact: true }).fill("mismatched-password");
+  await page.getByRole("button", { name: "注册并进入旅行空间" }).click();
+  await expect(page.getByRole("alert")).toHaveText("两次输入的个人密码不一致。");
+  await page.getByLabel("确认个人密码", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "注册并进入旅行空间" }).click();
+  await expect(page).toHaveURL(/\/trips$/);
+  const member = await fixtureRequest(page, "GET", "/api/member");
+  expect((await member.json()).member.role).toBe("member");
+  await fixtureRequest(page, "DELETE", "/api/session");
+  await page.goto("/register");
+  await page.getByLabel("你的名字", { exact: true }).fill(name);
+  await page.getByLabel("邀请码", { exact: true }).fill("test-invite");
+  await page.getByLabel("个人密码", { exact: true }).fill(password);
+  await page.getByLabel("确认个人密码", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "注册并进入旅行空间" }).click();
+  await expect(page.getByRole("alert")).toContainText("这个名字已被使用");
+  await page.getByRole("link", { name: "已有账号？返回登录" }).click();
+  await page.getByLabel("你的名字", { exact: true }).fill(name);
+  await page.getByLabel("旅行空间暗号或个人密码", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "进入旅行空间", exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
+});

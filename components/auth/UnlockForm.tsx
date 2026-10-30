@@ -30,5 +30,6 @@ export function UnlockForm({ returnTo = "/" }: { returnTo?: string }) {
     <button disabled={loading}>{loading ? "正在处理…" : activationRequired ? "设置密码并进入" : "进入旅行空间"}</button>
     {!activationRequired && <button className="unlock-forgot" type="button" onClick={() => setRecoveryOpen((value) => !value)}>忘记密码</button>}
     {recoveryOpen && <p className="unlock-recovery" role="status">请联系网站管理员。管理员在右上角头像的“管理成员”中重置后，你可以用原旅行空间暗号重新设置个人密码。</p>}
+    <a className="unlock-auth-link" href={`/register?returnTo=${encodeURIComponent(returnTo)}`}>还没有账号？注册加入</a>
   </form>;
 }

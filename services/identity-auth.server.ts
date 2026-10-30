@@ -34,12 +34,16 @@ export async function credentialStatus(memberId: string) {
   try { return await getRuntimeEnv().DB.prepare("SELECT credential_status FROM members WHERE id = ? LIMIT 1").bind(memberId).first<{ credential_status: "legacy" | "active" | "disabled" }>(); }
   catch { return null; }
 }
-export async function activateCredential(memberId: string, password: string) {
+export async function createPasswordCredential(password: string) {
   validatePassword(password);
   const salt = new Uint8Array(16); crypto.getRandomValues(salt);
-  const digest = await derive(password, salt), now = new Date().toISOString(), db = getRuntimeEnv().DB;
+  return { salt: toBase64(salt), digest: toBase64(await derive(password, salt)) };
+}
+export async function activateCredential(memberId: string, password: string) {
+  const credential = await createPasswordCredential(password);
+  const now = new Date().toISOString(), db = getRuntimeEnv().DB;
   await db.batch([
-    db.prepare("INSERT INTO member_credentials (member_id, algorithm, algorithm_version, salt, password_digest, updated_at) VALUES (?, 'pbkdf2-sha256-6x100k', 2, ?, ?, ?) ON CONFLICT(member_id) DO UPDATE SET algorithm=excluded.algorithm, algorithm_version=excluded.algorithm_version, salt=excluded.salt, password_digest=excluded.password_digest, updated_at=excluded.updated_at").bind(memberId, toBase64(salt), toBase64(digest), now),
+    db.prepare("INSERT INTO member_credentials (member_id, algorithm, algorithm_version, salt, password_digest, updated_at) VALUES (?, 'pbkdf2-sha256-6x100k', 2, ?, ?, ?) ON CONFLICT(member_id) DO UPDATE SET algorithm=excluded.algorithm, algorithm_version=excluded.algorithm_version, salt=excluded.salt, password_digest=excluded.password_digest, updated_at=excluded.updated_at").bind(memberId, credential.salt, credential.digest, now),
     db.prepare("UPDATE members SET credential_status = 'active', last_login_at = ? WHERE id = ?").bind(now, memberId),
     db.prepare("UPDATE member_sessions SET revoked_at = ? WHERE member_id = ? AND revoked_at IS NULL").bind(now, memberId),
   ]);
