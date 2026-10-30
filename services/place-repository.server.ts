@@ -56,11 +56,12 @@ export async function createManualPlace(slug: string, input: { name: string; cit
   const trip = await getStoredTripForMember(slug, actorMemberId);
   const cityLink = await db.select().from(tripCityRecords).where(and(eq(tripCityRecords.tripId, trip.id), eq(tripCityRecords.cityId, input.cityId))).limit(1);
   if (!cityLink.length) throw new Error("CITY_NOT_IN_TRIP");
-  const existing = (await db.select().from(placeRecords).where(and(eq(placeRecords.cityId, input.cityId), eq(placeRecords.name, input.name))).limit(1))[0];
-  if (existing) return existing;
-  const now = new Date().toISOString();
   if (input.longitude != null && (!Number.isFinite(input.longitude) || input.longitude < -180 || input.longitude > 180)) throw new Error("INVALID_LONGITUDE");
   if (input.latitude != null && (!Number.isFinite(input.latitude) || input.latitude < -90 || input.latitude > 90)) throw new Error("INVALID_LATITUDE");
+  const sameName = await db.select().from(placeRecords).where(and(eq(placeRecords.cityId, input.cityId), eq(placeRecords.name, input.name)));
+  const existing = sameName.find(place => place.address === input.address && place.longitude === (input.longitude ?? null) && place.latitude === (input.latitude ?? null));
+  if (existing) return existing;
+  const now = new Date().toISOString();
   const place = { id: crypto.randomUUID(), name: input.name, cityId: input.cityId, address: input.address, latitude: input.latitude ?? null, longitude: input.longitude ?? null, coordinateSystem: input.latitude != null && input.longitude != null ? "GCJ02" as const : null, provider: "manual" as const, providerPlaceId: null, createdByMemberId: actorMemberId, updatedByMemberId: actorMemberId, createdAt: now, updatedAt: now };
   await db.insert(placeRecords).values(place); return place;
 }

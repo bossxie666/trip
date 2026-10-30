@@ -2133,3 +2133,19 @@ test("paginates album dates and filters without missing photos or limiting full 
     await render(`/api/trips/${trip.slug}`, { method: "DELETE" });
   }
 });
+
+
+test("manual points retain distinct coordinates for equal names and reject invalid retries", async () => {
+  const trip = await createTrip({ title: "Manual coordinate identity", status: "planning", cities: ["上海"], startDate: "2028-11-01", endDate: "2028-11-01", memberIds: ["member-nini"] });
+  const cityId = DB.database.prepare("SELECT city_id FROM trip_cities WHERE trip_id=?").get(trip.id).city_id;
+  const input = { name: `同名集合点-${trip.id}`, address: "入口", cityId, longitude: 121.4737, latitude: 31.2304 };
+  const endpoint = `/api/trips/${trip.slug}/plan/places`;
+  const first = await render(endpoint, { method: "POST", body: input }); assert.equal(first.status, 201);
+  const original = (await first.json()).place;
+  const retry = await render(endpoint, { method: "POST", body: input }); assert.equal((await retry.json()).place.id, original.id);
+  const moved = await render(endpoint, { method: "POST", body: { ...input, longitude: 121.49 } });
+  const other = (await moved.json()).place; assert.notEqual(other.id, original.id); assert.equal(other.longitude, 121.49);
+  const before = DB.database.prepare("SELECT * FROM places WHERE name=? ORDER BY id").all(input.name);
+  const invalid = await render(endpoint, { method: "POST", body: { ...input, latitude: 120 } }); assert.equal(invalid.status, 400);
+  assert.deepEqual(DB.database.prepare("SELECT * FROM places WHERE name=? ORDER BY id").all(input.name), before);
+});

@@ -4,6 +4,9 @@ VALUES ('member-nini', 'nini', 'nini', 1, '2026-01-01T00:00:00.000Z', 'admin', '
 INSERT OR IGNORE INTO members (id, name, display_name, active, created_at, role, credential_status)
 VALUES ('member-e2e-presence', 'presence-test', '成员测试', 1, '2026-01-01T00:00:00.000Z', 'member', 'legacy');
 
+-- Keep isolated browser fixtures independent of external geocoding services.
+UPDATE cities SET center_lat = 31.2304, center_lng = 121.4737 WHERE id = 'city-shadow-shanghai';
+
 INSERT OR IGNORE INTO trips (id, slug, title, status, start_date, end_date, people, cover, timezone, created_at, updated_at, protected, created_by_member_id, updated_by_member_id)
 VALUES ('trip-e2e', 'e2e-shanghai', '上海测试旅行', 'planning', '2026-10-01', '2026-10-02', 1, NULL, 'Asia/Shanghai', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 0, 'member-nini', 'member-nini');
 
