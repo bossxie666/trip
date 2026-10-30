@@ -841,9 +841,9 @@
   gap: 12px;
   min-height: 88px;
   padding: 16px 20px;
-  background: url("/assets/homepage-v3/paper-note-01.webp") center / 100% 100% no-repeat;
+  background: transparent;
   text-decoration: none;
-  filter: drop-shadow(0 5px 6px rgba(71, 56, 36, .1));
+  filter: none;
 }
 .map-index-entry > span { color: var(--home-red); font: 800 9px var(--font-geist-mono); }
 .map-index-entry strong { font-family: "KaiTi", serif; font-size: 23px; }
