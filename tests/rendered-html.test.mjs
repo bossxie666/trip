@@ -217,6 +217,27 @@ async function loginAs(memberName) {
 
 await login();
 
+test("opens the current trip map from the main navigation while keeping workspace tabs compact", async () => {
+  for (const view of ["planning", "map", "budget"]) {
+    const response = await render(`/trips/shanghai-hangzhou-2026/plan?view=${view}&member=all&mode=library`);
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    const primary = html.match(/<nav class="site-desktop-nav"[\s\S]*?<\/nav>/)?.[0];
+    assert.ok(primary);
+    assert.match(primary, /href="\/trips\/shanghai-hangzhou-2026\/plan\?[^"\s]*view=map/);
+    assert.match(primary, /member=all/);
+    assert.match(primary, /day=/);
+    const tabs = html.match(/<nav class="plan-view-tabs"[\s\S]*?<\/nav>/)?.[0];
+    assert.ok(tabs);
+    assert.match(tabs, />规划<\/a>/);
+    assert.match(tabs, />费用<\/a>/);
+    assert.doesNotMatch(tabs, />地图<\/a>/);
+    if (view === "map") assert.match(primary, /class="active" href="[^"]*view=map/);
+  }
+  const mapIndex = await render("/map");
+  assert.match(await mapIndex.text(), /class="active" href="\/map"/);
+});
+
 // Each test represents an independent client window; requests within a test share counters.
 test.beforeEach(() => DB.database.exec("DELETE FROM rate_limits"));
 
@@ -574,7 +595,7 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   assert.match(mobileNavigation, />我的旅行</);
   assert.match(mobileNavigation, />相册</);
   assert.match(mobileNavigation, />留言</);
-  assert.doesNotMatch(mobileNavigation, />地图</);
+  assert.match(mobileNavigation, />地图</);
   assert.match(desktopMap, /IntersectionObserver/);
   assert.match(desktopMap, /rootMargin: "240px 0px"/);
   assert.match(desktopMap, /dynamic<PlanMapProps>/);

@@ -39,5 +39,11 @@ export default async function TripPlanPage({ params, searchParams }: { params: P
         ? actor.id
         : "all";
   const costMode = query.cost === "actual" ? "actual" : "expected";
-  return <><SiteHeader active="trips" currentMember={{ id: actor!.id, displayName: actor!.displayName, avatar: actor!.avatar, role: actor!.role }} /><TripPlanWorkspace workspace={workspace} activeDayId={activeDayId} view={view} mapMode={mapMode} query={(query.q || "").trim()} areaFilter={areaFilter} categoryFilter={categoryFilter} memberFilter={memberFilter} costMode={costMode} /></>;
+  const mapQuery = new URLSearchParams(Object.entries(query).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
+  mapQuery.set("view", "map");
+  mapQuery.set("day", activeDayId);
+  mapQuery.set("mode", mapMode);
+  mapQuery.set("member", memberFilter);
+  const mapHref = "/trips/" + encodeURIComponent(slug) + "/plan?" + mapQuery.toString();
+  return <><SiteHeader active={view === "map" ? "map" : "trips"} mapHref={mapHref} currentMember={{ id: actor!.id, displayName: actor!.displayName, avatar: actor!.avatar, role: actor!.role }} /><TripPlanWorkspace workspace={workspace} activeDayId={activeDayId} view={view} mapMode={mapMode} query={(query.q || "").trim()} areaFilter={areaFilter} categoryFilter={categoryFilter} memberFilter={memberFilter} costMode={costMode} /></>;
 }
