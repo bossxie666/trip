@@ -70,8 +70,8 @@
 
 .album-empty {
   border: 0;
-  background: url("/assets/homepage-v3/paper-note-01.webp") center / 100% 100% no-repeat;
-  filter: drop-shadow(0 7px 8px rgba(71, 56, 36, .12));
+  background: transparent;
+  filter: none;
 }
 
 .album-card {
