@@ -24,6 +24,9 @@ test("opens the supplied 3D book, changes chapters, closes and returns safely",a
   await page.waitForTimeout(2200);
   await page.locator("#scene-close").click();
   await expect(wrap).toHaveAttribute("data-state","closed");
+  await expect(page.locator("#chapter-links")).toHaveText("");
+  const emptyCollection=page.locator(".memory-strip.is-empty");
+  if(await emptyCollection.count())expect((await emptyCollection.boundingBox())!.height).toBeLessThan(70);
   expect(await page.locator("audio").getAttribute("src")).toBeNull();
   for(const width of [320,375,390,430,1024,1360]){
     await page.setViewportSize({width,height:900});
