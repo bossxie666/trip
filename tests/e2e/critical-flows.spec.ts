@@ -20,7 +20,7 @@ test("keeps the reserved mobile menu and bottom navigation available", async ({ 
   await page.goto("/");
   await expect(page.locator(".site-mobile-tools")).toBeVisible();
   await expect(page.locator(".site-mobile-nav")).toBeVisible();
-  await expect(page.getByAltText("跳进地理书的旅行")).toBeVisible();
+  await expect(page.locator('canvas[aria-label*="跳进地理书的旅行"]')).toBeVisible();
 });
 
 test("has no critical accessibility violations on primary pages", async ({ page }) => {

@@ -357,7 +357,7 @@ test("loads homepage, book and workspace presentation only on their own routes",
     const hrefs = [...html.matchAll(/<link\b[^>]*\bhref="([^"]+\.css)"[^>]*>/g)].map(match => match[1]);
     pages[key] = hrefs.map(href => readFileSync(new URL(`../dist/client${href}`, import.meta.url), "utf8")).join("\n");
   }
-  assert.match(pages.home, /\.home-hero/);
+  assert.doesNotMatch(pages.home, /\.home-hero/);
   assert.doesNotMatch(pages.home, /\.trip-journal-workspace\s*\{/);
   assert.match(pages.books, /\.trip-book-cover/);
   assert.doesNotMatch(pages.books, /\.home-hero/);
@@ -716,8 +716,8 @@ test("keeps all Stage A routes available", async () => {
   const homeHtml = await home.text();
   assert.match(homeHtml, /跳进地理书/);
   assert.match(homeHtml, /<a[^>]+href="\/trips"[^>]*>[\s\S]*?我的旅行[\s\S]*?<\/a>/);
-  assert.match(homeHtml, /<h2>照片<\/h2>/);
-  assert.match(homeHtml, /留言板/);
+  assert.match(homeHtml, /相册/);
+  assert.match(homeHtml, /留言/);
   assert.equal(cities.status, 200); assert.equal(city.status, 200); assert.ok([302, 307].includes(map.status));
 });
 
@@ -754,14 +754,14 @@ test("city pages use actual authorized destinations, trips and linked albums", a
   }
 });
 
-test("keeps desktop home sections while hiding only those sections on mobile", async () => {
+test("loads the imported travel desk with accessible navigation and no legacy photo wall", async () => {
   const html = await (await render("/")).text();
   const css = readFileSync(new URL("../app/home-journal.css", import.meta.url), "utf8");
-  assert.match(html, /home-photo-wall mobile-home-secondary/);
-  assert.match(html, /home-lower-grid mobile-home-secondary/);
-  assert.match(html, /<h2>照片<\/h2>/);
+  assert.doesNotMatch(html, /home-photo-wall mobile-home-secondary/);
+  assert.doesNotMatch(html, /home-lower-grid mobile-home-secondary/);
+  assert.match(html, /跳进地理书的旅行/);
   assert.match(html, /我的旅行/);
-  assert.match(html, /留言板/);
+  assert.match(html, /留言/);
   assert.match(css, /@media \(max-width: 820px\)[\s\S]*?\.mobile-home-secondary \{ display: none!important; \}/);
   assert.match(html, /href="\/albums"[\s\S]*?>相册</);
 });
@@ -783,6 +783,9 @@ test("creates and fully manages shared albums without leaking album media into o
     assert.equal(attachRetry.status, 200); assert.equal((await attachRetry.json()).album.photos.length, 2);
     const favorited = await render(`/api/albums/${albumId}/media/batch`, { method: "PATCH", body: { action: "favorite", assetIds: [assetA], isFavorite: true } });
     assert.equal(favorited.status, 200); assert.equal((await favorited.json()).album.photos.find((photo) => photo.assetId === assetA).isFavorite, true);
+    const homeWithFavorites = await (await render("/")).text();
+    assert.match(homeWithFavorites, /album-test-a/);
+    assert.doesNotMatch(homeWithFavorites, /album-test-b\?variant=card/);
     const tagged = await render(`/api/albums/${albumId}/media/batch`, { method: "PATCH", body: { action: "addTag", assetIds: [assetA, assetB], tagName: "桂林山水" } });
     assert.equal(tagged.status, 200); assert.equal((await tagged.json()).album.tags[0].name, "桂林山水");
     const dated = await render(`/api/albums/${albumId}/media/batch`, { method: "PATCH", body: { action: "date", assetIds: [assetA], capturedAt: "2026-08-16T12:00:00" } });
@@ -819,6 +822,7 @@ test("enforces Trip membership and album-author metadata edits", async () => {
     const created = await render("/api/albums", { method: "POST", body: { title: "私有 Trip 相册", tripId: trip.id } }); assert.equal(created.status, 201); albumId = (await created.json()).album.id;
     await loginAs("kiki");
     assert.equal((await render(`/api/albums/${albumId}`)).status, 403);
+    assert.doesNotMatch(await (await render("/")).text(), /私有 Trip 相册/);
     assert.equal((await render(`/api/albums/${albumId}`, { method: "PATCH", body: { title: "越权修改" } })).status, 403);
     await loginAs("nini");
     assert.equal((await render(`/api/albums/${albumId}`, { method: "PATCH", body: { title: "作者修改成功" } })).status, 200);

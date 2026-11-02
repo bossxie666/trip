@@ -15,6 +15,7 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "public/assets/travel-desk/vendor/**", // Unmodified Three.js 0.170.0 + MIT license from supplied prototype.
   ]),
   eslint.configs.recommended,
   ...tseslint.configs.recommended,

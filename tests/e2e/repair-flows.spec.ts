@@ -348,13 +348,13 @@ test("partial photo uploads keep successes and retry only the failed attachment"
   } finally { await fixtureRequest(page, "DELETE", `/api/albums/${album.id}`); }
 });
 
-test("map configuration failure stays local and leaves chapter navigation usable", async ({ page }) => {
+test("map configuration failure stays local and leaves map controls and primary navigation usable", async ({ page }) => {
   await page.route("**/api/amap/config", route => route.fulfill({ status: 503, json: { error: "测试地图服务暂不可用。" } }));
   await page.goto("/trips/e2e-shanghai/plan?view=map&member=all");
   await expect(page.getByRole("button", { name: "重新加载地图", exact: true })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "工作台视图" })).toBeVisible();
-  await page.getByRole("navigation", { name: "工作台视图" }).getByRole("link", { name: "费用", exact: true }).click();
-  await expect(page).toHaveURL(/view=budget/);
-  await expect(page.getByRole("navigation", { name: "工作台视图" })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "选择地图行程" })).toBeEnabled();
+  await expect(page.getByRole("combobox", { name: "选择地图日期" })).toBeEnabled();
+  await page.getByRole("link", { name: "我的旅行", exact: true }).first().click();
+  await expect(page.getByRole("navigation", { name: "行程状态" })).toBeVisible();
   await expect(page.getByText("行程读取失败", { exact: true })).toHaveCount(0);
 });
