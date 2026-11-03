@@ -9,7 +9,7 @@ function todayInShanghai() {
 
 export async function getHomeDashboard(memberId: string) {
   const featuredPhotosPromise = listHomeFeaturedPhotos();
-  const messagesPromise = listGuestbookMessages(3);
+  const messagesPromise = listGuestbookMessages(memberId, 3);
   const trips = await listTripSummaries("all", memberId);
   const cityRows = trips.flatMap((trip) => trip.cities.map((city) => ({ ...city, tripStatus: trip.status })));
   const cities = [...new Map(cityRows.map((city) => [city.cityId, city])).values()];

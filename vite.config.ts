@@ -52,6 +52,19 @@ export default defineConfig(async () => {
     plugins: [
       vinext(),
       sites(),
+      {
+        name: "trip-shared-client-chunks",
+        configEnvironment(name: string) {
+          if (name !== "client") return;
+          return { build: { rolldownOptions: { output: { codeSplitting: { groups: [
+            // Consolidate tiny shared modules without merging route-owned editors.
+            { name: "navigation-runtime", test: /[\\/]vinext[\\/]dist[\\/](?:shims|client|utils)[\\/]/, priority: 20, entriesAware: true, entriesAwareMergeThreshold: 12000 },
+            { name: "workspace-controls", test: /[\\/]components[\\/]trip[\\/](?:WorkspaceNavLink|useWorkspaceNavigation|WorkspaceOverlay|EditorDialog|editor-request|modal-events|DayNavigation|AccommodationListControl|TransportIcon)\.tsx?$/, priority: 20, entriesAware: true, entriesAwareMergeThreshold: 12000 },
+            { name: "site-controls", test: /[\\/]components[\\/]site[\\/]/, priority: 20 },
+            { name: "icons", test: /[\\/]lucide-react[\\/]/, priority: 20 },
+          ] } } } } };
+        },
+      },
       cloudflare({
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
         config: localBindingConfig,

@@ -1,5 +1,6 @@
 /* eslint-disable jsx-a11y/label-has-associated-control, jsx-a11y/no-autofocus */
 "use client";
+import { useClientReady } from "./useClientReady";
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
@@ -15,6 +16,7 @@ type MemberOption = { id: string; displayName: string };
 
 /** Accommodation creation only; long-distance transport has one entry in PlanAddControl. */
 export function BookingCreateControl({ slug, members, existingPlaces = [] }: { slug: string; members: MemberOption[]; existingPlaces?: GenericPlaceChoice[] }) {
+  const ready = useClientReady();
   const { refreshWorkspace } = useWorkspaceNavigation();
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<"tentative" | "confirmed">("tentative");
@@ -70,7 +72,7 @@ export function BookingCreateControl({ slug, members, existingPlaces = [] }: { s
   }
 
   return <>
-    <button type="button" className="booking-add-button button-primary" onClick={start}>＋ 添加住宿</button>
+    <button disabled={!ready} type="button" className="booking-add-button button-primary" onClick={start}>＋ 添加住宿</button>
     {open && <EditorDialog open title="添加住宿" className="accommodation-create-dialog" dirty={dirty} busy={saving} onClose={() => setOpen(false)} onSubmit={save} submitLabel="保存住宿">
       <label>住哪里？<GenericPlacePicker slug={slug} existing={existingPlaces} value={place} onChange={setPlace} autoFocus /></label>
       <div className="plan-add-two-columns accommodation-date-fields"><label>入住日期<input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label>退房日期<input type="date" min={startDate} value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label></div>

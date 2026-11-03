@@ -274,6 +274,7 @@ export const guestbookMessageRecords = sqliteTable("guestbook_messages", {
   id: text("id").primaryKey(),
   authorMemberId: text("author_member_id").notNull().references(() => memberRecords.id, { onDelete: "restrict" }),
   body: text("body"),
+  visibility: text("visibility", { enum: ["all", "selected"] }).notNull().default("all"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   deletedAt: text("deleted_at"),
@@ -291,6 +292,22 @@ export const guestbookMessageMediaRecords = sqliteTable("guestbook_message_media
   uniqueIndex("idx_guestbook_message_media_order").on(table.messageId, table.sortOrder),
 ]);
 
+export const guestbookMemberRecords = sqliteTable("guestbook_message_members", {
+  messageId: text("message_id").notNull().references(() => guestbookMessageRecords.id, { onDelete: "cascade" }),
+  memberId: text("member_id").notNull().references(() => memberRecords.id, { onDelete: "cascade" }),
+}, table => [primaryKey({ columns: [table.messageId, table.memberId] }), index("idx_guestbook_members_member").on(table.memberId, table.messageId)]);
+export const guestbookLikeRecords = sqliteTable("guestbook_likes", {
+  messageId: text("message_id").notNull().references(() => guestbookMessageRecords.id, { onDelete: "cascade" }),
+  memberId: text("member_id").notNull().references(() => memberRecords.id, { onDelete: "cascade" }),
+  createdAt: text("created_at").notNull(),
+}, table => [primaryKey({ columns: [table.messageId, table.memberId] })]);
+export const guestbookReplyRecords = sqliteTable("guestbook_replies", {
+  id: text("id").primaryKey(),
+  messageId: text("message_id").notNull().references(() => guestbookMessageRecords.id, { onDelete: "cascade" }),
+  authorMemberId: text("author_member_id").notNull().references(() => memberRecords.id, { onDelete: "restrict" }),
+  body: text("body").notNull(), createdAt: text("created_at").notNull(), deletedAt: text("deleted_at"),
+}, table => [index("idx_guestbook_replies_message").on(table.messageId, table.deletedAt, table.createdAt)]);
+
 export const albumRecords = sqliteTable("albums", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
@@ -305,6 +322,11 @@ export const albumRecords = sqliteTable("albums", {
   index("idx_albums_visible_updated").on(table.deletedAt, table.updatedAt),
   index("idx_albums_trip_updated").on(table.tripId, table.updatedAt),
 ]);
+
+export const albumMemberRecords = sqliteTable("album_members", {
+  albumId: text("album_id").notNull().references(() => albumRecords.id, {onDelete:"cascade"}),
+  memberId: text("member_id").notNull().references(() => memberRecords.id, {onDelete:"cascade"}),
+},table=>[primaryKey({columns:[table.albumId,table.memberId]}),index("idx_album_members_member").on(table.memberId,table.albumId)]);
 
 export const albumMediaRecords = sqliteTable("album_media", {
   albumId: text("album_id").notNull().references(() => albumRecords.id, { onDelete: "cascade" }),

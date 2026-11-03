@@ -10,11 +10,13 @@ import tseslint from "typescript-eslint";
 const eslintConfig = defineConfig([
   globalIgnores([
     ".next/**",
+    "work/**", // Ignored local QA scripts and sensitive release artifacts are not application sources.
     ".wrangler/**",
     "dist/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "public/assets/travel-desk/vendor/**", // Vendored Three.js; MIT license and documented local security patch retained.
   ]),
   eslint.configs.recommended,
   ...tseslint.configs.recommended,

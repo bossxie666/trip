@@ -170,7 +170,7 @@ class TestD1Database {
 const DB = new TestD1Database();
 globalThis.__TRIP_TEST_D1__ = DB;
 globalThis.__TRIP_TEST_ENV__ = { TRIP_SPACE_INVITE_CODE: "test-invite", TRIP_SPACE_SESSION_SECRET: "test-session-secret-at-least-32-characters", AMAP_JS_API_KEY: "test-js-key", AMAP_JS_SECURITY_CODE: "test-js-code", AMAP_WEB_SERVICE_KEY: "test-web-key" };
-for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql", "0014_v2_2_1_confirmed_facts.sql", "0015_v2_4_r1_booking_endpoint_labels.sql", "0016_recommendation_v2.sql", "0017_home_media_guestbook.sql", "0018_recommendation_member_authoring.sql", "0019_albums.sql", "0020_city_centers.sql", "0021_security_rate_limits.sql", "0022_album_photo_management.sql", "0023_member_identity.sql", "0024_knowledge_library.sql", "0025_knowledge_reference_titles.sql", "0026_knowledge_legacy_favorites.sql", "0027_media_deletion_queue.sql", "0028_album_calendar_indexes.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
+for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql", "0014_v2_2_1_confirmed_facts.sql", "0015_v2_4_r1_booking_endpoint_labels.sql", "0016_recommendation_v2.sql", "0017_home_media_guestbook.sql", "0018_recommendation_member_authoring.sql", "0019_albums.sql", "0020_city_centers.sql", "0021_security_rate_limits.sql", "0022_album_photo_management.sql", "0023_member_identity.sql", "0024_knowledge_library.sql", "0025_knowledge_reference_titles.sql", "0026_knowledge_legacy_favorites.sql", "0027_media_deletion_queue.sql", "0028_album_calendar_indexes.sql", "0029_album_members.sql", "0030_guestbook_social.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
 
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
@@ -349,15 +349,20 @@ test("rejects forged identity headers and revoked sessions on the next request",
   } finally { sessionCookie = original; }
 });
 
+function renderedStyles(html) {
+  const linked = [...html.matchAll(/<link\b[^>]*\bhref="([^"]+\.css)"[^>]*>/g)].map(match => readFileSync(new URL(`../dist/client${match[1]}`, import.meta.url), "utf8"));
+  const inline = [...html.matchAll(/<style\b[^>]*data-vinext-inline-css[^>]*>([\s\S]*?)<\/style>/g)].map(match => match[1]);
+  return [...linked, ...inline].join("\n");
+}
+
 test("loads homepage, book and workspace presentation only on their own routes", async () => {
   const pages = {};
   for (const [key, path] of Object.entries({ home: "/", books: "/trips", workspace: "/trips/shanghai-hangzhou-2026/plan?view=planning" })) {
     const response = await render(path); assert.equal(response.status, 200);
     const html = await response.text();
-    const hrefs = [...html.matchAll(/<link\b[^>]*\bhref="([^"]+\.css)"[^>]*>/g)].map(match => match[1]);
-    pages[key] = hrefs.map(href => readFileSync(new URL(`../dist/client${href}`, import.meta.url), "utf8")).join("\n");
+    pages[key] = renderedStyles(html);
   }
-  assert.match(pages.home, /\.home-hero/);
+  assert.doesNotMatch(pages.home, /\.home-hero/);
   assert.doesNotMatch(pages.home, /\.trip-journal-workspace\s*\{/);
   assert.match(pages.books, /\.trip-book-cover/);
   assert.doesNotMatch(pages.books, /\.home-hero/);
@@ -375,10 +380,8 @@ test("loads album gallery CSS only through the album route", async () => {
       const response = await render(pathname);
       assert.equal(response.status, 200);
       const html = await response.text();
-      const styles = [...html.matchAll(/<link\b[^>]*\bhref="([^"]+\.css)"[^>]*>/g)]
-        .map((match) => match[1]);
-      assert.ok(styles.length, `${pathname} must include its stylesheets`);
-      pages[pathname] = styles.map((href) => readFileSync(new URL(`../dist/client${href}`, import.meta.url), "utf8")).join("\n");
+      pages[pathname] = renderedStyles(html);
+      assert.ok(pages[pathname].length, `${pathname} must include linked or inline stylesheets`);
     }
     assert.match(pages["/albums"], /\.album-photo-grid\s*\{/);
     assert.match(pages["/albums"], /\.album-book-meta\s*\{/);
@@ -716,8 +719,8 @@ test("keeps all Stage A routes available", async () => {
   const homeHtml = await home.text();
   assert.match(homeHtml, /跳进地理书/);
   assert.match(homeHtml, /<a[^>]+href="\/trips"[^>]*>[\s\S]*?我的旅行[\s\S]*?<\/a>/);
-  assert.match(homeHtml, /<h2>照片<\/h2>/);
-  assert.match(homeHtml, /留言板/);
+  assert.match(homeHtml, /相册/);
+  assert.match(homeHtml, /留言/);
   assert.equal(cities.status, 200); assert.equal(city.status, 200); assert.ok([302, 307].includes(map.status));
 });
 
@@ -742,7 +745,7 @@ test("city pages use actual authorized destinations, trips and linked albums", a
     assert.match(html, /城市页面权限验证/);
     assert.match(html, /大阪关联相册验证/);
     assert.match(html, new RegExp(`/albums/${albumId}`));
-    assert.doesNotMatch(html, /架构已预留|后续阶段加入|archive-placeholder/);
+    assert.doesNotMatch(html, />[^<]*(?:架构已预留|后续阶段加入)[^<]*<|class="[^"]*\barchive-placeholder\b/);
     await loginAs("kiki");
     assert.equal((await render(`/cities/${city.slug}`)).status, 404);
     assert.doesNotMatch(await (await render("/cities")).text(), new RegExp(`/cities/${city.slug}`));
@@ -754,14 +757,14 @@ test("city pages use actual authorized destinations, trips and linked albums", a
   }
 });
 
-test("keeps desktop home sections while hiding only those sections on mobile", async () => {
+test("loads the imported travel desk with accessible navigation and no legacy photo wall", async () => {
   const html = await (await render("/")).text();
   const css = readFileSync(new URL("../app/home-journal.css", import.meta.url), "utf8");
-  assert.match(html, /home-photo-wall mobile-home-secondary/);
-  assert.match(html, /home-lower-grid mobile-home-secondary/);
-  assert.match(html, /<h2>照片<\/h2>/);
+  assert.doesNotMatch(html, /home-photo-wall mobile-home-secondary/);
+  assert.doesNotMatch(html, /home-lower-grid mobile-home-secondary/);
+  assert.match(html, /跳进地理书的旅行/);
   assert.match(html, /我的旅行/);
-  assert.match(html, /留言板/);
+  assert.match(html, /留言/);
   assert.match(css, /@media \(max-width: 820px\)[\s\S]*?\.mobile-home-secondary \{ display: none!important; \}/);
   assert.match(html, /href="\/albums"[\s\S]*?>相册</);
 });
@@ -783,6 +786,9 @@ test("creates and fully manages shared albums without leaking album media into o
     assert.equal(attachRetry.status, 200); assert.equal((await attachRetry.json()).album.photos.length, 2);
     const favorited = await render(`/api/albums/${albumId}/media/batch`, { method: "PATCH", body: { action: "favorite", assetIds: [assetA], isFavorite: true } });
     assert.equal(favorited.status, 200); assert.equal((await favorited.json()).album.photos.find((photo) => photo.assetId === assetA).isFavorite, true);
+    const homeWithFavorites = await (await render("/")).text();
+    assert.match(homeWithFavorites, /album-test-a/);
+    assert.doesNotMatch(homeWithFavorites, /album-test-b\?variant=card/);
     const tagged = await render(`/api/albums/${albumId}/media/batch`, { method: "PATCH", body: { action: "addTag", assetIds: [assetA, assetB], tagName: "桂林山水" } });
     assert.equal(tagged.status, 200); assert.equal((await tagged.json()).album.tags[0].name, "桂林山水");
     const dated = await render(`/api/albums/${albumId}/media/batch`, { method: "PATCH", body: { action: "date", assetIds: [assetA], capturedAt: "2026-08-16T12:00:00" } });
@@ -792,7 +798,7 @@ test("creates and fully manages shared albums without leaking album media into o
     const reordered = await render(`/api/albums/${albumId}/media`, { method: "PATCH", body: { assetIds: [assetB, assetA] } }); assert.equal(reordered.status, 200);
     const covered = await render(`/api/albums/${albumId}`, { method: "PATCH", body: { coverMediaAssetId: assetB } }); assert.equal(covered.status, 200);
     await loginAs("kiki");
-    const collaborativeEdit = await render(`/api/albums/${albumId}`, { method: "PATCH", body: { title: "全员共同整理" } }); assert.equal(collaborativeEdit.status, 200);
+    const collaborativeEdit = await render(`/api/albums/${albumId}`, { method: "PATCH", body: { title: "全员共同整理" } }); assert.equal(collaborativeEdit.status, 403);
     await loginAs("nini");
     const removed = await render(`/api/albums/${albumId}/media/${assetB}`, { method: "DELETE" }); assert.equal(removed.status, 200);
     assert.equal(DB.database.prepare("SELECT count(*) count FROM media_assets WHERE id=?").get(assetB).count, 0);
@@ -819,6 +825,7 @@ test("enforces Trip membership and album-author metadata edits", async () => {
     const created = await render("/api/albums", { method: "POST", body: { title: "私有 Trip 相册", tripId: trip.id } }); assert.equal(created.status, 201); albumId = (await created.json()).album.id;
     await loginAs("kiki");
     assert.equal((await render(`/api/albums/${albumId}`)).status, 403);
+    assert.doesNotMatch(await (await render("/")).text(), /私有 Trip 相册/);
     assert.equal((await render(`/api/albums/${albumId}`, { method: "PATCH", body: { title: "越权修改" } })).status, 403);
     await loginAs("nini");
     assert.equal((await render(`/api/albums/${albumId}`, { method: "PATCH", body: { title: "作者修改成功" } })).status, 200);
@@ -828,6 +835,38 @@ test("enforces Trip membership and album-author metadata edits", async () => {
     if (trip) assert.equal((await render(`/api/trips/${trip.slug}`, { method: "DELETE" })).status, 200);
     sessionCookie = savedSession;
   }
+});
+
+test("album membership is independent, revocable and protects favorites and media", async () => {
+  const saved=sessionCookie,asset="album-member-private-photo",now=new Date().toISOString();let id,trip;
+  try{
+    await loginAs("nini");
+    trip=await createTrip({title:"独立相册关联旅行",status:"planning",startDate:"2032-02-01",endDate:"2032-02-01",memberIds:["member-nini"]});
+    const response=await render("/api/albums",{method:"POST",body:{title:"相册独立人员测试",tripId:trip.id,memberIds:["member-zhu-jingqi"]}});
+    assert.equal(response.status,201);id=(await response.json()).album.id;
+    DB.database.prepare("INSERT INTO media_assets(id,uploader_member_id,purpose,object_key,original_filename,content_type,byte_size,status,created_at,updated_at,ready_at) VALUES(?,'member-nini','album',?,'private.jpg','image/jpeg',10,'ready',?,?,?)").run(asset,asset,now,now,now);
+    assert.equal((await render(`/api/albums/${id}/media`,{method:"POST",body:{assetIds:[asset]}})).status,200);
+    assert.equal((await render(`/api/albums/${id}/media/${asset}`,{method:"PATCH",body:{isFavorite:true}})).status,200);
+    await loginAs("kiki");
+    assert.equal(DB.database.prepare("SELECT count(*) AS n FROM trip_members WHERE trip_id=? AND member_id=?").get(trip.id,"member-zhu-jingqi").n,0);
+    assert.equal((await render(`/api/albums/${id}`)).status,200);
+    assert.match(await(await render("/")).text(),new RegExp(asset));
+    assert.equal((await render(`/api/media/${asset}`)).status,503); // Authorized, synthetic harness has no R2.
+    assert.equal((await render(`/api/albums/${id}`,{method:"PATCH",body:{memberIds:["member-zhu-jingqi"]}})).status,403);
+    await loginAs("nini");
+    assert.equal((await render(`/api/albums/${id}`,{method:"PATCH",body:{memberIds:["missing-member"]}})).status,400);
+    assert.equal((await render(`/api/albums/${id}`,{method:"PATCH",body:{memberIds:[]}})).status,200);
+    assert.equal(DB.database.prepare("SELECT count(*) AS n FROM album_members WHERE album_id=?").get(id).n,1);
+    DB.database.prepare("INSERT INTO trip_members(trip_id,member_id) VALUES(?,?)").run(trip.id,"member-zhu-jingqi");
+    await loginAs("kiki");
+    assert.doesNotMatch(await(await render("/api/albums")).text(),new RegExp(id));
+    assert.doesNotMatch(await(await render("/")).text(),new RegExp(asset));
+    assert.equal((await render(`/api/albums/${id}`)).status,403);
+    assert.equal((await render(`/api/albums/${id}/selection`)).status,403);
+    assert.equal((await render(`/api/albums/${id}/media/${asset}`,{method:"PATCH",body:{isFavorite:false}})).status,403);
+    assert.equal((await render(`/api/media/${asset}`)).status,404);
+    await loginAs("nini");assert.equal((await render(`/api/albums/${id}`)).status,200);
+  }finally{if(id){DB.database.prepare("DELETE FROM album_media WHERE album_id=?").run(id);DB.database.prepare("DELETE FROM albums WHERE id=?").run(id);}DB.database.prepare("DELETE FROM media_assets WHERE id=?").run(asset);if(trip){await loginAs("nini");await render(`/api/trips/${trip.slug}`,{method:"DELETE"});}sessionCookie=saved;}
 });
 
 test("creates an already completed Trip from the new Trip flow", async () => {
@@ -2239,4 +2278,86 @@ test("manual points retain distinct coordinates for equal names and reject inval
   const before = DB.database.prepare("SELECT * FROM places WHERE name=? ORDER BY id").all(input.name);
   const invalid = await render(endpoint, { method: "POST", body: { ...input, latitude: 120 } }); assert.equal(invalid.status, 400);
   assert.deepEqual(DB.database.prepare("SELECT * FROM places WHERE name=? ORDER BY id").all(input.name), before);
+});
+
+
+test("guestbook audience protects notes, reactions, replies and direct images after revocation", async () => {
+  const saved = sessionCookie, asset = `guestbook-private-${crypto.randomUUID()}`;
+  let id;
+  const now = new Date().toISOString();
+  DB.database.prepare("INSERT INTO media_assets(id,uploader_member_id,purpose,object_key,original_filename,content_type,byte_size,status,created_at,updated_at) VALUES (?,'member-nini','guestbook',?,'private.jpg','image/jpeg',100,'ready',?,?)").run(asset, `guestbook/${asset}.jpg`, now, now);
+  try {
+    await loginAs("nini");
+    assert.equal((await render("/api/guestbook", { method: "POST", body: { body: "invalid audience", visibility: "selected", memberIds: ["missing"] } })).status, 400);
+    assert.equal((await render("/api/guestbook", { method: "POST", headers: { origin: "https://evil.example" }, body: { body: "cross origin" } })).status, 403);
+    const created = await render("/api/guestbook", { method: "POST", body: { body: "指定成员私密留言", mediaAssetIds: [asset], visibility: "selected", memberIds: [] } });
+    assert.equal(created.status, 201);
+    const message = (await created.json()).message; id = message.id;
+    assert.deepEqual(message.memberIds, ["member-nini"]);
+    const root = `/api/guestbook/${id}`, image = `/api/media/${asset}`;
+    const list = async () => (await (await render("/api/guestbook")).json()).messages;
+    await loginAs("kiki");
+    assert.ok(!(await list()).some(m => m.id === id));
+    assert.doesNotMatch(await (await render("/messages")).text(), /指定成员私密留言/);
+    for (const [path, method, body] of [[`${root}/like`, "PUT", { liked: true }], [`${root}/replies`, "POST", { body: "hidden reply" }]]) assert.equal((await render(path, { method, body })).status, 404);
+    assert.equal((await render(image)).status, 404);
+    assert.equal(DB.database.prepare("SELECT COUNT(*) n FROM guestbook_likes WHERE message_id=?").get(id).n, 0);
+    await loginAs("nini");
+    DB.failBatchAt = 1;
+    assert.equal((await render(root, { method: "PATCH", body: { body: "must roll back", visibility: "selected", memberIds: ["member-zhu-jingqi"] } })).status, 500);
+    assert.equal(DB.database.prepare("SELECT body FROM guestbook_messages WHERE id=?").get(id).body, "指定成员私密留言");
+    const grant = await render(root, { method: "PATCH", body: { body: message.body, visibility: "selected", memberIds: ["member-zhu-jingqi"] } });
+    assert.equal(grant.status, 200);
+    assert.ok((await grant.json()).message.memberIds.includes("member-nini"));
+    await loginAs("kiki");
+    assert.ok((await list()).some(m => m.id === id));
+    for (let i = 0; i < 2; i++) assert.equal((await render(`${root}/like`, { method: "PUT", body: { liked: true } })).status, 200);
+    let visible = (await list()).find(m => m.id === id);
+    assert.equal(visible.likes.length, 1); assert.equal(visible.likes[0].id, "member-zhu-jingqi");
+    assert.equal((await render(`${root}/like`, { method: "PUT", body: { liked: "yes" } })).status, 400);
+    assert.equal((await render(`${root}/replies`, { method: "POST", body: { body: "   " } })).status, 400);
+    assert.equal((await render(`${root}/replies`, { method: "POST", body: { body: "x".repeat(1001) } })).status, 400);
+    const reply = await render(`${root}/replies`, { method: "POST", body: { body: "一起出发！" } });
+    assert.equal(reply.status, 201);
+    visible = (await reply.json()).message;
+    const replyId = visible.replies[0].id;
+    const allowedImage = await render(image); assert.equal(allowedImage.status, 503); assert.match(allowedImage.headers.get("cache-control"), /no-store/);
+    await loginAs("nini");
+    assert.equal((await render(`${root}/replies/${replyId}`, { method: "DELETE" })).status, 403);
+    assert.equal((await render(root, { method: "PATCH", body: { body: message.body, visibility: "selected", memberIds: [] } })).status, 200);
+    await loginAs("kiki");
+    assert.ok(!(await list()).some(m => m.id === id));
+    assert.equal((await render(image)).status, 404);
+    assert.equal((await render(`${root}/replies/${replyId}`, { method: "DELETE" })).status, 404);
+    await loginAs("nini");
+    await render(root, { method: "PATCH", body: { body: message.body, visibility: "all", memberIds: [] } });
+    await loginAs("kiki");
+    const unliked = await render(`${root}/like`, { method: "PUT", body: { liked: false } });
+    assert.equal((await unliked.json()).message.likes.length, 0);
+    const removed = await render(`${root}/replies/${replyId}`, { method: "DELETE" });
+    assert.equal((await removed.json()).message.replies.length, 0);
+    await loginAs("nini"); await render(root, { method: "DELETE" });
+    assert.equal((await render(image)).status, 404);
+    assert.equal((await render(`${root}/like`, { method: "PUT", body: { liked: true } })).status, 404);
+    sessionCookie = "";
+    assert.equal((await render("/api/guestbook")).status, 401);
+    assert.equal((await render(`${root}/replies`, { method: "POST", body: { body: "anonymous" } })).status, 401);
+  } finally {
+    if (id) DB.database.prepare("DELETE FROM guestbook_messages WHERE id=?").run(id);
+    DB.database.prepare("DELETE FROM media_assets WHERE id=?").run(asset);
+    sessionCookie = saved;
+  }
+});
+
+
+test("vendored scene UUIDs require secure entropy and retain the UUID format", async () => {
+  const { MathUtils } = await import("../public/assets/travel-desk/vendor/three.module.js");
+  const uuid = MathUtils.generateUUID();
+  assert.match(uuid, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.notEqual(uuid, MathUtils.generateUUID());
+  const native = crypto.getRandomValues;
+  try {
+    crypto.getRandomValues = () => { throw new Error("entropy unavailable"); };
+    assert.throws(() => MathUtils.generateUUID(), /entropy unavailable/);
+  } finally { crypto.getRandomValues = native; }
 });

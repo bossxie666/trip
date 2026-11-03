@@ -15,7 +15,7 @@
   .archive-index-with-shell { padding-top: 34px; }
 }
 body:has(.archive-index-with-shell) {
-  background: #eee4d1 url("/assets/homepage-v3/desktop-shell.webp") center top / cover fixed no-repeat;
+  background: #eee4d1 var(--journal-shell-desktop, none) center top / cover fixed no-repeat;
 }
 
 .archive-index-with-shell {
@@ -89,7 +89,7 @@ body:has(.archive-index-with-shell) {
 @media (max-width: 1080px) and (min-width: 681px) { .trip-list { grid-template-columns: repeat(3,minmax(0,1fr)); } }
 
 @media (max-width: 680px) {
-  body:has(.archive-index-with-shell) { background-image: url("/assets/homepage-v3/mobile-shell.webp"); }
+  body:has(.archive-index-with-shell) { background-image: var(--journal-shell-mobile, none); }
   .archive-index-with-shell { padding: 20px 18px 94px; background: rgba(255,253,247,.58); }
   .archive-index-toolbar { align-items: start; gap: 10px; margin-bottom: 20px; }
   .archive-index-toolbar .trip-tabs { flex: 1; flex-wrap: nowrap; justify-content: space-between; gap: 4px; }
@@ -112,7 +112,7 @@ body:has(.archive-index-with-shell) {
   .trip-book-cover:hover { transform: none; }
 }
 body:has(.archive-index-with-shell) {
-  background: #e8d9bf url("/assets/homepage-v3/desktop-shell.webp") center top / cover fixed no-repeat;
+  background: #e8d9bf var(--journal-shell-desktop, none) center top / cover fixed no-repeat;
 }
 
 .archive-index-with-shell {
@@ -217,7 +217,7 @@ body:has(.archive-index-with-shell) {
 
 @media (max-width: 680px) {
   body:has(.archive-index-with-shell) {
-    background-image: url("/assets/homepage-v3/mobile-shell.webp");
+    background-image: var(--journal-shell-mobile, none);
   }
 
   .archive-index-with-shell {

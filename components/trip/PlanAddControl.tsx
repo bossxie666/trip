@@ -1,4 +1,5 @@
 "use client";
+import { useClientReady } from "./useClientReady";
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
@@ -15,13 +16,14 @@ export type PlanAddControlProps = {
 const PlanAddEditor = dynamic(() => import("./PlanAddEditor").then(module => module.PlanAddEditor), { ssr: false });
 
 export function PlanAddControl(props: PlanAddControlProps) {
+  const ready = useClientReady();
   const [open, setOpen] = useState(false);
   const { openPlanningDay } = useWorkspaceNavigation();
   const { slug } = props;
   const modalOwner = `plan-add:${slug}`;
   useExclusiveTripModal(modalOwner, () => setOpen(false));
   return <>
-    <button type="button" aria-label="＋ 添加行程" className="add-itinerary-button button-primary" onClick={() => { requestTripModalOpen(modalOwner); setOpen(true); }}>＋ 添加行程</button>
+    <button disabled={!ready} type="button" aria-label="＋ 添加行程" className="add-itinerary-button button-primary" onClick={() => { requestTripModalOpen(modalOwner); setOpen(true); }}>＋ 添加行程</button>
     {open && <PlanAddEditor {...props} onClose={() => setOpen(false)} onSaved={dayId => { setOpen(false); openPlanningDay(slug, dayId); }} />}
   </>;
 }

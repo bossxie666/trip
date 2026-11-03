@@ -24,7 +24,7 @@ body {
 
 body::before {
   opacity: 1;
-  background-image: url("/assets/scrapbook-paper-desktop.webp");
+  background-image: var(--journal-paper-desktop, none);
   background-position: center top;
   background-repeat: no-repeat;
   background-size: cover;
@@ -83,7 +83,7 @@ body::before {
 
 @media (max-width: 680px) {
   body::before {
-    background-image: url("/assets/scrapbook-paper-mobile.webp");
+    background-image: var(--journal-paper-mobile, none);
     background-position: center top;
     background-size: cover;
   }

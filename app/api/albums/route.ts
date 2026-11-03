@@ -1,16 +1,19 @@
 import { getCurrentMember } from "@/services/auth.server";
 import { createAlbum, listAlbums } from "@/services/album-service.server";
+import {hasValidRequestOrigin,apiError,requestIdFrom} from "@/services/api-response";
+import {recordAuditEvent} from "@/services/audit.server";
 
 export async function GET() {
   const actor = await getCurrentMember();
   if (!actor) return Response.json({ error: "请先验证旅行成员身份。" }, { status: 401 });
-  return Response.json({ albums: await listAlbums(actor.id) });
+  return Response.json({ albums: await listAlbums(actor.id) },{headers:{"cache-control":"no-store"}});
 }
 
 export async function POST(request: Request) {
+  if(!hasValidRequestOrigin(request))return apiError(request,403,"INVALID_ORIGIN","请求来源无效。");
   const actor = await getCurrentMember();
   if (!actor) return Response.json({ error: "请先验证旅行成员身份。" }, { status: 401 });
-  try { return Response.json({ album: await createAlbum(actor.id, await request.json()) }, { status: 201 }); }
+  try { const album=await createAlbum(actor.id,await request.json());await recordAuditEvent({memberId:actor.id,action:"album.create",resourceType:"album",resourceId:album.id,requestId:requestIdFrom(request),metadata:{memberCount:album.memberIds.length}});return Response.json({album},{status:201}); }
   catch (error) { return albumError(error); }
 }
 

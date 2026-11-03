@@ -1,5 +1,6 @@
 /* eslint-disable jsx-a11y/label-has-associated-control */
 "use client";
+import { useClientReady } from "./useClientReady";
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
@@ -46,13 +47,14 @@ function localDateTimeToUtc(date: string, time: string, timezone: string) {
 
 type BookingEditorProps = { slug: string; booking: BookingRecord; members: Member[]; existingPlaces?: GenericPlaceChoice[]; placeUsageCount?: number };
 export function BookingEditControl(props: BookingEditorProps) {
+  const ready = useClientReady();
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState<{ baseline: string; record: BookingRecord } | null>(null);
   const baseline = JSON.stringify(props.booking);
   const current = saved?.baseline === baseline ? saved.record : props.booking;
   const modalName = `booking-editor:${props.booking.booking.id}`;
   useExclusiveTripModal(modalName, () => setOpen(false));
-  return <><div className="booking-edit-control"><button type="button" className="booking-edit-trigger button-ghost" onClick={() => { requestTripModalOpen(modalName); setOpen(true); }}>{props.booking.booking.type === "hotel" ? "编辑住宿" : "编辑交通"}</button></div>
+  return <><div className="booking-edit-control"><button disabled={!ready} type="button" className="booking-edit-trigger button-ghost" onClick={() => { requestTripModalOpen(modalName); setOpen(true); }}>{props.booking.booking.type === "hotel" ? "编辑住宿" : "编辑交通"}</button></div>
     {open && <BookingEditor {...props} booking={current} onClose={() => setOpen(false)} onSaved={record => { setSaved({ baseline, record }); setOpen(false); }} />}</>;
 }
 function BookingEditor({ slug, booking: record, members, existingPlaces = [], placeUsageCount = 0, onClose, onSaved }: BookingEditorProps & { onClose: () => void; onSaved: (record: BookingRecord) => void }) {
