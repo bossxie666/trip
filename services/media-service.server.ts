@@ -1,7 +1,8 @@
+import {canAccessAlbum} from "./album-access.server";
 import { and, eq, isNull, like } from "drizzle-orm";
 import { AwsV4Signer } from "aws4fetch";
 import { getDb, getRuntimeEnv } from "@/db";
-import { albumMediaRecords, albumRecords, homeFeaturedPhotoRecords, knowledgeEntryRecords, knowledgeMediaRecords, mediaAssetRecords, recommendationRecords, recommendationReferenceMediaRecords, recommendationReferenceRecords, tripMemberRecords, tripRecords } from "@/db/schema";
+import { homeFeaturedPhotoRecords, knowledgeEntryRecords, knowledgeMediaRecords, mediaAssetRecords, recommendationRecords, recommendationReferenceMediaRecords, recommendationReferenceRecords, tripMemberRecords, tripRecords } from "@/db/schema";
 
 export const mediaPurposes = ["home_featured", "guestbook", "recommendation_reference", "trip_cover", "album", "member_avatar", "knowledge_image"] as const;
 export type MediaPurpose = (typeof mediaPurposes)[number];
@@ -116,14 +117,9 @@ export async function getAuthorizedReadyMediaAsset(assetId: string, memberId: st
   if (asset.purpose === "home_featured" || asset.purpose === "guestbook" || asset.purpose === "member_avatar" || asset.purpose === "knowledge_image") return asset;
   const db = getDb();
   if (asset.purpose === "album") {
-    const album = (await db.select({ tripId: albumRecords.tripId }).from(albumMediaRecords)
-      .innerJoin(albumRecords, eq(albumRecords.id, albumMediaRecords.albumId))
-      .where(and(eq(albumMediaRecords.mediaAssetId, assetId), isNull(albumRecords.deletedAt))).limit(1))[0];
-    if (!album) return null;
-    if (!album.tripId) return asset;
-    const member = (await db.select({ memberId: tripMemberRecords.memberId }).from(tripMemberRecords)
-      .where(and(eq(tripMemberRecords.tripId, album.tripId), eq(tripMemberRecords.memberId, memberId))).limit(1))[0];
-    return member ? asset : null;
+    const rows=await getRuntimeEnv().DB.prepare("SELECT album_id AS id FROM album_media WHERE media_asset_id=?").bind(assetId).all<{id:string}>();
+    for(const row of rows.results)if(await canAccessAlbum(row.id,memberId))return asset;
+    return null;
   }
   if (asset.purpose === "recommendation_reference") {
     const shared = (await db.select({ id: knowledgeMediaRecords.entryId }).from(knowledgeMediaRecords)

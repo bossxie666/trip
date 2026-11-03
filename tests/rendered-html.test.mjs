@@ -170,7 +170,7 @@ class TestD1Database {
 const DB = new TestD1Database();
 globalThis.__TRIP_TEST_D1__ = DB;
 globalThis.__TRIP_TEST_ENV__ = { TRIP_SPACE_INVITE_CODE: "test-invite", TRIP_SPACE_SESSION_SECRET: "test-session-secret-at-least-32-characters", AMAP_JS_API_KEY: "test-js-key", AMAP_JS_SECURITY_CODE: "test-js-code", AMAP_WEB_SERVICE_KEY: "test-web-key" };
-for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql", "0014_v2_2_1_confirmed_facts.sql", "0015_v2_4_r1_booking_endpoint_labels.sql", "0016_recommendation_v2.sql", "0017_home_media_guestbook.sql", "0018_recommendation_member_authoring.sql", "0019_albums.sql", "0020_city_centers.sql", "0021_security_rate_limits.sql", "0022_album_photo_management.sql", "0023_member_identity.sql", "0024_knowledge_library.sql", "0025_knowledge_reference_titles.sql", "0026_knowledge_legacy_favorites.sql", "0027_media_deletion_queue.sql", "0028_album_calendar_indexes.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
+for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql", "0014_v2_2_1_confirmed_facts.sql", "0015_v2_4_r1_booking_endpoint_labels.sql", "0016_recommendation_v2.sql", "0017_home_media_guestbook.sql", "0018_recommendation_member_authoring.sql", "0019_albums.sql", "0020_city_centers.sql", "0021_security_rate_limits.sql", "0022_album_photo_management.sql", "0023_member_identity.sql", "0024_knowledge_library.sql", "0025_knowledge_reference_titles.sql", "0026_knowledge_legacy_favorites.sql", "0027_media_deletion_queue.sql", "0028_album_calendar_indexes.sql", "0029_album_members.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
 
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
@@ -795,7 +795,7 @@ test("creates and fully manages shared albums without leaking album media into o
     const reordered = await render(`/api/albums/${albumId}/media`, { method: "PATCH", body: { assetIds: [assetB, assetA] } }); assert.equal(reordered.status, 200);
     const covered = await render(`/api/albums/${albumId}`, { method: "PATCH", body: { coverMediaAssetId: assetB } }); assert.equal(covered.status, 200);
     await loginAs("kiki");
-    const collaborativeEdit = await render(`/api/albums/${albumId}`, { method: "PATCH", body: { title: "全员共同整理" } }); assert.equal(collaborativeEdit.status, 200);
+    const collaborativeEdit = await render(`/api/albums/${albumId}`, { method: "PATCH", body: { title: "全员共同整理" } }); assert.equal(collaborativeEdit.status, 403);
     await loginAs("nini");
     const removed = await render(`/api/albums/${albumId}/media/${assetB}`, { method: "DELETE" }); assert.equal(removed.status, 200);
     assert.equal(DB.database.prepare("SELECT count(*) count FROM media_assets WHERE id=?").get(assetB).count, 0);
@@ -832,6 +832,38 @@ test("enforces Trip membership and album-author metadata edits", async () => {
     if (trip) assert.equal((await render(`/api/trips/${trip.slug}`, { method: "DELETE" })).status, 200);
     sessionCookie = savedSession;
   }
+});
+
+test("album membership is independent, revocable and protects favorites and media", async () => {
+  const saved=sessionCookie,asset="album-member-private-photo",now=new Date().toISOString();let id,trip;
+  try{
+    await loginAs("nini");
+    trip=await createTrip({title:"独立相册关联旅行",status:"planning",startDate:"2032-02-01",endDate:"2032-02-01",memberIds:["member-nini"]});
+    const response=await render("/api/albums",{method:"POST",body:{title:"相册独立人员测试",tripId:trip.id,memberIds:["member-zhu-jingqi"]}});
+    assert.equal(response.status,201);id=(await response.json()).album.id;
+    DB.database.prepare("INSERT INTO media_assets(id,uploader_member_id,purpose,object_key,original_filename,content_type,byte_size,status,created_at,updated_at,ready_at) VALUES(?,'member-nini','album',?,'private.jpg','image/jpeg',10,'ready',?,?,?)").run(asset,asset,now,now,now);
+    assert.equal((await render(`/api/albums/${id}/media`,{method:"POST",body:{assetIds:[asset]}})).status,200);
+    assert.equal((await render(`/api/albums/${id}/media/${asset}`,{method:"PATCH",body:{isFavorite:true}})).status,200);
+    await loginAs("kiki");
+    assert.equal(DB.database.prepare("SELECT count(*) AS n FROM trip_members WHERE trip_id=? AND member_id=?").get(trip.id,"member-zhu-jingqi").n,0);
+    assert.equal((await render(`/api/albums/${id}`)).status,200);
+    assert.match(await(await render("/")).text(),new RegExp(asset));
+    assert.equal((await render(`/api/media/${asset}`)).status,503); // Authorized, synthetic harness has no R2.
+    assert.equal((await render(`/api/albums/${id}`,{method:"PATCH",body:{memberIds:["member-zhu-jingqi"]}})).status,403);
+    await loginAs("nini");
+    assert.equal((await render(`/api/albums/${id}`,{method:"PATCH",body:{memberIds:["missing-member"]}})).status,400);
+    assert.equal((await render(`/api/albums/${id}`,{method:"PATCH",body:{memberIds:[]}})).status,200);
+    assert.equal(DB.database.prepare("SELECT count(*) AS n FROM album_members WHERE album_id=?").get(id).n,1);
+    DB.database.prepare("INSERT INTO trip_members(trip_id,member_id) VALUES(?,?)").run(trip.id,"member-zhu-jingqi");
+    await loginAs("kiki");
+    assert.doesNotMatch(await(await render("/api/albums")).text(),new RegExp(id));
+    assert.doesNotMatch(await(await render("/")).text(),new RegExp(asset));
+    assert.equal((await render(`/api/albums/${id}`)).status,403);
+    assert.equal((await render(`/api/albums/${id}/selection`)).status,403);
+    assert.equal((await render(`/api/albums/${id}/media/${asset}`,{method:"PATCH",body:{isFavorite:false}})).status,403);
+    assert.equal((await render(`/api/media/${asset}`)).status,404);
+    await loginAs("nini");assert.equal((await render(`/api/albums/${id}`)).status,200);
+  }finally{if(id){DB.database.prepare("DELETE FROM album_media WHERE album_id=?").run(id);DB.database.prepare("DELETE FROM albums WHERE id=?").run(id);}DB.database.prepare("DELETE FROM media_assets WHERE id=?").run(asset);if(trip){await loginAs("nini");await render(`/api/trips/${trip.slug}`,{method:"DELETE"});}sessionCookie=saved;}
 });
 
 test("creates an already completed Trip from the new Trip flow", async () => {

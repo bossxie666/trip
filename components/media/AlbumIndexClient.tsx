@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
+import {HorizontalShelf} from "./HorizontalShelf";
 
 import { useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
@@ -9,9 +10,10 @@ import { uploadMediaFile } from "@/components/media/client-upload";
 import type { AlbumSummary } from "@/services/album-service.server";
 import { AlbumEditor } from "./AlbumEditor";
 
+type MemberOption={id:string;displayName:string};
 type TripOption = { id: string; title: string };
 
-function AlbumBookCard({ album, index, trips }: { album: AlbumSummary; index: number; trips: TripOption[] }) {
+function AlbumBookCard({ album, index, trips, members, currentMemberId }: { album: AlbumSummary; index: number; trips: TripOption[]; members:MemberOption[]; currentMemberId:string }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [replacing, setReplacing] = useState(false);
@@ -42,20 +44,20 @@ function AlbumBookCard({ album, index, trips }: { album: AlbumSummary; index: nu
     <Link className="album-book-open" href={`/albums/${album.id}`}>
       <span className="album-book-spine" aria-hidden="true" />
       <span className={`album-book-image${replacing ? " is-replacing" : ""}`}>{album.coverMediaAssetId ? <img src={`/api/media/${album.coverMediaAssetId}?variant=card`} alt="" width={640} height={420} loading="lazy" /> : <span className="album-book-empty"><BookOpen size={42} /></span>}</span>
-      <span className="album-book-meta"><small>{album.tripTitle || "共同相册"}</small><strong>{album.title}</strong><span>{album.photoCount} 张照片</span></span>
+      <span className="album-book-meta"><small>{album.tripTitle || "独立相册"}</small><strong>{album.title}</strong><span>{album.photoCount} 张照片</span></span>
     </Link>
     {album.canEditAlbum && <button className="album-book-replace" type="button" disabled={replacing} aria-label={`替换${album.title}的封面`} onClick={() => inputRef.current?.click()} />}
     {error && !editOpen && <p className="form-error" role="alert">{error}</p>}
-    {album.canEditAlbum && <><button className="album-book-menu-trigger" type="button" aria-label={`编辑相册：${album.title}`} aria-haspopup="dialog" aria-expanded={editOpen} onClick={() => setEditOpen(true)}><MoreHorizontal size={18} /></button>{editOpen && <AlbumEditor album={album} trips={trips} onClose={() => setEditOpen(false)} onSaved={() => { setEditOpen(false); router.refresh(); }} />}</>}
+    {album.canEditAlbum && <><button className="album-book-menu-trigger" type="button" aria-label={`编辑相册：${album.title}`} aria-haspopup="dialog" aria-expanded={editOpen} onClick={() => setEditOpen(true)}><MoreHorizontal size={18} /></button>{editOpen && <AlbumEditor members={members} currentMemberId={currentMemberId} album={album} trips={trips} onClose={() => setEditOpen(false)} onSaved={() => { setEditOpen(false); router.refresh(); }} />}</>}
   </article>;
 }
 
-export function AlbumIndexClient({ albums, trips }: { albums: AlbumSummary[]; trips: TripOption[] }) {
+export function AlbumIndexClient({ albums, trips, members=[], currentMemberId="" }: { albums: AlbumSummary[]; trips: TripOption[]; members?:MemberOption[]; currentMemberId?:string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   return <>
     <button type="button" className="global-floating-add" aria-label="添加相册" onClick={() => setOpen(true)}><Plus size={30} /></button>
-    {open && <AlbumEditor trips={trips} onClose={() => setOpen(false)} onSaved={albumId => { setOpen(false); if (albumId) router.push(`/albums/${albumId}`); }} />}
-    {!albums.length ? <section className="album-empty"><BookOpen size={72} strokeWidth={1.2} /><h2>暂无相册</h2></section> : <div className="album-grid album-book-grid">{albums.map((album, index) => <AlbumBookCard album={album} index={index} trips={trips} key={album.id} />)}</div>}
+    {open && <AlbumEditor members={members} currentMemberId={currentMemberId} trips={trips} onClose={() => setOpen(false)} onSaved={albumId => { setOpen(false); if (albumId) router.push(`/albums/${albumId}`); }} />}
+    {!albums.length ? <section className="album-empty"><BookOpen size={72} strokeWidth={1.2} /><h2>暂无相册</h2></section> : <HorizontalShelf>{albums.map((album, index) => <AlbumBookCard album={album} index={index} trips={trips} members={members} currentMemberId={currentMemberId} key={album.id} />)}</HorizontalShelf>}
   </>;
 }

@@ -1,3 +1,4 @@
+import {canAccessAlbum,validatedAlbumMembers} from "./album-access.server";
 import { and, asc, desc, eq, getTableColumns, inArray, isNull, or, sql } from "drizzle-orm";
 import { getDb, getRuntimeEnv } from "@/db";
 import { albumMediaRecords, albumMediaTagRecords, albumRecords, albumTagRecords, mediaAssetRecords, tripMemberRecords, tripRecords } from "@/db/schema";
@@ -6,7 +7,7 @@ import { drainMediaDeletionQueue } from "./media-deletion.server";
 export type AlbumSummary = {
   id: string; title: string; description: string | null; tripId: string | null; tripTitle: string | null;
   createdByMemberId: string; coverMediaAssetId: string | null; photoCount: number; updatedAt: string;
-  canEditAlbum: boolean;
+  canEditAlbum: boolean; memberIds?: string[];
 };
 
 async function membership(tripId: string, memberId: string) {
@@ -21,13 +22,13 @@ async function albumRow(id: string) {
 async function requireAlbumAccess(id: string, memberId: string) {
   const album = await albumRow(id);
   if (!album) throw new Error("ALBUM_NOT_FOUND");
-  if (album.tripId && !await membership(album.tripId, memberId)) throw new Error("ALBUM_FORBIDDEN");
+  if (!await canAccessAlbum(id, memberId)) throw new Error("ALBUM_FORBIDDEN");
   return album;
 }
 
 async function requireAlbumEditor(id: string, memberId: string) {
   const album = await requireAlbumAccess(id, memberId);
-  if (album.tripId && album.createdByMemberId !== memberId) throw new Error("ALBUM_AUTHOR_REQUIRED");
+  if (album.createdByMemberId !== memberId) throw new Error("ALBUM_AUTHOR_REQUIRED");
   return album;
 }
 
@@ -39,12 +40,12 @@ export async function listAlbumTripOptions(memberId: string) {
 
 export async function listAlbums(memberId: string): Promise<AlbumSummary[]> {
   const rows = await getDb().select({ ...getTableColumns(albumRecords), tripTitle: tripRecords.title,
-    photoCount: sql<number>`(SELECT count(*) FROM album_media am WHERE am.album_id=${albumRecords.id})`,
+    memberIdsJson: sql<string>`(SELECT json_group_array(member_id) FROM album_members WHERE album_id=${albumRecords.id})`, photoCount: sql<number>`(SELECT count(*) FROM album_media am WHERE am.album_id=${albumRecords.id})`,
   }).from(albumRecords).leftJoin(tripRecords, eq(tripRecords.id, albumRecords.tripId))
-    .where(and(isNull(albumRecords.deletedAt), or(isNull(albumRecords.tripId),
-      sql`EXISTS (SELECT 1 FROM trip_members tm WHERE tm.trip_id=${albumRecords.tripId} AND tm.member_id=${memberId})`)))
+    .where(and(isNull(albumRecords.deletedAt), or(eq(albumRecords.createdByMemberId,memberId),
+      sql`EXISTS (SELECT 1 FROM album_members am WHERE am.album_id=${albumRecords.id} AND am.member_id=${memberId})`)))
     .orderBy(desc(albumRecords.updatedAt));
-  return rows.map((row) => ({ ...row, canEditAlbum: !row.tripId || row.createdByMemberId === memberId }));
+  return rows.map((row) => ({ ...row, memberIds: JSON.parse(row.memberIdsJson), canEditAlbum: row.createdByMemberId === memberId }));
 }
 
 type AlbumPhotoQuery = { filter?: string; cursor?: string | null; limit?: number };
@@ -91,7 +92,7 @@ export async function getAlbum(id: string, memberId: string, query: AlbumPhotoQu
   const last = photos.at(-1);
   return { ...album, tripTitle: trip[0]?.title || null, tags,
     photos: photos.map(photo => ({ ...photo, capturedAt: photo.capturedAt || photo.createdAt, tagIds: tagsByPhoto.get(photo.assetId) || [] })),
-    canEditAlbum: !album.tripId || album.createdByMemberId === memberId,
+    memberIds: (await getRuntimeEnv().DB.prepare("SELECT member_id AS id FROM album_members WHERE album_id=?").bind(id).all<{id:string}>()).results.map(row=>row.id), canEditAlbum: album.createdByMemberId === memberId,
     pagination: { filter, total: dateCounts.reduce((sum, row) => sum + row.count, 0), totalPhotos: counts[0]?.count || 0, dateCounts,
       nextCursor: rows.length > limit && last ? JSON.stringify({ date: (last.capturedAt || last.createdAt).slice(0, 10), order: last.sortOrder, id: last.assetId }) : null },
   };
@@ -105,7 +106,7 @@ export async function getAlbumPhotoSelection(id: string, memberId: string, filte
     .where(and(eq(albumMediaRecords.albumId, id), eq(mediaAssetRecords.status, "ready"), photoFilter(id, filter)));
   return { assetIds: rows.map(row => row.id), total: rows.length };
 }
-export async function createAlbum(memberId: string, input: { title?: string; description?: string | null; tripId?: string | null }) {
+export async function createAlbum(memberId: string, input: { title?: string; description?: string | null; tripId?: string | null; memberIds?: string[] }) {
   const title = input.title?.trim() || "";
   if (!title || title.length > 80) throw new Error("INVALID_ALBUM_TITLE");
   const description = input.description?.trim() || null;
@@ -113,11 +114,12 @@ export async function createAlbum(memberId: string, input: { title?: string; des
   const tripId = input.tripId?.trim() || null;
   if (tripId && !await membership(tripId, memberId)) throw new Error("ALBUM_FORBIDDEN");
   const now = new Date().toISOString(), id = crypto.randomUUID();
-  await getDb().insert(albumRecords).values({ id, title, description, tripId, createdByMemberId: memberId, createdAt: now, updatedAt: now });
+  const ids=await validatedAlbumMembers(input.memberIds,memberId),db=getRuntimeEnv().DB;
+  await db.batch([db.prepare("INSERT INTO albums(id,title,description,trip_id,created_by_member_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?)").bind(id,title,description,tripId,memberId,now,now),...ids.map(person=>db.prepare("INSERT INTO album_members(album_id,member_id) VALUES(?,?)").bind(id,person))]);
   return getAlbum(id, memberId);
 }
 
-export async function updateAlbum(id: string, memberId: string, input: { title?: string; description?: string | null; tripId?: string | null; coverMediaAssetId?: string | null }) {
+export async function updateAlbum(id: string, memberId: string, input: { title?: string; description?: string | null; tripId?: string | null; coverMediaAssetId?: string | null; memberIds?: string[] }) {
   const album = await requireAlbumEditor(id, memberId);
   const values: Partial<typeof albumRecords.$inferInsert> = { updatedAt: new Date().toISOString() };
   if (input.title !== undefined) { const title = input.title.trim(); if (!title || title.length > 80) throw new Error("INVALID_ALBUM_TITLE"); values.title = title; }
@@ -128,7 +130,9 @@ export async function updateAlbum(id: string, memberId: string, input: { title?:
     if (assetId && !(await getDb().select({ id: albumMediaRecords.mediaAssetId }).from(albumMediaRecords).where(and(eq(albumMediaRecords.albumId, id), eq(albumMediaRecords.mediaAssetId, assetId))).limit(1))[0]) throw new Error("INVALID_ALBUM_COVER");
     values.coverMediaAssetId = assetId;
   }
-  await getDb().update(albumRecords).set(values).where(eq(albumRecords.id, album.id));
+  const ids=input.memberIds===undefined?null:await validatedAlbumMembers(input.memberIds,album.createdByMemberId);
+  const db=getRuntimeEnv().DB;const entries=Object.entries(values);const columns:Record<string,string>={title:"title",description:"description",tripId:"trip_id",coverMediaAssetId:"cover_media_asset_id",updatedAt:"updated_at"};
+  await db.batch([db.prepare(`UPDATE albums SET ${entries.map(([key])=>columns[key]+"=?").join(",")} WHERE id=?`).bind(...entries.map(([,value])=>value),album.id),...(ids?[db.prepare("DELETE FROM album_members WHERE album_id=?").bind(id),...ids.map(person=>db.prepare("INSERT INTO album_members(album_id,member_id) VALUES(?,?)").bind(id,person))]:[])]);
   return getAlbum(id, memberId);
 }
 
@@ -180,7 +184,7 @@ export async function updateAlbumMedia(id: string, memberId: string, assetIds: s
   const assignments: string[] = [], values: (string | number)[] = [];
   if (input.isFavorite !== undefined) { assignments.push("is_favorite=?"); values.push(input.isFavorite ? 1 : 0); }
   if (input.capturedAt !== undefined) {
-    if (album.tripId && album.createdByMemberId !== memberId) throw new Error("ALBUM_AUTHOR_REQUIRED");
+    if (album.createdByMemberId !== memberId) throw new Error("ALBUM_AUTHOR_REQUIRED");
     const capturedAt = validCapturedAt(input.capturedAt);
     if (!capturedAt) throw new Error("INVALID_ALBUM_DATE");
     assignments.push("captured_at=?"); values.push(capturedAt);

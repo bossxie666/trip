@@ -306,6 +306,11 @@ export const albumRecords = sqliteTable("albums", {
   index("idx_albums_trip_updated").on(table.tripId, table.updatedAt),
 ]);
 
+export const albumMemberRecords = sqliteTable("album_members", {
+  albumId: text("album_id").notNull().references(() => albumRecords.id, {onDelete:"cascade"}),
+  memberId: text("member_id").notNull().references(() => memberRecords.id, {onDelete:"cascade"}),
+},table=>[primaryKey({columns:[table.albumId,table.memberId]}),index("idx_album_members_member").on(table.memberId,table.albumId)]);
+
 export const albumMediaRecords = sqliteTable("album_media", {
   albumId: text("album_id").notNull().references(() => albumRecords.id, { onDelete: "cascade" }),
   mediaAssetId: text("media_asset_id").notNull().references(() => mediaAssetRecords.id, { onDelete: "restrict" }),

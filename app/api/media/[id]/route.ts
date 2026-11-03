@@ -6,27 +6,27 @@ const variants = { thumb: { width: 480, quality: 76 }, card: { width: 960, quali
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const actor = await getCurrentMember();
-  if (!actor) return Response.json({ error: "请先验证旅行成员身份。" }, { status: 401 });
+  if (!actor) return Response.json({ error: "请先验证旅行成员身份。" }, { status: 401, headers: {"cache-control":"private, no-store"} });
   const asset = await getAuthorizedReadyMediaAsset((await params).id, actor.id);
-  if (!asset) return Response.json({ error: "图片不存在。" }, { status: 404 });
+  if (!asset) return Response.json({ error: "图片不存在。" }, { status: 404, headers: {"cache-control":"private, no-store"} });
   const env = getRuntimeEnv();
-  if (!env.MEDIA) return Response.json({ error: "图片存储暂时不可用。" }, { status: 503 });
+  if (!env.MEDIA) return Response.json({ error: "图片存储暂时不可用。" }, { status: 503, headers: {"cache-control":"private, no-store"} });
   const object = await env.MEDIA.get(asset.objectKey);
-  if (!object?.body) return Response.json({ error: "图片不存在。" }, { status: 404 });
+  if (!object?.body) return Response.json({ error: "图片不存在。" }, { status: 404, headers: {"cache-control":"private, no-store"} });
   const requested = new URL(request.url).searchParams.get("variant") || "display";
   const variant = variants[requested as keyof typeof variants] || variants.display;
   try {
     const transformed = await env.IMAGES.input(object.body).transform({ width: variant.width, fit: "scale-down" }).output({ format: "image/webp", quality: variant.quality });
     const response = transformed.response();
     const headers = new Headers(response.headers);
-    headers.set("cache-control", "private, max-age=86400");
+    headers.set("cache-control", asset.purpose==="album"?"private, no-store":"private, max-age=86400");
     headers.set("content-disposition", "inline");
     headers.set("x-content-type-options", "nosniff");
     return new Response(response.body, { status: response.status, headers });
   } catch {
     const headers = new Headers();
     object.writeHttpMetadata(headers);
-    headers.set("cache-control", "private, max-age=3600");
+    headers.set("cache-control", asset.purpose==="album"?"private, no-store":"private, max-age=3600");
     headers.set("content-disposition", "inline");
     headers.set("x-content-type-options", "nosniff");
     return new Response(object.body, { headers });

@@ -3,7 +3,7 @@ import { listTripSummaries } from "@/services/trip-repository.server";
 
 export async function getHomeDesk(memberId: string) {
   const db = getRuntimeEnv().DB;
-  const access = "a.deleted_at IS NULL AND (a.trip_id IS NULL OR EXISTS (SELECT 1 FROM trip_members tm WHERE tm.trip_id=a.trip_id AND tm.member_id=?))";
+  const access = "a.deleted_at IS NULL AND (EXISTS (SELECT 1 FROM album_members am WHERE am.album_id=a.id AND am.member_id=?))";
   const [trips, albums, photos] = await Promise.all([
     listTripSummaries("all",memberId),
     db.prepare(`SELECT a.id,a.title,a.cover_media_asset_id AS cover FROM albums a WHERE ${access} ORDER BY a.updated_at DESC LIMIT 8`).bind(memberId).all<{id:string;title:string;cover:string|null}>(),
