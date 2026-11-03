@@ -2,6 +2,7 @@
 "use client";
 import "@/app/trip-books.css";
 
+import { useClientReady } from "./useClientReady";
 import { tripCoverCardUrl } from "@/components/media/cover-url";
 import { MoreHorizontal, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -19,6 +20,7 @@ type Props = {
 
 export function TripBookCard({ trip, index, canDelete, members }: Props) {
   const router = useRouter();
+  const ready = useClientReady();
   const [editOpen, setEditOpen] = useState(false);
   const [replacing, setReplacing] = useState(false);
   const [coverError, setCoverError] = useState("");
@@ -83,7 +85,7 @@ export function TripBookCard({ trip, index, canDelete, members }: Props) {
       <span className="trip-book-meta"><strong title="打开行程">{trip.title}</strong><small><Users size={14} />{trip.participantSummary}</small></span>
       <i className="trip-book-mark" aria-hidden="true" />
     </a>
-    <button className="trip-book-menu-trigger" type="button" aria-label={`编辑旅行：${trip.title}`} aria-haspopup="dialog" aria-expanded={editOpen} onClick={() => setEditOpen(true)}><MoreHorizontal size={18} /></button>
+    <button className="trip-book-menu-trigger" disabled={!ready} type="button" aria-label={`编辑旅行：${trip.title}`} aria-haspopup="dialog" aria-expanded={editOpen} onClick={() => setEditOpen(true)}><MoreHorizontal size={18} /></button>
     {coverError && <p className="form-error" role="alert">{coverError}</p>}
     {editOpen && <EditTripDialog trip={{ ...trip, cities: trip.cities.map(name => ({ name })), members: trip.memberIds.map(id => ({ id })) }} members={members} canDelete={canDelete} onClose={() => setEditOpen(false)} />}
   </article>;
