@@ -349,13 +349,18 @@ test("rejects forged identity headers and revoked sessions on the next request",
   } finally { sessionCookie = original; }
 });
 
+function renderedStyles(html) {
+  const linked = [...html.matchAll(/<link\b[^>]*\bhref="([^"]+\.css)"[^>]*>/g)].map(match => readFileSync(new URL(`../dist/client${match[1]}`, import.meta.url), "utf8"));
+  const inline = [...html.matchAll(/<style\b[^>]*data-vinext-inline-css[^>]*>([\s\S]*?)<\/style>/g)].map(match => match[1]);
+  return [...linked, ...inline].join("\n");
+}
+
 test("loads homepage, book and workspace presentation only on their own routes", async () => {
   const pages = {};
   for (const [key, path] of Object.entries({ home: "/", books: "/trips", workspace: "/trips/shanghai-hangzhou-2026/plan?view=planning" })) {
     const response = await render(path); assert.equal(response.status, 200);
     const html = await response.text();
-    const hrefs = [...html.matchAll(/<link\b[^>]*\bhref="([^"]+\.css)"[^>]*>/g)].map(match => match[1]);
-    pages[key] = hrefs.map(href => readFileSync(new URL(`../dist/client${href}`, import.meta.url), "utf8")).join("\n");
+    pages[key] = renderedStyles(html);
   }
   assert.doesNotMatch(pages.home, /\.home-hero/);
   assert.doesNotMatch(pages.home, /\.trip-journal-workspace\s*\{/);
@@ -375,10 +380,8 @@ test("loads album gallery CSS only through the album route", async () => {
       const response = await render(pathname);
       assert.equal(response.status, 200);
       const html = await response.text();
-      const styles = [...html.matchAll(/<link\b[^>]*\bhref="([^"]+\.css)"[^>]*>/g)]
-        .map((match) => match[1]);
-      assert.ok(styles.length, `${pathname} must include its stylesheets`);
-      pages[pathname] = styles.map((href) => readFileSync(new URL(`../dist/client${href}`, import.meta.url), "utf8")).join("\n");
+      pages[pathname] = renderedStyles(html);
+      assert.ok(pages[pathname].length, `${pathname} must include linked or inline stylesheets`);
     }
     assert.match(pages["/albums"], /\.album-photo-grid\s*\{/);
     assert.match(pages["/albums"], /\.album-book-meta\s*\{/);
@@ -742,7 +745,7 @@ test("city pages use actual authorized destinations, trips and linked albums", a
     assert.match(html, /城市页面权限验证/);
     assert.match(html, /大阪关联相册验证/);
     assert.match(html, new RegExp(`/albums/${albumId}`));
-    assert.doesNotMatch(html, /架构已预留|后续阶段加入|archive-placeholder/);
+    assert.doesNotMatch(html.replace(/<style\b[^>]*>[\s\S]*?<\/style>/g, ""), /架构已预留|后续阶段加入|archive-placeholder/);
     await loginAs("kiki");
     assert.equal((await render(`/cities/${city.slug}`)).status, 404);
     assert.doesNotMatch(await (await render("/cities")).text(), new RegExp(`/cities/${city.slug}`));
@@ -2344,4 +2347,17 @@ test("guestbook audience protects notes, reactions, replies and direct images af
     DB.database.prepare("DELETE FROM media_assets WHERE id=?").run(asset);
     sessionCookie = saved;
   }
+});
+
+
+test("vendored scene UUIDs require secure entropy and retain the UUID format", async () => {
+  const { MathUtils } = await import("../public/assets/travel-desk/vendor/three.module.js");
+  const uuid = MathUtils.generateUUID();
+  assert.match(uuid, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.notEqual(uuid, MathUtils.generateUUID());
+  const native = crypto.getRandomValues;
+  try {
+    crypto.getRandomValues = () => { throw new Error("entropy unavailable"); };
+    assert.throws(() => MathUtils.generateUUID(), /entropy unavailable/);
+  } finally { crypto.getRandomValues = native; }
 });

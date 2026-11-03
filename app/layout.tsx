@@ -1,19 +1,14 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { CSSProperties } from "react";
 import "./globals.css";
 import "./home-journal.css";
 import "./dialogs.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-  preload: false,
-});
+// Chinese display faces remain local; shared Latin text uses native metrics-compatible fallbacks.
+const nativeFonts = {
+  "--font-geist-sans": 'Arial, "Microsoft YaHei", sans-serif',
+  "--font-geist-mono": '"SFMono-Regular", Consolas, "Liberation Mono", monospace',
+} as CSSProperties;
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://trip.bossxie.win"),
@@ -45,7 +40,7 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className="antialiased" style={nativeFonts}
       >
         {children}
       </body>

@@ -1,3 +1,4 @@
+import { tripCoverCardUrl } from "@/components/media/cover-url";
 import { listTripSummaries } from "@/services/trip-repository.server";
 import { getCurrentMember } from "@/services/auth.server";
 import { isAdminMember } from "@/services/identity-auth.server";
@@ -28,7 +29,9 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
   const actor = await getCurrentMember();
   const [trips, members, canDeleteTrips] = actor ? await Promise.all([listTripSummaries(activeStatus, actor.id), listActiveMembers(), isAdminMember(actor.id)]) : [[], [], false];
 
+  const firstCover = tripCoverCardUrl(trips[0]?.cover ?? null);
   return (<>
+    {firstCover && <link rel="preload" as="image" href={firstCover} fetchPriority="high" />}
     {actor && <SiteHeader active="trips" currentMember={{ id: actor.id, displayName: actor.displayName, avatar: actor.avatar, role: actor.role }} />}
     <main className="archive-index archive-index-with-shell">
       <div className="archive-index-toolbar"><nav className="trip-tabs" aria-label="行程状态">{filters.map((filter) => <Link key={filter.value} className={activeStatus === filter.value ? "active" : ""} href={filter.value === "all" ? "/trips" : `/trips?status=${filter.value}`}>{filter.label}</Link>)}</nav></div><Link className="global-floating-add" aria-label="新建行程" href="/trips/new">＋</Link>

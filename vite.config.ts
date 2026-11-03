@@ -52,6 +52,17 @@ export default defineConfig(async () => {
     plugins: [
       vinext(),
       sites(),
+      {
+        name: "trip-shared-client-chunks",
+        configEnvironment(name: string) {
+          if (name !== "client") return;
+          return { build: { rolldownOptions: { output: { codeSplitting: { groups: [
+            // Consolidate tiny shared modules without merging route-owned editors.
+            { name: "site-controls", test: /[\\/]components[\\/]site[\\/]/, priority: 20 },
+            { name: "icons", test: /[\\/]lucide-react[\\/]/, priority: 20 },
+          ] } } } } };
+        },
+      },
       cloudflare({
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
         config: localBindingConfig,

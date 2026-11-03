@@ -28,5 +28,10 @@ export function TravelDesk({data}:{data:Awaited<ReturnType<typeof getHomeDesk>>}
     void start();
     return ()=>{controller.abort();cleanup?.();shadow.replaceChildren();};
   },[data]);
-  return <><div ref={host} />{!ready && <section style={{padding:"32px",textAlign:"center"}} aria-live="polite"><h1>跳进地理书的旅行</h1><p>{failed?"立体书暂时无法显示，可直接打开旅行和相册。":"正在准备旅行书…"}</p><Link href="/map">足迹地图</Link> · <Link href="/trips">我的旅行</Link> · <Link href="/albums">相册</Link></section>}</>;
+  return <div className="travel-desk-container" style={{position:"relative",minHeight:"calc(100svh - 74px)"}}>
+    <style>{`.travel-desk-poster{position:absolute;top:44px;left:53px;width:calc(100% - 226px);height:570px;pointer-events:none}.travel-desk-poster img{width:100%;height:100%;object-fit:contain}@media(max-width:650px){.travel-desk-poster{top:55px;left:4px;width:calc(100% - 8px);height:400px}}@media(max-width:350px){.travel-desk-poster{height:370px}}`}</style>
+    <div ref={host} />
+    {!ready && <picture className="travel-desk-poster"><source media="(max-width:650px)" srcSet="/assets/travel-desk/assets/book-closed-mobile.webp" /><img src="/assets/travel-desk/assets/book-closed-desktop.webp" width={1054} height={570} alt="跳进地理书的旅行" fetchPriority="high" /></picture>}
+    {failed && <section style={{position:"absolute",inset:0,padding:"32px",textAlign:"center"}} aria-live="polite"><h1>跳进地理书的旅行</h1><p>立体书暂时无法显示，可直接打开旅行和相册。</p><Link href="/map">足迹地图</Link> · <Link href="/trips">我的旅行</Link> · <Link href="/albums">相册</Link></section>}
+  </div>;
 }
