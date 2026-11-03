@@ -335,7 +335,7 @@
   pointer-events: none;
 }
 
-.trip-journal-workspace .recommendation-panel,.trip-journal-workspace .itinerary-panel {
+.trip-journal-workspace .itinerary-panel {
   padding: 22px;
   border: 0;
   background: transparent;
@@ -390,10 +390,6 @@
   font-size: 10px;
 }
 
-.trip-journal-workspace .recommendation-panel {
-  border-right: 1px solid var(--journal-rule);
-}
-
 .trip-journal-workspace .panel-heading {
   align-items: center;
   margin-bottom: 14px;
@@ -420,37 +416,17 @@
   color: #fff;
 }
 
-.trip-journal-workspace .recommendation-area-filters a,.trip-journal-workspace .recommendation-filters a,.trip-journal-workspace .plan-member-filter a,.trip-journal-workspace .map-filter-row button {
+.trip-journal-workspace .plan-member-filter a,.trip-journal-workspace .map-filter-row button {
   border-radius: 4px;
 }
 
-.trip-journal-workspace .recommendation-area-filters .active,.trip-journal-workspace .recommendation-filters .active,.trip-journal-workspace .plan-member-filter a.active,.trip-journal-workspace .map-filter-row button.active {
+.trip-journal-workspace .plan-member-filter a.active,.trip-journal-workspace .map-filter-row button.active {
   border-color: var(--journal-ink);
   background: var(--journal-ink);
   color: #fff;
 }
-.trip-journal-workspace .recommendation-grid {
-  align-items: start;
-  gap: 12px;
-}
 
-.trip-journal-workspace .recommendation-card {
-  overflow: visible;
-  border: 1px solid var(--journal-rule);
-  border-radius: 2px;
-  background: var(--journal-sheet);
-  box-shadow: 0 5px 14px rgba(35, 49, 56, .08);
-}
-
-.trip-journal-workspace .recommendation-card-guide {
-  border-bottom: 3px solid var(--journal-green);
-}
-
-.trip-journal-workspace .recommendation-card-place {
-  border-bottom: 3px solid var(--journal-blue);
-}
-
-.trip-journal-workspace .recommendation-card > img,.trip-journal-workspace .recommendation-card > .recommendation-cover,.recommendation-detail-visual > img,.recommendation-detail-visual > .recommendation-cover {
+.recommendation-detail-visual > img,.recommendation-detail-visual > .recommendation-cover {
   display: block;
   width: 100%;
   aspect-ratio: 3 / 2;
@@ -459,32 +435,7 @@
   background: #e9e1d1;
 }
 
-.trip-journal-workspace .recommendation-card-body {
-  padding: 12px 13px 13px;
-}
-
-.trip-journal-workspace .recommendation-card h3 {
-  margin: 8px 0 5px;
-  color: var(--journal-ink);
-  font-size: 16px;
-  line-height: 1.32;
-}
-
-.trip-journal-workspace .recommendation-tags span {
-  border: 1px solid transparent;
-  border-radius: 3px;
-  background: var(--journal-blue-soft);
-}
-
-.trip-journal-workspace .recommendation-card-guide .recommendation-tags span {
-  background: var(--journal-green-soft);
-}
-
-.trip-journal-workspace .recommendation-state {
-  color: var(--journal-green) !important;
-}
-
-.trip-journal-workspace .recommendation-map-link,.trip-journal-workspace .recommendation-detail-trigger,.trip-journal-workspace .recommendation-add select,.trip-journal-workspace .recommendation-add button {
+.trip-journal-workspace .recommendation-detail-trigger,.trip-journal-workspace .recommendation-add select,.trip-journal-workspace .recommendation-add button {
   min-height: 36px;
   border-radius: 4px;
 }
@@ -627,20 +578,11 @@
 .trip-journal-workspace .timeline-node-controls {
   border-color: var(--journal-rule);
 }
-.trip-journal-workspace.recommendation-library-page .library-console {
-  grid-template-columns: 1fr;
-  min-height: 116px;
-}
 
-.trip-journal-workspace .recommendation-library-full,.trip-journal-workspace .map-view,.trip-journal-workspace .budget-view {
+.trip-journal-workspace .map-view,.trip-journal-workspace .budget-view {
   border: 1px solid var(--journal-rule);
   background: rgba(255, 253, 247, .7);
   box-shadow: var(--journal-shadow);
-}
-
-.trip-journal-workspace .recommendation-library-full .recommendation-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
 }
 
 .trip-journal-workspace .map-view {
@@ -783,22 +725,6 @@
   background: transparent;
 }
 
-.recommendation-detail-guide ol {
-  margin-left: 10px;
-  border-left: 2px dotted rgba(72, 166, 111, .48);
-}
-
-.recommendation-detail-guide ol li::before {
-  left: -13px;
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--journal-green);
-  color: #fff;
-}
-
 .recommendation-detail-body ul {
   list-style: none;
   padding: 0;
@@ -810,13 +736,6 @@
   background: rgba(255, 247, 217, .52);
 }
 
-@media (hover: hover) and (pointer: fine) {
-  .trip-journal-workspace .recommendation-card:hover {
-    transform: perspective(1000px) rotateX(1.2deg) rotateY(-1.2deg) translateY(-3px);
-    box-shadow: 0 14px 28px rgba(35, 49, 56, .14);
-  }
-}
-
 @media (max-width: 980px) {
   .trip-journal-workspace .trip-console {
     grid-template-columns: 1fr;
@@ -825,10 +744,6 @@
   .trip-journal-workspace .trip-console-side {
     grid-template-columns: minmax(0, 1fr);
     padding-top: 4px;
-  }
-
-  .trip-journal-workspace .recommendation-library-full .recommendation-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -847,24 +762,18 @@
     display: none;
   }
 
-  .trip-journal-workspace .recommendation-panel,.trip-journal-workspace .itinerary-panel {
+  .trip-journal-workspace .itinerary-panel {
     padding: 18px;
   }
 
-  .trip-journal-workspace .recommendation-panel .panel-heading,.trip-journal-workspace .itinerary-panel .panel-heading {
+  .trip-journal-workspace .itinerary-panel .panel-heading {
     display: grid;
     align-items: start;
     gap: 10px;
   }
 
-  .trip-journal-workspace .recommendation-panel .panel-heading h2,.trip-journal-workspace .itinerary-panel .panel-heading h2 {
+  .trip-journal-workspace .itinerary-panel .panel-heading h2 {
     white-space: nowrap;
-  }
-
-  .trip-journal-workspace .recommendation-panel .panel-heading form {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    width: 100%;
   }
 
   .trip-journal-workspace .itinerary-panel .day-plan-actions {
@@ -1200,7 +1109,7 @@
     color: #fff;
   }
 
-  .trip-journal-workspace .recommendation-panel,.trip-journal-workspace .itinerary-panel {
+  .trip-journal-workspace .itinerary-panel {
     width: 100%;
     padding: 16px 13px 20px;
     border: 0;
@@ -1222,25 +1131,6 @@
 
   .trip-journal-workspace .panel-heading form {
     width: 100%;
-  }
-
-  .trip-journal-workspace .recommendation-card > img,.trip-journal-workspace .recommendation-card > .recommendation-cover {
-    aspect-ratio: 16 / 9;
-  }
-
-  .trip-journal-workspace .recommendation-card {
-    overflow: hidden;
-    border-radius: 9px;
-    box-shadow: 0 8px 18px rgba(35, 49, 56, .11);
-  }
-
-  .trip-journal-workspace .recommendation-card h3 {
-    font-size: 18px;
-  }
-
-  .trip-journal-workspace .recommendation-card-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
   }
 
   .trip-journal-workspace .recommendation-add {
@@ -1338,7 +1228,7 @@
     line-height: 1.6;
   }
 
-  .trip-journal-workspace .map-view,.trip-journal-workspace .budget-view,.trip-journal-workspace .recommendation-library-full {
+  .trip-journal-workspace .map-view,.trip-journal-workspace .budget-view {
     padding: 14px 12px 18px;
     box-shadow: none;
   }
@@ -1371,18 +1261,6 @@
   .trip-journal-workspace .planning-map-panel .plan-map-canvas-wrap,.trip-journal-workspace .planning-map-placeholder {
     height: clamp(360px, 52dvh, 620px);
     min-height: 360px;
-  }
-
-  .trip-journal-workspace .recommendation-library-full .recommendation-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .trip-journal-workspace.recommendation-library-page .library-console {
-    min-height: 126px;
-  }
-
-  .trip-journal-workspace.recommendation-library-page .console-title {
-    padding-right: 92px;
   }
 
   .recommendation-detail-body {

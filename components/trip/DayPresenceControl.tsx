@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useClientReady } from "./useClientReady";
 import dynamic from "next/dynamic";
 import { requestTripModalOpen, useExclusiveTripModal } from "./modal-events";
 import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
@@ -15,6 +16,7 @@ export function DayPresenceControl(props: DayPresenceProps) {
   return <PresenceControlState key={`${props.slug}:${props.dayId}`} {...props} />;
 }
 function PresenceControlState(props: DayPresenceProps) {
+  const ready = useClientReady();
   const { refreshWorkspace } = useWorkspaceNavigation();
   const [fallback, setFallback] = useState<PresenceContext | null>(null), [loadError, setLoadError] = useState(""), [retry, setRetry] = useState(0);
   const [open, setOpen] = useState(false);
@@ -47,7 +49,7 @@ function PresenceControlState(props: DayPresenceProps) {
   const current = context && saved?.base === base ? { ...context, states: saved.states, details: saved.details } : context;
   const hasUnknown = !current || current.members.some(member => !current.states[member.id] || current.states[member.id] === "unknown");
   return <div id={`day-presence-${dayId}`} className="day-presence-control">
-    <button type="button" className="day-presence-trigger" disabled={!current} onClick={() => { requestTripModalOpen(modalOwner); setOpen(true); }}>{hasUnknown ? "设置当天成员" : "当天成员 · 已确认"}</button>
+    <button type="button" className="day-presence-trigger" disabled={!ready || !current} onClick={() => { requestTripModalOpen(modalOwner); setOpen(true); }}>{hasUnknown ? "设置当天成员" : "当天成员 · 已确认"}</button>
     {loadError && <p className="form-error" role="alert">{loadError}<button type="button" onClick={() => setRetry(value => value + 1)}>重试</button></p>}
     {open && current && <DayPresenceEditor context={current} onClose={() => setOpen(false)} onSaved={(states, details) => { setSaved({ base, states, details }); setOpen(false); refreshWorkspace(); }} />}
   </div>;

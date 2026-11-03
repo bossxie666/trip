@@ -1,10 +1,12 @@
 "use client";
+import { useClientReady } from "./useClientReady";
 import { useEffect, useState } from "react";
 import { BookOpenText, Plus, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { WorkspaceOverlay } from "./WorkspaceOverlay";
 type Entry = { id: string; title: string; summary: string | null; destination: string | null; tags: string[]; places: { id: string; name: string; address: string | null }[] };
 export function KnowledgeTripPicker({ slug, days, defaultDayId }: { slug: string; days: { id: string; label: string }[]; defaultDayId: string }) {
+  const ready = useClientReady();
   const router = useRouter();
   const [open, setOpen] = useState(false), [entries, setEntries] = useState<Entry[]>([]), [query, setQuery] = useState(""), [destination, setDestination] = useState(""), [tag, setTag] = useState("");
   const [dayId, setDayId] = useState(defaultDayId), [saving, setSaving] = useState(""), [error, setError] = useState(""), [loading, setLoading] = useState(false), [page, setPage] = useState(1), [hasMore, setHasMore] = useState(false);
@@ -47,7 +49,7 @@ export function KnowledgeTripPicker({ slug, days, defaultDayId }: { slug: string
     } catch (caught) { setError(caught instanceof Error ? caught.message : "添加失败。"); }
     finally { setSaving(""); }
   }
-  return <><button className="knowledge-picker-trigger" type="button" onClick={() => { setDayId(defaultDayId); setLoading(true); setOpen(true); }}><BookOpenText size={19} />从知识库添加</button>
+  return <><button disabled={!ready} className="knowledge-picker-trigger" type="button" onClick={() => { setDayId(defaultDayId); setLoading(true); setOpen(true); }}><BookOpenText size={19} />从知识库添加</button>
     <WorkspaceOverlay open={open} onClose={() => !saving && setOpen(false)} ariaLabel="从知识库添加" className="knowledge-picker-dialog clean-dialog">
       <header className="editor-dialog-heading"><h2>从知识库添加</h2><button type="button" disabled={!!saving} aria-label="关闭" onClick={() => setOpen(false)}><X size={20} /></button></header>
       <div className="knowledge-picker-filters"><input aria-label="搜索知识" value={query} onChange={event => { setLoading(true); setQuery(event.target.value); }} placeholder="搜索攻略或标签" /><input aria-label="目的地" value={destination} onChange={event => { setLoading(true); setDestination(event.target.value); }} placeholder="目的地" /><input aria-label="标签筛选" value={tag} onChange={event => { setLoading(true); setTag(event.target.value); }} placeholder="标签" /><select aria-label="目标日期" value={dayId} onChange={event => setDayId(event.target.value)}>{days.map(day => <option key={day.id} value={day.id}>{day.label}</option>)}</select></div>

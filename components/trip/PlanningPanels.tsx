@@ -1,4 +1,3 @@
-"use client";
 import { type ReactNode } from "react";
 
 export function PlanningPanels({ library, itinerary, map }: { library: ReactNode; itinerary: ReactNode; map?: ReactNode }) {
