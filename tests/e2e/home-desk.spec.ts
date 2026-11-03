@@ -2,6 +2,23 @@ import {test,expect} from "@playwright/test";
 import {enterTestSession} from "./session";
 
 test.beforeEach(async({page})=>enterTestSession(page));
+test("returns to the open chapter and keeps compact view-all entries",async({page})=>{
+  test.setTimeout(90000);
+  await page.goto("/");await page.locator("#scene-open").click();
+  await expect(page.locator("#scene-wrap")).toHaveAttribute("data-state","open");
+  await page.waitForTimeout(300);await page.locator("#scene-next").click();
+  await expect(page.locator("#scene-wrap")).toHaveAttribute("data-page","2");
+  const links=page.locator("#chapter-links");expect(await links.locator('a:not(.chapter-view-all)').count()).toBeLessThanOrEqual(2);
+  await links.getByRole("link",{name:"查看全部旅行 →",exact:true}).click();await expect(page).toHaveURL(/\/trips$/);
+  await page.getByRole("link",{name:"首页",exact:true}).first().click();
+  await expect(page.locator("#scene-wrap")).toHaveAttribute("data-state","open");await expect(page.locator("#scene-wrap")).toHaveAttribute("data-page","2");
+  await page.locator("#scene-next").click();await expect(page.locator("#scene-wrap")).toHaveAttribute("data-page","3");
+  await page.locator("#chapter-links").getByRole("link",{name:"查看全部相册 →",exact:true}).click();await expect(page).toHaveURL(/\/albums$/);
+  await page.goBack();await expect(page.locator("#scene-wrap")).toHaveAttribute("data-state","open");await expect(page.locator("#scene-wrap")).toHaveAttribute("data-page","3");
+  await page.reload();await expect(page.locator("#scene-wrap")).toHaveAttribute("data-page","3");await expect(page.locator("#scene-open")).not.toBeVisible();
+  await page.waitForTimeout(2000);await page.locator("#scene-close").click();await expect(page.locator("#scene-wrap")).toHaveAttribute("data-state","closed");
+  await page.reload();await expect(page.locator("#scene-open")).toBeVisible();
+});
 test("opens the supplied 3D book, changes chapters, closes and returns safely",async({page})=>{
   test.setTimeout(90000);
   const errors:string[]=[];
