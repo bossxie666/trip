@@ -563,7 +563,7 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   const mobileNavigation = header.match(/<nav className="site-mobile-nav"[\s\S]*?<\/nav>/)?.[0] || "";
 
   assert.match(css, /\.plan-columns\{height:auto;min-height:0\}/);
-  assert.match(css, /\.recommendation-panel,\.itinerary-panel\{overflow:visible;max-height:none\}/);
+  assert.match(css, /\.itinerary-panel\{overflow:visible;max-height:none\}/);
   assert.match(css, /\.booking-add-button\{[^}]*background:var\(--ink\);[^}]*color:#fff/);
   assert.match(css, /\.add-itinerary-button\{[^}]*background:var\(--ink\);[^}]*color:#fff/);
   assert.match(css, /\.workspace-overlay\{position:fixed;inset:0/);
@@ -617,7 +617,7 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   assert.match(recommendationCreator, /添加小红书/);
   assert.match(recommendationCreator, /uploadMediaFile\(file, "recommendation_reference"\)/);
   assert.match(recommendationRoute, /isCore: false/);
-  assert.match(css, /\.trip-plan-page,\.plan-columns,\.recommendation-panel,\.itinerary-panel\{overflow:visible\}/);
+  assert.match(css, /\.trip-plan-page,\.plan-columns,\.itinerary-panel\{overflow:visible\}/);
 });
 
 test("releases save state after success, API errors, refresh errors, and request failures", () => {

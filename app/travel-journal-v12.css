@@ -31,7 +31,7 @@ body::before {
   pointer-events: none;
 }
 
-.site-mobile-nav + .trip-journal-workspace .trip-console-side > .member-identity-control,.site-mobile-nav + .trip-journal-workspace .library-console > .member-identity-control {
+.site-mobile-nav + .trip-journal-workspace .trip-console-side > .member-identity-control {
   display: none;
 }
 
