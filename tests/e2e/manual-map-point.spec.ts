@@ -39,6 +39,7 @@ test("manual map point dialogs retry each unfinished step without recreating the
     const pick = page.frameLocator('iframe[title="高德地图"]').getByRole("button", { name: "选择测试地图坐标", exact: true });
     await pick.click();
     const editor = page.getByRole("dialog", { name: "手动地图选点", exact: true });
+    await expect(editor.getByRole("combobox", { name: "城市", exact: true })).toHaveValue(trip.cities[0].id);
     for (const width of [320, 375, 390, 430, 1280]) {
       await page.setViewportSize({ width, height: 844 });
       const metrics = await editor.evaluate(element => {

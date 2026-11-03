@@ -7,7 +7,8 @@ export function ManualMapPointEditor({ slug, point, cities, defaultCityId, booki
   slug: string; point: { longitude: number; latitude: number }; cities: { id: string; name: string }[];
   defaultCityId: string; bookings: { id: string; title: string }[]; onClose: (hasSavedChanges: boolean) => void; onSaved: () => void;
 }) {
-  const [name, setName] = useState(""), [address, setAddress] = useState(""), [cityId, setCityId] = useState(defaultCityId);
+  const initialCityId = cities.some(city => city.id === defaultCityId) ? defaultCityId : cities.length === 1 ? cities[0].id : "";
+  const [name, setName] = useState(""), [address, setAddress] = useState(""), [cityId, setCityId] = useState(initialCityId);
   const [bookingId, setBookingId] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [placeId, setPlaceId] = useState<string | null>(null), [saved, setSaved] = useState(false);
   const running = useRef(false), createdPlace = useRef<string | null>(null), attached = useRef(false);
@@ -38,11 +39,11 @@ export function ManualMapPointEditor({ slug, point, cities, defaultCityId, booki
     finally { running.current = false; setBusy(false); }
   }
   return <EditorDialog open title="手动地图选点" onClose={() => onClose(Boolean(placeId))} busy={busy}
-    dirty={Boolean(name || address || bookingId || cityId !== defaultCityId || placeId)}
+    dirty={Boolean(name || address || bookingId || cityId !== initialCityId || placeId)}
     discardMessage={saved ? "地点已保留在暂存地点中，订单绑定尚未完成。关闭不会删除已保存的地点。" : placeId ? "地点已创建，但尚未加入旅行暂存地点。关闭将结束本次编辑。" : undefined}
     onSubmit={submit} submitLabel={saved && bookingId ? "重试绑定订单" : "保存地点"}>
     <p>坐标：{point.longitude.toFixed(5)}, {point.latitude.toFixed(5)}</p>
-    <label>城市<select aria-label="城市" disabled={!!placeId} value={cityId} onChange={event => setCityId(event.target.value)}>{cities.map(city => <option key={city.id} value={city.id}>{city.name}</option>)}</select></label>
+    <label>城市<select aria-label="城市" disabled={!!placeId} value={cityId} onChange={event => setCityId(event.target.value)}><option value="">请选择城市</option>{cities.map(city => <option key={city.id} value={city.id}>{city.name}</option>)}</select></label>
     <label>名称<input disabled={!!placeId} required maxLength={200} value={name} onChange={event => setName(event.target.value)} placeholder="例如：集合点" /></label>
     <label>地址或备注<input disabled={!!placeId} maxLength={500} value={address} onChange={event => setAddress(event.target.value)} /></label>
     {bookings.length > 0 && <label>同时绑定订单<select aria-label="同时绑定订单" value={bookingId} onChange={event => setBookingId(event.target.value)}><option value="">不绑定订单</option>{bookings.map(booking => <option key={booking.id} value={booking.id}>{booking.title}</option>)}</select></label>}
