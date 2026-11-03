@@ -298,3 +298,7 @@
 .plan-add-editor .plan-add-two-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 @media(max-width:680px){.plan-add-editor .plan-add-two-columns{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:680px){.workspace-editor-dialog .accommodation-date-fields{grid-template-columns:minmax(0,1fr)}}
+
+.member-profile-shortcuts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 16px 0; }
+.member-profile-shortcuts a { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-width: 0; padding: 12px; border: 1px solid #d9d5ca; border-radius: 8px; color: var(--ink); text-decoration: none; }
+.member-profile-shortcuts a:hover, .member-profile-shortcuts a:focus-visible { background: #f0ece2; }

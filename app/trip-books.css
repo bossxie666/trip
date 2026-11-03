@@ -266,3 +266,4 @@ body:has(.archive-index-with-shell) {
 .trip-book-binding { display:none; }
 .trip-book-cover { animation:none!important; transition:none!important; }
 .trip-book-cover:hover,.trip-book-cover:focus-visible { transform:translateY(-5px) rotateY(-4deg) translateZ(8px); }
+.trip-book-cover:hover .trip-book-meta strong, .trip-book-cover:focus-visible .trip-book-meta strong { text-decoration: underline; text-underline-offset: .2em; }
