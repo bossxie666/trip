@@ -82,8 +82,9 @@ test("a delayed engine times out visibly and a late download does not open the b
     release();
     await downloaded;
     await expect(page.locator("#scene-wrap")).toHaveAttribute("data-state", "closed");
-    await page.clock.resume();
     await page.getByRole("button", { name: "重试打开旅行书", exact: true }).click();
+    await expect(page.locator("#scene-wrap")).toHaveAttribute("data-state", "opening");
+    await page.clock.runFor(1100);
     await expect(page.locator("#scene-wrap")).toHaveAttribute("data-state", "open");
   } finally { release(); }
 });
