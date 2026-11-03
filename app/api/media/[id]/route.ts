@@ -19,14 +19,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const transformed = await env.IMAGES.input(object.body).transform({ width: variant.width, fit: "scale-down" }).output({ format: "image/webp", quality: variant.quality });
     const response = transformed.response();
     const headers = new Headers(response.headers);
-    headers.set("cache-control", asset.purpose==="album"?"private, no-store":"private, max-age=86400");
+    headers.set("cache-control", (asset.purpose==="album"||asset.purpose==="guestbook")?"private, no-store":"private, max-age=86400");
     headers.set("content-disposition", "inline");
     headers.set("x-content-type-options", "nosniff");
     return new Response(response.body, { status: response.status, headers });
   } catch {
     const headers = new Headers();
     object.writeHttpMetadata(headers);
-    headers.set("cache-control", asset.purpose==="album"?"private, no-store":"private, max-age=3600");
+    headers.set("cache-control", (asset.purpose==="album"||asset.purpose==="guestbook")?"private, no-store":"private, max-age=3600");
     headers.set("content-disposition", "inline");
     headers.set("x-content-type-options", "nosniff");
     return new Response(object.body, { headers });

@@ -8,19 +8,23 @@ import { editorRequest } from "@/components/trip/editor-request";
 import type { GuestbookMessageView } from "@/services/guestbook-service.server";
 
 // Mounted on demand so closing never leaves an unsaved draft in a card.
-export function GuestbookEditor({ message, initialDelete = false, onClose, onSaved, onDeleted }: {
+export function GuestbookEditor({ message, currentMemberId, members, initialDelete = false, onClose, onSaved, onDeleted }: {
+  currentMemberId: string; members: { id: string; displayName: string }[];
   message?: GuestbookMessageView; initialDelete?: boolean; onClose: () => void;
   onSaved: (message: GuestbookMessageView) => void; onDeleted: (id: string) => void;
 }) {
   const [body, setBody] = useState(message?.body ?? "");
+  const [visibility, setVisibility] = useState<"all" | "selected">(message?.visibility ?? "all");
+  const [memberIds, setMemberIds] = useState<string[]>(message?.memberIds ?? [currentMemberId]);
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [progress, setProgress] = useState(""), [deleting, setDeleting] = useState(initialDelete);
   const inputRef = useRef<HTMLInputElement>(null);
   const uploaded = useRef(new Map<File, string>());
-  const dirty = body !== (message?.body ?? "") || files.length > 0;
+  const dirty = body !== (message?.body ?? "") || files.length > 0 || visibility !== (message?.visibility ?? "all") || [...memberIds].sort().join() !== [...(message?.memberIds ?? [currentMemberId])].sort().join();
 
   async function submit() {
+    if (busy) return;
     setBusy(true); setError("");
     try {
       if (deleting && message) {
@@ -39,7 +43,7 @@ export function GuestbookEditor({ message, initialDelete = false, onClose, onSav
       setProgress("保存中…");
       const result = await editorRequest<{ message?: GuestbookMessageView }>(message ? `/api/guestbook/${encodeURIComponent(message.id)}` : "/api/guestbook", {
         method: message ? "PATCH" : "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify(message ? { body } : { body, mediaAssetIds }),
+        body: JSON.stringify({ body, visibility, memberIds, ...(!message ? { mediaAssetIds } : {}) }),
       });
       if (!result.message) throw new Error("留言保存结果异常，请重试。");
       onSaved(result.message);
@@ -54,6 +58,8 @@ export function GuestbookEditor({ message, initialDelete = false, onClose, onSav
     actions={message && <button type="button" className={deleting ? undefined : "danger"} disabled={busy} onClick={() => { setDeleting(!deleting); setError(""); }}>{deleting ? "返回编辑" : "删除留言"}</button>}>
     {deleting ? <p>确定删除这条留言吗？删除后将不再显示在留言板中。</p> : <>
       <label>留言内容<textarea rows={5} value={body} maxLength={1000} onChange={event => setBody(event.target.value)} /></label>
+      <label>可见范围<select value={visibility} onChange={event => setVisibility(event.target.value as "all" | "selected")}><option value="all">全体成员</option><option value="selected">指定成员</option></select></label>
+      {visibility === "selected" && <fieldset className="guestbook-member-picker"><legend>可见成员</legend>{members.map(member => <label key={member.id}><input type="checkbox" checked={member.id === currentMemberId || memberIds.includes(member.id)} disabled={busy || member.id === currentMemberId} onChange={event => setMemberIds(ids => event.target.checked ? [...new Set([...ids, member.id])] : ids.filter(id => id !== member.id))} />{member.displayName}{member.id === currentMemberId ? "（自己）" : ""}</label>)}</fieldset>}
       {!message && <>
         <input ref={inputRef} hidden type="file" multiple accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" onChange={event => {
           const selected = Array.from(event.target.files ?? []);

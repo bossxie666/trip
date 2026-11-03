@@ -170,7 +170,7 @@ class TestD1Database {
 const DB = new TestD1Database();
 globalThis.__TRIP_TEST_D1__ = DB;
 globalThis.__TRIP_TEST_ENV__ = { TRIP_SPACE_INVITE_CODE: "test-invite", TRIP_SPACE_SESSION_SECRET: "test-session-secret-at-least-32-characters", AMAP_JS_API_KEY: "test-js-key", AMAP_JS_SECURITY_CODE: "test-js-code", AMAP_WEB_SERVICE_KEY: "test-web-key" };
-for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql", "0014_v2_2_1_confirmed_facts.sql", "0015_v2_4_r1_booking_endpoint_labels.sql", "0016_recommendation_v2.sql", "0017_home_media_guestbook.sql", "0018_recommendation_member_authoring.sql", "0019_albums.sql", "0020_city_centers.sql", "0021_security_rate_limits.sql", "0022_album_photo_management.sql", "0023_member_identity.sql", "0024_knowledge_library.sql", "0025_knowledge_reference_titles.sql", "0026_knowledge_legacy_favorites.sql", "0027_media_deletion_queue.sql", "0028_album_calendar_indexes.sql", "0029_album_members.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
+for (const file of ["0000_strange_unus.sql", "0001_fancy_sharon_carter.sql", "0002_cynical_umar.sql", "0003_bright_prodigy.sql", "0004_clean_starfox.sql", "0005_omniscient_la_nuit.sql", "0006_right_queen_noir.sql", "0007_shanghai_hangzhou_real_trip.sql", "0008_fair_shinobi_shaw.sql", "0009_supreme_loa.sql", "0010_retire_shanghai_legacy.sql", "0011_v2_1_stability.sql", "0012_rename_zhu_jingqi_display_name.sql", "0013_absurd_bastion.sql", "0014_v2_2_1_confirmed_facts.sql", "0015_v2_4_r1_booking_endpoint_labels.sql", "0016_recommendation_v2.sql", "0017_home_media_guestbook.sql", "0018_recommendation_member_authoring.sql", "0019_albums.sql", "0020_city_centers.sql", "0021_security_rate_limits.sql", "0022_album_photo_management.sql", "0023_member_identity.sql", "0024_knowledge_library.sql", "0025_knowledge_reference_titles.sql", "0026_knowledge_legacy_favorites.sql", "0027_media_deletion_queue.sql", "0028_album_calendar_indexes.sql", "0029_album_members.sql", "0030_guestbook_social.sql"]) DB.database.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
 
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
@@ -2275,4 +2275,73 @@ test("manual points retain distinct coordinates for equal names and reject inval
   const before = DB.database.prepare("SELECT * FROM places WHERE name=? ORDER BY id").all(input.name);
   const invalid = await render(endpoint, { method: "POST", body: { ...input, latitude: 120 } }); assert.equal(invalid.status, 400);
   assert.deepEqual(DB.database.prepare("SELECT * FROM places WHERE name=? ORDER BY id").all(input.name), before);
+});
+
+
+test("guestbook audience protects notes, reactions, replies and direct images after revocation", async () => {
+  const saved = sessionCookie, asset = `guestbook-private-${crypto.randomUUID()}`;
+  let id;
+  const now = new Date().toISOString();
+  DB.database.prepare("INSERT INTO media_assets(id,uploader_member_id,purpose,object_key,original_filename,content_type,byte_size,status,created_at,updated_at) VALUES (?,'member-nini','guestbook',?,'private.jpg','image/jpeg',100,'ready',?,?)").run(asset, `guestbook/${asset}.jpg`, now, now);
+  try {
+    await loginAs("nini");
+    assert.equal((await render("/api/guestbook", { method: "POST", body: { body: "invalid audience", visibility: "selected", memberIds: ["missing"] } })).status, 400);
+    assert.equal((await render("/api/guestbook", { method: "POST", headers: { origin: "https://evil.example" }, body: { body: "cross origin" } })).status, 403);
+    const created = await render("/api/guestbook", { method: "POST", body: { body: "指定成员私密留言", mediaAssetIds: [asset], visibility: "selected", memberIds: [] } });
+    assert.equal(created.status, 201);
+    const message = (await created.json()).message; id = message.id;
+    assert.deepEqual(message.memberIds, ["member-nini"]);
+    const root = `/api/guestbook/${id}`, image = `/api/media/${asset}`;
+    const list = async () => (await (await render("/api/guestbook")).json()).messages;
+    await loginAs("kiki");
+    assert.ok(!(await list()).some(m => m.id === id));
+    assert.doesNotMatch(await (await render("/messages")).text(), /指定成员私密留言/);
+    for (const [path, method, body] of [[`${root}/like`, "PUT", { liked: true }], [`${root}/replies`, "POST", { body: "hidden reply" }]]) assert.equal((await render(path, { method, body })).status, 404);
+    assert.equal((await render(image)).status, 404);
+    assert.equal(DB.database.prepare("SELECT COUNT(*) n FROM guestbook_likes WHERE message_id=?").get(id).n, 0);
+    await loginAs("nini");
+    DB.failBatchAt = 1;
+    assert.equal((await render(root, { method: "PATCH", body: { body: "must roll back", visibility: "selected", memberIds: ["member-zhu-jingqi"] } })).status, 500);
+    assert.equal(DB.database.prepare("SELECT body FROM guestbook_messages WHERE id=?").get(id).body, "指定成员私密留言");
+    const grant = await render(root, { method: "PATCH", body: { body: message.body, visibility: "selected", memberIds: ["member-zhu-jingqi"] } });
+    assert.equal(grant.status, 200);
+    assert.ok((await grant.json()).message.memberIds.includes("member-nini"));
+    await loginAs("kiki");
+    assert.ok((await list()).some(m => m.id === id));
+    for (let i = 0; i < 2; i++) assert.equal((await render(`${root}/like`, { method: "PUT", body: { liked: true } })).status, 200);
+    let visible = (await list()).find(m => m.id === id);
+    assert.equal(visible.likes.length, 1); assert.equal(visible.likes[0].id, "member-zhu-jingqi");
+    assert.equal((await render(`${root}/like`, { method: "PUT", body: { liked: "yes" } })).status, 400);
+    assert.equal((await render(`${root}/replies`, { method: "POST", body: { body: "   " } })).status, 400);
+    assert.equal((await render(`${root}/replies`, { method: "POST", body: { body: "x".repeat(1001) } })).status, 400);
+    const reply = await render(`${root}/replies`, { method: "POST", body: { body: "一起出发！" } });
+    assert.equal(reply.status, 201);
+    visible = (await reply.json()).message;
+    const replyId = visible.replies[0].id;
+    const allowedImage = await render(image); assert.equal(allowedImage.status, 503); assert.match(allowedImage.headers.get("cache-control"), /no-store/);
+    await loginAs("nini");
+    assert.equal((await render(`${root}/replies/${replyId}`, { method: "DELETE" })).status, 403);
+    assert.equal((await render(root, { method: "PATCH", body: { body: message.body, visibility: "selected", memberIds: [] } })).status, 200);
+    await loginAs("kiki");
+    assert.ok(!(await list()).some(m => m.id === id));
+    assert.equal((await render(image)).status, 404);
+    assert.equal((await render(`${root}/replies/${replyId}`, { method: "DELETE" })).status, 404);
+    await loginAs("nini");
+    await render(root, { method: "PATCH", body: { body: message.body, visibility: "all", memberIds: [] } });
+    await loginAs("kiki");
+    const unliked = await render(`${root}/like`, { method: "PUT", body: { liked: false } });
+    assert.equal((await unliked.json()).message.likes.length, 0);
+    const removed = await render(`${root}/replies/${replyId}`, { method: "DELETE" });
+    assert.equal((await removed.json()).message.replies.length, 0);
+    await loginAs("nini"); await render(root, { method: "DELETE" });
+    assert.equal((await render(image)).status, 404);
+    assert.equal((await render(`${root}/like`, { method: "PUT", body: { liked: true } })).status, 404);
+    sessionCookie = "";
+    assert.equal((await render("/api/guestbook")).status, 401);
+    assert.equal((await render(`${root}/replies`, { method: "POST", body: { body: "anonymous" } })).status, 401);
+  } finally {
+    if (id) DB.database.prepare("DELETE FROM guestbook_messages WHERE id=?").run(id);
+    DB.database.prepare("DELETE FROM media_assets WHERE id=?").run(asset);
+    sessionCookie = saved;
+  }
 });
