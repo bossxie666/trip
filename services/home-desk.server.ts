@@ -1,3 +1,4 @@
+import { tripCoverCardUrl } from "@/components/media/cover-url";
 import { getRuntimeEnv } from "@/db";
 import { listTripSummaries } from "@/services/trip-repository.server";
 
@@ -11,7 +12,7 @@ export async function getHomeDesk(memberId: string) {
   ]);
   return {
     memberId,
-    trips:trips.slice(0,8).map(t=>({id:t.id,title:t.title,cover:t.cover==="/og.png"?"/og-card.jpg":t.cover,href:`/trips/${t.slug}/plan`})),
+    trips:trips.slice(0,8).map(t=>({id:t.id,title:t.title,cover:tripCoverCardUrl(t.cover),href:`/trips/${t.slug}/plan`})),
     cities:[...new Map(trips.flatMap(t=>t.cities).map(c=>[c.cityId,{name:c.name,lat:c.centerLat,lng:c.centerLng,href:`/cities/${c.slug}`}])).values()],
     albums:albums.results.map(a=>({id:a.id,title:a.title,cover:a.cover?`/api/media/${a.cover}?variant=card`:null,href:`/albums/${a.id}`})),
     photos:photos.results.map(p=>({id:p.id,albumId:p.albumId,title:p.filename||p.title,src:`/api/media/${p.id}?variant=card`,full:`/api/media/${p.id}?variant=display`,href:`/albums/${p.albumId}`})),

@@ -1,0 +1,16 @@
+:root, html[data-decor-ready] {
+  --site-background: radial-gradient(ellipse at 45% 30%, #f6f3eb, #e6e1d6 75%, #d8d1c4);
+  --journal-paper-mobile: none;
+  --journal-paper-desktop: none;
+  --journal-shell-mobile: none;
+  --journal-shell-desktop: none;
+}
+
+html, html body {
+  background: var(--site-background) fixed !important;
+  min-height: 100svh;
+}
+
+body::before, body::after { display: none !important; }
+main { background: transparent !important; }
+main::before, main::after { background-image: none !important; }
