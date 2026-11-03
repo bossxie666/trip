@@ -59,7 +59,19 @@ function withSecurityHeaders(response: Response, url: URL, requestId: string) {
     headers.set("x-frame-options", "SAMEORIGIN");
   }
   if (url.protocol === "https:") headers.set("strict-transport-security", "max-age=31536000; includeSubDomains");
-  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+  const secured = new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+  // Vinext emits script preloads without the module fetch credentials mode.
+  // Matching anonymous CORS prevents Chrome discarding and fetching them again.
+  type Rewriter = { on(selector: string, handler: { element(element: { getAttribute(name: string): string | null; setAttribute(name: string, value: string): void }): void }): Rewriter; transform(response: Response): Response };
+  const Rewriter = (globalThis as typeof globalThis & { HTMLRewriter?: new () => Rewriter }).HTMLRewriter;
+  if (headers.get("content-type")?.includes("text/html") && Rewriter) {
+    return new Rewriter().on('link[rel="preload"][as="script"]', {
+      element(element) {
+        if (element.getAttribute("href")?.startsWith("/_next/static/")) element.setAttribute("crossorigin", "anonymous");
+      },
+    }).transform(secured);
+  }
+  return secured;
 }
 
 // Image security config. SVG sources with .svg extension auto-skip the
