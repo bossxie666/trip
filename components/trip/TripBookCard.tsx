@@ -80,7 +80,7 @@ export function TripBookCard({ trip, index, canDelete, members }: Props) {
       <span className="trip-book-spine" aria-hidden="true" />
       <span className="trip-book-image">{cover ? <img src={cover} alt="" width={640} height={480} fetchPriority={index < 2 ? "high" : "auto"} loading={index < 4 ? "eager" : "lazy"} /> : <span className="trip-book-empty">NO COVER</span>}</span>
       <span className="trip-book-status">{trip.statusLabel}</span>
-      <span className="trip-book-meta"><strong>{trip.title}</strong><small><Users size={14} />{trip.participantSummary}</small></span>
+      <span className="trip-book-meta"><strong title="打开行程">{trip.title}</strong><small><Users size={14} />{trip.participantSummary}</small></span>
       <i className="trip-book-mark" aria-hidden="true" />
     </a>
     <button className="trip-book-menu-trigger" type="button" aria-label={`编辑旅行：${trip.title}`} aria-haspopup="dialog" aria-expanded={editOpen} onClick={() => setEditOpen(true)}><MoreHorizontal size={18} /></button>

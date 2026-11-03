@@ -2,6 +2,10 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
+import { mapAreaCity, mapAreaOptions, matchesMapArea, normalizeMapArea } from "@/services/map-areas";
+import { useClientReady } from "./useClientReady";
+import { sameRoutePlace } from "@/services/route-location";
 import { WorkspaceNavLink as Link } from "./WorkspaceNavLink";
 import type { AMapRouteMode, AMapRouteResult } from "@/services/amap/amap-types";
 import { routeStrokeColor, transitLegStrokeColor } from "@/services/amap/subway-colors";
@@ -38,7 +42,6 @@ function transitStepLabel(step: NonNullable<AMapRouteResult["steps"]>[number]) {
   return step.transfer || step.instruction || "换乘";
 }
 function shortDate(date: string | null) { return date ? date.slice(5).replace("-", "/") : "日期未定"; }
-function placeArea(place: Place, cities: { id: string; name: string }[]) { const city = cities.find((item) => item.id === place.cityId)?.name || ""; return (place.name.includes("桐庐") || place.district?.includes("桐庐")) ? "tonglu" : city.includes("上海") ? "shanghai" : "hangzhou"; }
 function placeCategory(entry: MapEntry) { if (entry.category === "hotel" || entry.category === "experience") return "other"; return entry.category || (entry.kind === "recommendation" ? "attraction" : "other"); }
 function segmentParticipantSummary(segment: Segment, members: { id: string }[] = []) {
   const memberIds = members.length ? members.map((member) => member.id) : [...new Set([...Object.keys(segment.from.memberStates || {}), ...Object.keys(segment.to.memberStates || {})])];
@@ -46,19 +49,21 @@ function segmentParticipantSummary(segment: Segment, members: { id: string }[] =
   return { unknown: false, count: memberIds.filter((memberId) => segment.from.memberStates?.[memberId] === "present" && segment.to.memberStates?.[memberId] === "present").length };
 }
 
-export type PlanMapProps = { slug: string; places?: { id: string; name: string; latitude: number | null; longitude: number | null; candidate: boolean; order: number | null }[]; workspace?: Workspace; activeDayId?: string; mapMode?: "day" | "library"; compact?: boolean };
+export type PlanMapProps = { slug: string; places?: { id: string; name: string; latitude: number | null; longitude: number | null; candidate: boolean; order: number | null }[]; workspace?: Workspace; activeDayId?: string; mapMode?: "day" | "library"; compact?: boolean; initialArea?: string };
 
 export function PlanMap(props: PlanMapProps) {
   return <MapRecoveryBoundary><PlanMapContent {...props} /></MapRecoveryBoundary>;
 }
 
-function PlanMapContent({ slug, places = [], workspace, activeDayId, mapMode = "day", compact = false }: PlanMapProps) {
+function PlanMapContent({ slug, places = [], workspace, activeDayId, mapMode = "day", compact = false, initialArea = "all" }: PlanMapProps) {
   const { refreshWorkspace } = useWorkspaceNavigation();
+  const router = useRouter();
+  const interactive = useClientReady();
   const namespaceRef = useRef<AMapNamespace | null>(null);
   const container = useRef<HTMLDivElement>(null), mapRef = useRef<AMapObject | null>(null), overlays = useRef<unknown[]>([]), markerObjects = useRef<AMapMarker[]>([]), lastFitSignature = useRef(""), focusedFitSignatureRef = useRef(""), fitContextRef = useRef(""), userHasInteractedWithMap = useRef(false), searchAbortRef = useRef<AbortController | null>(null), searchRequestRef = useRef(0), routeAbortRef = useRef<AbortController | null>(null), routeRequestRef = useRef(0);
   const defaultRouteKey = useRef("");
   const [mapAttempt, setMapAttempt] = useState(0), [mapError, setMapError] = useState("");
-  const [ready, setReady] = useState(false), [error, setError] = useState(""), [search, setSearch] = useState(""), [searching, setSearching] = useState(false), [searchResults, setSearchResults] = useState<SearchPoi[]>([]), [selectedSearch, setSelectedSearch] = useState<string | null>(null), [selectedMapEntryId, setSelectedMapEntryId] = useState<string | null>(null), [focusedRecommendationId, setFocusedRecommendationId] = useState<string | null>(null), [bindingBookingId, setBindingBookingId] = useState(""), [area, setArea] = useState("all"), [category, setCategory] = useState("all"), [dayFilter, setDayFilter] = useState("all"), [memberFilter, setMemberFilter] = useState(workspace?.memberFilter || workspace?.currentMemberId || "all"), [targetDayId, setTargetDayId] = useState(activeDayId || ""), [routeResults, setRouteResults] = useState<Record<string, AMapRouteResult>>({}), [routeComparisons, setRouteComparisons] = useState<Record<string, Partial<Record<AMapRouteMode, AMapRouteResult>>>>({}), [routeStale, setRouteStale] = useState<Record<string, boolean>>({}), [routing, setRouting] = useState<string | null>(null), [viewport, setViewport] = useState<{ south: number; west: number; north: number; east: number } | null>(null), [manualPoint, setManualPoint] = useState<{ longitude: number; latitude: number } | null>(null);
+  const [ready, setReady] = useState(false), [error, setError] = useState(""), [search, setSearch] = useState(""), [searching, setSearching] = useState(false), [searchResults, setSearchResults] = useState<SearchPoi[]>([]), [selectedSearch, setSelectedSearch] = useState<string | null>(null), [selectedMapEntryId, setSelectedMapEntryId] = useState<string | null>(null), [focusedRecommendationId, setFocusedRecommendationId] = useState<string | null>(null), [bindingBookingId, setBindingBookingId] = useState(""), [area, setArea] = useState(() => normalizeMapArea(initialArea, workspace?.cities || [])), [category, setCategory] = useState("all"), [dayFilter, setDayFilter] = useState("all"), [memberFilter, setMemberFilter] = useState(workspace?.memberFilter || workspace?.currentMemberId || "all"), [targetDayId, setTargetDayId] = useState(activeDayId || ""), [routeResults, setRouteResults] = useState<Record<string, AMapRouteResult>>({}), [routeComparisons, setRouteComparisons] = useState<Record<string, Partial<Record<AMapRouteMode, AMapRouteResult>>>>({}), [routeStale, setRouteStale] = useState<Record<string, boolean>>({}), [routing, setRouting] = useState<string | null>(null), [viewport, setViewport] = useState<{ south: number; west: number; north: number; east: number } | null>(null), [manualPoint, setManualPoint] = useState<{ longitude: number; latitude: number } | null>(null);
   const activeDay = workspace?.days.find((day) => day.id === activeDayId) || workspace?.days[0];
   const timelineNodes = activeDay ? workspace?.timelineNodesByDay?.[activeDay.id] || [] : [];
   const visibleTimelineNodes = filterTimelineForMember(timelineNodes, memberFilter);
@@ -96,7 +101,7 @@ function PlanMapContent({ slug, places = [], workspace, activeDayId, mapMode = "
     // A Day filter is a visual highlight, not a hard hide.  The library map is
     // an all-trip spatial overview; non-matching places remain visible but are
     // deliberately muted by the marker layer below.
-    return entries.filter((entry) => (area === "all" || placeArea(entry.place, workspace.cities) === area) && (category === "all" || placeCategory(entry) === category));
+    return entries.filter((entry) => matchesMapArea(entry.place, area, workspace.cities) && (category === "all" || placeCategory(entry) === category));
   }, [area, category, dayFilter, dayStops, entries, mapMode, workspace]);
   const visible = useMemo(() => mapEntries.filter((entry) => entry.place.latitude != null && entry.place.longitude != null), [mapEntries]);
   const focusedEntries = useMemo(() => focusedRecommendationId ? visible.filter((entry) => entry.recommendations?.some(({ id }) => id === focusedRecommendationId)).sort((a, b) => (a.recommendations?.find(({ id }) => id === focusedRecommendationId)?.sortOrder ?? 999) - (b.recommendations?.find(({ id }) => id === focusedRecommendationId)?.sortOrder ?? 999)) : [], [focusedRecommendationId, visible]);
@@ -109,11 +114,16 @@ function PlanMapContent({ slug, places = [], workspace, activeDayId, mapMode = "
   ].join("|");
   const fitContext = [mapMode, activeDay?.id || "", area, category, dayFilter, memberFilter, visible.map((entry) => entry.timelineId || entry.place.id).join(",")].join("|");
   const dayHighlightIds = useMemo(() => new Set((workspace?.days.find((day) => day.id === dayFilter)?.items || []).map(({ item }) => item.placeId).filter((id): id is string => Boolean(id))), [dayFilter, workspace]);
-  // Tonglu is an area/region under Hangzhou, not a separate Trip City.  Keep
-  // the persisted city relation on Hangzhou while using 桐庐 only as the
-  // provider search region.
-  const searchCity = workspace?.cities.find((item) => (area === "hangzhou" || area === "tonglu") && item.name.includes("杭州")) || workspace?.cities.find((item) => area === "shanghai" && item.name.includes("上海")) || workspace?.cities.find((item) => item.name.includes("上海")) || workspace?.cities[0];
+  const areaOptions = mapAreaOptions(workspace?.cities || [], entries.map(entry => entry.place), area);
+  const searchCity = mapAreaCity(area, workspace?.cities || []);
   const searchRegion = mapMode === "library" ? (area === "tonglu" ? "桐庐" : searchCity?.name || "") : "";
+  useEffect(() => { setArea(normalizeMapArea(initialArea, workspace?.cities || [])); }, [initialArea, workspace?.cities]);
+  function changeArea(value: string) {
+    setArea(value);
+    const query = new URLSearchParams(window.location.search);
+    query.set("area", value);
+    router.replace(`${window.location.pathname}?${query}`);
+  }
   useEffect(() => {
     let cancelled = false, frame = 0, attempts = 0;
     let observer: ResizeObserver | null = null;
@@ -132,7 +142,7 @@ function PlanMapContent({ slug, places = [], workspace, activeDayId, mapMode = "
         disposeFrame = dispose;
         if (cancelled) { dispose(); return; }
         namespaceRef.current = AMap;
-        try { mapRef.current = new AMap.Map(target, { zoom: 11, center: [121.47, 31.23], viewMode: "2D" }); }
+        try { const first = visible[0]?.place; mapRef.current = new AMap.Map(target, { zoom: first ? 11 : 4, center: first ? [first.longitude!, first.latitude!] : [104, 35], viewMode: "2D" }); }
         catch { dispose(); setMapError("地图初始化失败，请重试。"); return; }
         if (typeof ResizeObserver !== "undefined") {
           observer = new ResizeObserver(() => mapRef.current?.resize?.());
@@ -209,7 +219,7 @@ function PlanMapContent({ slug, places = [], workspace, activeDayId, mapMode = "
   useEffect(() => { if (!workspace || mapMode !== "day") return; setRouteResults({}); setRouteComparisons({}); setRouteStale({}); setTargetDayId(activeDayId || workspace.days[0]?.id || ""); }, [activeDayId, mapMode, memberFilter, workspace]);
   useEffect(() => {
     searchAbortRef.current?.abort();
-    if (!search.trim() || (mapMode === "library" && !searchCity)) { setSearchResults([]); setSearching(false); return; }
+    if (!search.trim()) { setSearchResults([]); setSearching(false); return; }
     const controller = new AbortController(); searchAbortRef.current = controller; const requestId = ++searchRequestRef.current;
     const timer = window.setTimeout(async () => {
       setSearching(true); setError("");
@@ -231,6 +241,7 @@ function PlanMapContent({ slug, places = [], workspace, activeDayId, mapMode = "
   }, [mapMode, search, searchCity, searchRegion, slug]);
   function preferredFor(segment: Segment) { return workspace?.routePreferences?.find((preference) => preference.dayId === activeDay?.id && preference.fromId === segment.from.id && preference.toId === segment.to.id && (preference.memberId === memberFilter || (memberFilter === "all" && preference.memberId === (workspace.currentMemberId || null))))?.preferredMode || "transit"; }
   async function planSegment(segment: Segment, mode: AMapRouteMode, persistPreference = true) {
+    if (sameRoutePlace(segment.from.place, segment.to.place)) return;
     const cached = routeComparisons[segment.id]?.[mode];
     if (cached) {
       setRouteResults((current) => ({ ...current, [segment.id]: cached })); setRouteStale((current) => ({ ...current, [segment.id]: false }));
@@ -264,7 +275,7 @@ function PlanMapContent({ slug, places = [], workspace, activeDayId, mapMode = "
       setError(caught instanceof Error ? caught.message : "路线暂时无法计算，请重试。");
     } finally { if (requestId === routeRequestRef.current) setRouting(null); }
   }
-  useEffect(() => { if (mapMode !== "day" || !activeDay || !daySegments.length) return; const first = daySegments.find((segment) => !segment.crossCity); if (!first || defaultRouteKey.current === `${activeDay.id}:${first.id}` || routeResults[first.id] || routing) return; defaultRouteKey.current = `${activeDay.id}:${first.id}`; void planSegment(first, preferredFor(first), false); }, [activeDay, daySegments, mapMode, routeResults, routing]);
+  useEffect(() => { if (mapMode !== "day" || !activeDay || !daySegments.length) return; const first = daySegments.find((segment) => !segment.crossCity && !sameRoutePlace(segment.from.place, segment.to.place)); if (!first || defaultRouteKey.current === `${activeDay.id}:${first.id}` || routeResults[first.id] || routing) return; defaultRouteKey.current = `${activeDay.id}:${first.id}`; void planSegment(first, preferredFor(first), false); }, [activeDay, daySegments, mapMode, routeResults, routing]);
   async function saveSearch(action: "add" | "save" | "recommendation") { const poi = searchResults.find((item) => item.id === selectedSearch); if (!poi) return; setSearching(true); try { const endpoint = action === "add" ? `/api/trips/${encodeURIComponent(slug)}/plan/items` : action === "save" ? `/api/trips/${encodeURIComponent(slug)}/saved-places` : `/api/trips/${encodeURIComponent(slug)}/recommendations`; const cityId = mapMode === "library" ? searchCity?.id : undefined; const body = action === "add" ? { dayId: targetDayId || activeDay?.id, providerPlaceId: poi.id, cityId, itemType: "place" } : action === "save" ? { providerPlaceId: poi.id, cityId } : { title: poi.name, providerPlaceId: poi.id, cityId, category: "attraction", areaKey: area === "tonglu" ? "tonglu" : area === "hangzhou" ? "hangzhou" : area === "shanghai" ? "shanghai" : null, areaLabel: area === "tonglu" ? "桐庐" : poi.cityName || searchCity?.name || null }; const response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); const payload = await response.json() as { error?: string }; if (!response.ok) throw new Error(payload.error || "保存失败"); refreshWorkspace(); } catch (caught) { setError(caught instanceof Error ? caught.message : "保存失败"); } finally { setSearching(false); } }
   async function bindSearchToBooking() {
     const poi = searchResults.find((item) => item.id === selectedSearch);
@@ -307,7 +318,7 @@ function PlanMapContent({ slug, places = [], workspace, activeDayId, mapMode = "
     } catch (caught) { setError(caught instanceof Error ? caught.message : "收藏攻略失败"); }
     finally { setSearching(false); }
   }
-  async function searchThisArea() { if (!workspace || !searchCity) return; setSearching(true); setError(""); try { const params = new URLSearchParams({ keywords: search.trim() || (area === "tonglu" ? "桐庐 景点" : "景点"), cityId: searchCity.id, tripSlug: slug }); if (searchRegion) params.set("region", searchRegion); if (viewport) params.set("rectangle", `${viewport.west},${viewport.south};${viewport.east},${viewport.north}`); const response = await fetch(`/api/amap/places/search?${params}`); const payload = await response.json() as { pois?: typeof searchResults; error?: string }; if (!response.ok) throw new Error(payload.error || "区域搜索失败"); setSearchResults(payload.pois || []); setSelectedSearch(null); } catch (caught) { setError(caught instanceof Error ? caught.message : "区域搜索失败"); } finally { setSearching(false); } }
+  async function searchThisArea() { if (!workspace) return; setSearching(true); setError(""); try { const params = new URLSearchParams({ keywords: search.trim() || (area === "tonglu" ? "桐庐 景点" : "景点"), tripSlug: slug }); if (searchCity) params.set("cityId", searchCity.id); if (searchRegion) params.set("region", searchRegion); if (viewport) params.set("rectangle", `${viewport.west},${viewport.south};${viewport.east},${viewport.north}`); const response = await fetch(`/api/amap/places/search?${params}`); const payload = await response.json() as { pois?: typeof searchResults; error?: string }; if (!response.ok) throw new Error(payload.error || "区域搜索失败"); setSearchResults(payload.pois || []); setSelectedSearch(null); } catch (caught) { setError(caught instanceof Error ? caught.message : "区域搜索失败"); } finally { setSearching(false); } }
 
   function renderRouteDirectory() {
     if (mapMode !== "day" || !workspace) return null;
@@ -354,7 +365,7 @@ function PlanMapContent({ slug, places = [], workspace, activeDayId, mapMode = "
                   <span>参与人数 {participantSummary.count} 人（由相邻节点推导）</span>
                 )}
               </div>
-              {segment.crossCity ? (
+              {sameRoutePlace(segment.from.place, segment.to.place) ? <p className="cross-city-note">同一地点，无需交通</p> : segment.crossCity ? (
                 <p className="cross-city-note">
                   跨城市交通不在市内路线估算中，请在订单或行程中确认长途交通。
                 </p>
@@ -433,11 +444,11 @@ function PlanMapContent({ slug, places = [], workspace, activeDayId, mapMode = "
 
 
     return <div className={`plan-map-surface ${mapMode === "library" ? "library-map" : "route-map"}${compact ? " compact-map" : ""}`}>
-    {!compact && workspace && <div className="map-filter-bar"><div className="map-search"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索地点、餐厅、酒店…" aria-label="地图搜索地点"/><button type="button" onClick={() => setSearch(search.trim())} disabled={searching}>{searching ? "搜索中…" : "搜索"}</button></div><div className="map-target-day"><label>加入目标 Day<select value={targetDayId || activeDay?.id || ""} onChange={(event) => setTargetDayId(event.target.value)}>{workspace.days.map((day) => <option key={day.id} value={day.id}>{shortDate(day.date)} · {day.title}</option>)}</select></label>{mapMode === "library" && <button type="button" onClick={searchThisArea} disabled={searching}>{searching ? "搜索中…" : "搜索此区域"}</button>}<button type="button" onClick={() => setError("请点击地图上的准确位置来创建手动地点。")}>在地图上选点</button><button type="button" onClick={() => { userHasInteractedWithMap.current = false; lastFitSignature.current = ""; mapRef.current?.setFitView(markerObjects.current); }} disabled={!ready}>适配视野</button></div>{mapMode === "library" && <><div className="map-filter-row"><span>地域</span>{[{ key: "all", label: "全部" }, { key: "shanghai", label: "上海" }, { key: "hangzhou", label: "杭州" }, { key: "tonglu", label: "桐庐" }].map((item) => <button type="button" className={area === item.key ? "active" : ""} key={item.key} onClick={() => setArea(item.key)}>{item.label}</button>)}</div><div className="map-filter-row"><span>分类</span>{categoryLabels.map((item) => <button type="button" className={category === item.key ? "active" : ""} key={item.key} onClick={() => setCategory(item.key)}>{item.label}</button>)}</div><div className="map-filter-row"><span>Day</span><button type="button" className={dayFilter === "all" ? "active" : ""} onClick={() => setDayFilter("all")}>全部</button>{workspace.days.map((day) => <button type="button" className={dayFilter === day.id ? "active" : ""} key={day.id} onClick={() => setDayFilter(day.id)}>{shortDate(day.date)}</button>)}</div></>}{mapMode === "day" && <div className="map-filter-row"><span>路线成员</span><button type="button" className={memberFilter === "all" ? "active" : ""} onClick={() => setMemberFilter("all")}>全体</button>{(workspace.members || []).map((member) => <button type="button" className={memberFilter === member.id ? "active" : ""} key={member.id} onClick={() => setMemberFilter(member.id)}>{member.displayName}</button>)}</div>}</div>}
+    {!compact && workspace && <div className="map-filter-bar"><div className="map-search"><input disabled={!interactive} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索地点、餐厅、酒店…" aria-label="地图搜索地点"/><button type="button" onClick={() => setSearch(search.trim())} disabled={!interactive || searching}>{searching ? "搜索中…" : "搜索"}</button></div><div className="map-target-day"><label>加入目标 Day<select value={targetDayId || activeDay?.id || ""} onChange={(event) => setTargetDayId(event.target.value)}>{workspace.days.map((day) => <option key={day.id} value={day.id}>{shortDate(day.date)} · {day.title}</option>)}</select></label>{mapMode === "library" && <button type="button" onClick={searchThisArea} disabled={!interactive || searching}>{searching ? "搜索中…" : "搜索此区域"}</button>}<button type="button" onClick={() => setError("请点击地图上的准确位置来创建手动地点。")}>在地图上选点</button><button type="button" onClick={() => { userHasInteractedWithMap.current = false; lastFitSignature.current = ""; mapRef.current?.setFitView(markerObjects.current); }} disabled={!interactive || !ready}>适配视野</button></div>{mapMode === "library" && <><div className="map-filter-row"><span>地域</span>{areaOptions.map((item) => <button disabled={!interactive} type="button" className={area === item.key ? "active" : ""} key={item.key} onClick={() => changeArea(item.key)}>{item.label}</button>)}</div><div className="map-filter-row"><span>分类</span>{categoryLabels.map((item) => <button disabled={!interactive} type="button" className={category === item.key ? "active" : ""} key={item.key} onClick={() => setCategory(item.key)}>{item.label}</button>)}</div><div className="map-filter-row"><span>Day</span><button disabled={!interactive} type="button" className={dayFilter === "all" ? "active" : ""} onClick={() => setDayFilter("all")}>全部</button>{workspace.days.map((day) => <button disabled={!interactive} type="button" className={dayFilter === day.id ? "active" : ""} key={day.id} onClick={() => setDayFilter(day.id)}>{shortDate(day.date)}</button>)}</div></>}{mapMode === "day" && <div className="map-filter-row"><span>路线成员</span><button disabled={!interactive} type="button" className={memberFilter === "all" ? "active" : ""} onClick={() => setMemberFilter("all")}>全体</button>{(workspace.members || []).map((member) => <button disabled={!interactive} type="button" className={memberFilter === member.id ? "active" : ""} key={member.id} onClick={() => setMemberFilter(member.id)}>{member.displayName}</button>)}</div>}</div>}
     {!compact && searchResults.length > 0 && <div className="map-search-results"><b>搜索结果 · 选择后可加入或暂存</b>{searchResults.map((poi) => <article key={poi.id} className={selectedSearch === poi.id ? "selected" : ""} onClick={() => setSelectedSearch(poi.id)}><div><strong>{poi.name}</strong><small>{[poi.district, poi.address].filter(Boolean).join(" · ") || "暂无地址"}</small></div>{selectedSearch === poi.id && <div className="map-search-actions"><button type="button" onClick={() => saveSearch("add")} disabled={!targetDayId}>加入 {shortDate((workspace?.days.find((day) => day.id === targetDayId) || activeDay)?.date || null)}</button><button type="button" onClick={() => saveSearch("save")}>暂存</button><button type="button" onClick={() => saveSearch("recommendation")}>收藏攻略</button>{workspace?.bookings?.length ? <div className="map-binding-actions"><select aria-label="选择要绑定的订单" value={bindingBookingId} onChange={(event) => setBindingBookingId(event.target.value)}><option value="">绑定到订单…</option>{workspace.bookings.map((booking) => <option key={booking.id} value={booking.id}>{booking.title}</option>)}</select><button type="button" onClick={bindSearchToBooking} disabled={!bindingBookingId}>绑定到订单</button></div> : null}</div>}</article>)}</div>}
     {!compact && selectedMapEntryId && mapMode === "library" && (() => { const entry = entries.find((candidate) => candidate.place.id === selectedMapEntryId); if (!entry) return null; const canAdd = entry.kind !== "booking"; return <section className="map-entry-actions"><div><b>{entry.place.name}</b><small>{entry.place.address || "已在旅行地点库中"}</small></div><div><button type="button" onClick={() => saveMapEntry("add")} disabled={!canAdd || !targetDayId}>{canAdd ? `加入 ${shortDate((workspace?.days.find((day) => day.id === targetDayId) || activeDay)?.date || null)}` : "Booking 地点"}</button>{entry.kind !== "saved" && <button type="button" onClick={() => saveMapEntry("save")}>暂存</button>}{entry.kind !== "recommendation" && <button type="button" onClick={() => saveMapEntry("recommendation")}>收藏攻略</button>}<button type="button" className="map-entry-dismiss" onClick={() => setSelectedMapEntryId(null)}>关闭</button></div></section>; })()}
     {!compact && manualPoint && workspace && <ManualMapPointEditor slug={slug} point={manualPoint} cities={workspace.cities} defaultCityId={searchCity?.id || ""} bookings={workspace.bookings || []} onClose={changed => { setManualPoint(null); if (changed) refreshWorkspace(); }} onSaved={() => { setManualPoint(null); refreshWorkspace(); }} />}
-    {!compact && mapMode === "library" && workspace?.savedPlaces?.length ? <section className="saved-place-list"><header><b>暂存地点</b><small>不属于正式行程，选择后再加入目标 Day</small></header>{workspace.savedPlaces.map((saved) => <article key={saved.id}><div><strong>{saved.place.name}</strong><small>{saved.place.address || saved.note || "暂存地点"}</small></div><div><button type="button" onClick={async () => { const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/plan/items`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ dayId: targetDayId || activeDay?.id, placeId: saved.place.id, itemType: "place" }) }); if (response.ok) refreshWorkspace(); }}>加入 Day</button><button type="button" onClick={() => saveSavedAsRecommendation(saved)} disabled={searching}>收藏攻略</button><button type="button" onClick={async () => { const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/saved-places?id=${encodeURIComponent(saved.id)}`, { method: "DELETE" }); if (response.ok) refreshWorkspace(); }}>删除</button></div></article>)}</section> : null}
+    {!compact && mapMode === "library" && workspace?.savedPlaces?.length ? <section className="saved-place-list"><header><b>暂存地点</b><small>不属于正式行程，选择后再加入目标 Day</small></header>{workspace.savedPlaces.map((saved) => <article key={saved.id}><div><strong>{saved.place.name}</strong><small>{saved.place.address || saved.note || "暂存地点"}</small></div><div><button type="button" onClick={async () => { const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/plan/items`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ dayId: targetDayId || activeDay?.id, placeId: saved.place.id, itemType: "place" }) }); if (response.ok) refreshWorkspace(); }}>加入 Day</button><button type="button" onClick={() => saveSavedAsRecommendation(saved)} disabled={!interactive || searching}>收藏攻略</button><button type="button" onClick={async () => { const response = await fetch(`/api/trips/${encodeURIComponent(slug)}/saved-places?id=${encodeURIComponent(saved.id)}`, { method: "DELETE" }); if (response.ok) refreshWorkspace(); }}>删除</button></div></article>)}</section> : null}
     {!compact && renderRouteDirectory()}
     <div className="plan-map-canvas-wrap"><div ref={container} className="plan-map-canvas" aria-label="高德地图" />{!ready && !mapError && <p role="status">地图加载中…</p>}{mapError && <div className="map-recovery" role="alert"><p>{mapError}</p><button type="button" onClick={() => setMapAttempt((attempt) => attempt + 1)}>重新加载地图</button></div>}{ready && !visible.length && <p>当前视图还没有带坐标的地点。</p>}</div>
     {!compact && mapMode === "library" && <p className="map-hint">攻略地图默认展示整趟旅行的地点分布。正式行程、Booking、攻略素材、暂存地点和候选点会用不同透明度区分（候选点为淡色 Marker）；拖动后点击“搜索此区域”才会请求候选 POI。</p>}

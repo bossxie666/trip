@@ -1,3 +1,4 @@
+import { normalizeMapArea } from "@/services/map-areas";
 import { listTrips } from "@/services/trip-repository.server";
 import { notFound, redirect } from "next/navigation";
 import "../../../workspace-base.css";
@@ -13,12 +14,11 @@ import { createTripRequestContext } from "@/services/request-data-context.server
 import { getCurrentMember } from "@/services/auth.server";
 
 export const dynamic = "force-dynamic";
-const views = new Set(["planning", "map", "budget"]), modes = new Set(["day", "library"]), areas = new Set(["shanghai", "hangzhou", "tonglu"]), categories = new Set(["all", "core", "attraction", "food", "shopping", "day_trip", "other", "cafe", "guide"]);
+const views = new Set(["planning", "map", "budget"]), modes = new Set(["day", "library"]), categories = new Set(["all", "core", "attraction", "food", "shopping", "day_trip", "other", "cafe", "guide"]);
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> { const slug = (await params).slug; const actor = await getCurrentMember(); const trip = actor ? await findTripMetadataBySlug(slug, actor.id) : null; return trip ? { title: `${trip.title} · 规划工作台`, description: "旅行攻略、正式行程、地图和预算工作台。", openGraph: { images: [] }, twitter: { images: [] } } : {}; }
 export default async function TripPlanPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ view?: string; day?: string; mode?: string; q?: string; area?: string; category?: string; library?: string; sort?: string; page?: string; member?: string; cost?: string; settings?: string; focusRecommendation?: string }> }) {
   const { slug } = await params, query = await searchParams;
   const view = views.has(query.view || "") ? query.view as "planning" | "map" | "budget" : "planning";
-  const areaFilter = areas.has(query.area || "") ? query.area as "shanghai" | "hangzhou" | "tonglu" : "shanghai";
   const categoryFilter = categories.has(query.category || "") ? query.category as "all" | "core" | "attraction" | "food" | "shopping" | "day_trip" | "other" | "cafe" | "guide" : "all";
   const requestContext = await createTripRequestContext(slug);
   if (!requestContext.permissions.canRead || !requestContext.actor) notFound();
@@ -27,6 +27,7 @@ export default async function TripPlanPage({ params, searchParams }: { params: P
   const actor = requestContext.actor;
   const workspace = await getPlanWorkspace(slug, actor?.id, { view, activeDayId: query.day, requestContext });
   if (!workspace) notFound();
+  const areaFilter = normalizeMapArea(query.area, workspace.trip.cities);
   const activeDayId = workspace.days.some((day) => day.id === query.day) ? query.day! : workspace.days[0]?.id || "";
   const mapMode = modes.has(query.mode || "") ? query.mode as "day" | "library" : "day";
   // A signed-in member gets their own view by default.  The explicit `all`

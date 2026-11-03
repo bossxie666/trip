@@ -1,5 +1,6 @@
 "use client";
 
+import { sameRoutePlace } from "@/services/route-location";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AMapRouteMode, AMapRouteResult } from "@/services/amap/amap-types";
 import { createAmapRouteQuote, routeQuoteLabel } from "@/services/amap/route-quote";
@@ -16,7 +17,7 @@ const minutes = (seconds: number | null) => seconds == null ? "时间待确认" 
 const distance = (meters: number | null) => meters == null ? "距离待确认" : meters < 1000 ? `${Math.round(meters)} 米` : `${(meters / 1000).toFixed(1)} 公里`;
 
 export function EstimatedTransport({ slug, days, segmentsByDay, preferences, currentMemberId, onEstimateChange }: { slug: string; days: Day[]; segmentsByDay?: Record<string, Segment[]>; preferences?: Preference[]; currentMemberId?: string | null; onEstimateChange?: (snapshot: EstimateSnapshot) => void }) {
-  const selectedSegments = useMemo(() => days.flatMap((day) => (segmentsByDay?.[day.id] || []).filter((segment) => !segment.crossCity).flatMap((segment) => {
+  const selectedSegments = useMemo(() => days.flatMap((day) => (segmentsByDay?.[day.id] || []).filter((segment) => !segment.crossCity && !sameRoutePlace(segment.from.place, segment.to.place)).flatMap((segment) => {
     const preference = preferences?.find((entry) => entry.dayId === day.id && entry.fromId === segment.from.id && entry.toId === segment.to.id && entry.memberId === currentMemberId);
     return preference ? [{ day, segment, mode: preference.preferredMode }] : [];
   })), [currentMemberId, days, preferences, segmentsByDay]);

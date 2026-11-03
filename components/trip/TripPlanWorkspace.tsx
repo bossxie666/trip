@@ -5,6 +5,7 @@ import { WorkspaceNavLink } from "./WorkspaceNavLink";
 import { DayPresenceControl } from "./DayPresenceControl";
 import { ItineraryItemControl } from "./ItineraryItemControl";
 import { ItineraryOrderControls } from "./ItineraryOrderControls";
+import { sameRoutePlace } from "@/services/route-location";
 import { PlanAddControl } from "./PlanAddControl";
 import { BookingPlaceControl } from "./BookingPlaceControl";
 import { BookingCreateControl } from "./BookingCreateControl";
@@ -31,7 +32,7 @@ const BudgetWorkspace = dynamic(() => import("./BudgetWorkspace").then((module) 
 type Workspace = NonNullable<Awaited<ReturnType<typeof getPlanWorkspace>>>;
 type View = "planning" | "map" | "budget";
 type MapMode = "day" | "library";
-type AreaFilter = "shanghai" | "hangzhou" | "tonglu";
+type AreaFilter = string;
 type CategoryFilter = "all" | "core" | "attraction" | "food" | "shopping" | "day_trip" | "other" | "cafe" | "guide";
 
 const Link = WorkspaceNavLink;
@@ -98,6 +99,7 @@ export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query
     }
     const edgeId = edge?.id || `${from?.id || "unknown"}-${to?.id || "unknown"}:pending`;
     if (!edge || edge.kind !== "local" || !from?.place?.id || !to?.place?.id) return null;
+    if (sameRoutePlace(from.place, to.place)) return <div className="timeline-edge timeline-edge-local" key={edgeId}><span>同一地点，无需交通</span></div>;
     const initialMode = workspace.routePreferences.find((preference) => preference.dayId === activeDay?.id && preference.fromId === from.id && preference.toId === to.id && preference.memberId === workspace.currentMemberId)?.preferredMode || null;
     return <div className="timeline-edge timeline-edge-local local-route-control" data-timeline-edge-kind="local" data-timeline-edge-state={initialMode ? "selected" : "pending"} data-timeline-edge-id={edgeId} key={edgeId}><LocalRouteSegmentControl slug={trip.slug} dayId={activeDay!.id} edgeId={edgeId} from={{ id: from.id, source: from.source, placeId: from.place.id, title: from.title }} to={{ id: to.id, source: to.source, placeId: to.place.id, title: to.title }} initialMode={initialMode} /></div>;
   };
@@ -176,7 +178,7 @@ export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query
   };
 
 
-  if (view === "map") return <main className="standalone-map"><TripMapToolbar slug={trip.slug} trips={mapTrips} days={workspace.days} dayId={activeDayId} mode={mapMode} /><PlanMap slug={trip.slug} places={[]} workspace={mapWorkspace} activeDayId={activeDayId} mapMode={mapMode} /></main>;
+  if (view === "map") return <main className="standalone-map"><TripMapToolbar slug={trip.slug} trips={mapTrips} days={workspace.days} dayId={activeDayId} mode={mapMode} /><PlanMap initialArea={areaFilter} slug={trip.slug} places={[]} workspace={mapWorkspace} activeDayId={activeDayId} mapMode={mapMode} /></main>;
 
   const hotelBookings = bookings.filter(({ booking }) => booking.type === "hotel");
   const accommodation = summarizeAccommodation(hotelBookings.map(({ booking }) => booking), workspace.costLines || []);

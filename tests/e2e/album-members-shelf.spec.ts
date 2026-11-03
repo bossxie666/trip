@@ -15,8 +15,14 @@ test("album members are selectable and book dragging does not open a book",async
     await expect(page).toHaveURL(/\/albums\/.+/);ids.push(new URL(page.url()).pathname.split("/").at(-1)!);
     const created=await(await fixtureRequest(page,"GET",`/api/albums/${ids[0]}`)).json();
     expect(created.album.memberIds).toContain("member-zhu-jingqi");
+    await page.goto("/albums");
+    await expect(page.getByRole("button",{name:"上一组相册",exact:true})).toBeHidden();
+    await expect(page.getByRole("button",{name:"下一组相册",exact:true})).toBeHidden();
     for(let i=0;i<5;i++){const response=await fixtureRequest(page,"POST","/api/albums",{title:`拖动样本-${i}-${Date.now()}`});ids.push((await response.json()).album.id);}
-    await page.goto("/albums");const shelf=page.locator(".album-drag-shelf");const bounds=(await shelf.boundingBox())!;
+    await page.goto("/albums");
+    await expect(page.getByRole("button",{name:"下一组相册",exact:true})).toBeEnabled();
+    await expect(page.getByRole("button",{name:"上一组相册",exact:true})).toBeDisabled();
+    const shelf=page.locator(".album-drag-shelf");const bounds=(await shelf.boundingBox())!;
     await page.mouse.move(bounds.x+bounds.width*.75,bounds.y+Math.min(bounds.height*.65,240));await page.mouse.down();await page.mouse.move(bounds.x+30,bounds.y+Math.min(bounds.height*.65,240),{steps:12});await page.mouse.up();
     expect(await shelf.evaluate(el=>el.scrollLeft)).toBeGreaterThan(40);await expect(page).toHaveURL(/\/albums$/);
     expect(fileChoosers).toBe(0);

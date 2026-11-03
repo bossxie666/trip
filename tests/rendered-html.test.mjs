@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { normalizeMapArea, mapAreaCity, mapAreaOptions, matchesMapArea } from "../services/map-areas.ts";
+import { sameRoutePlace } from "../services/route-location.ts";
 import { existsSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
@@ -2360,4 +2362,33 @@ test("vendored scene UUIDs require secure entropy and retain the UUID format", a
     crypto.getRandomValues = () => { throw new Error("entropy unavailable"); };
     assert.throws(() => MathUtils.generateUUID(), /entropy unavailable/);
   } finally { crypto.getRandomValues = native; }
+});
+
+
+test("map regions use the trip cities without assigning other destinations to Hangzhou", () => {
+  const cities = [{ id: "xining", name: "西宁市" }, { id: "chengdu", name: "成都" }];
+  assert.equal(normalizeMapArea(undefined, cities), "all");
+  assert.equal(normalizeMapArea("shanghai", cities), "all");
+  assert.equal(normalizeMapArea("unknown", cities), "all");
+  assert.equal(normalizeMapArea("chengdu", cities), "chengdu");
+  assert.equal(mapAreaCity("all", cities), undefined);
+  assert.deepEqual(mapAreaOptions(cities, [], "all").map(option => option.label), ["全部", "西宁市", "成都"]);
+  assert.equal(matchesMapArea({ cityId: "xining", name: "西宁站" }, "chengdu", cities), false);
+  assert.equal(matchesMapArea({ cityId: "xining" }, "xining", cities), true);
+  const legacyCities = [{ id: "city-hz", name: "杭州市" }, { id: "city-sh", name: "上海" }];
+  assert.equal(normalizeMapArea("shanghai", legacyCities), "city-sh");
+  assert.equal(normalizeMapArea("hangzhou", legacyCities), "city-hz");
+  assert.equal(normalizeMapArea("tonglu", legacyCities), "tonglu");
+  assert.equal(mapAreaCity("tonglu", legacyCities).id, "city-hz");
+  assert.equal(matchesMapArea({ cityId: "city-hz", district: "桐庐县" }, "tonglu", legacyCities), true);
+  assert.equal(matchesMapArea({ cityId: "xining", name: "桐庐" }, "tonglu", legacyCities), false);
+});
+
+test("same-location routes require shared identity or identical coordinates, not matching names", () => {
+  assert.equal(sameRoutePlace({ id: "a" }, { id: "a" }), true);
+  assert.equal(sameRoutePlace({ id: "a", providerPlaceId: "poi" }, { id: "b", providerPlaceId: "poi" }), true);
+  assert.equal(sameRoutePlace({ id: "a", latitude: 36.6, longitude: 101.8 }, { id: "b", latitude: 36.6, longitude: 101.8 }), true);
+  assert.equal(sameRoutePlace({ id: "a", latitude: 36.6, longitude: 101.8 }, { id: "b", latitude: 36.6001, longitude: 101.8 }), false);
+  assert.equal(sameRoutePlace({ id: "a" }, { id: "b" }), false);
+  assert.equal(sameRoutePlace({ id: "a", latitude: NaN, longitude: 101.8 }, { id: "b", latitude: NaN, longitude: 101.8 }), false);
 });
