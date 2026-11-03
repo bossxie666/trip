@@ -166,7 +166,7 @@
 /* From app/home-journal.css. */
 
 body:has(.trip-book-shell) {
-  background: #eee4d1 url("/assets/homepage-v3/desktop-shell.webp") center top / cover fixed no-repeat;
+  background: #eee4d1 var(--journal-shell-desktop, none) center top / cover fixed no-repeat;
 }
 
 .trip-book-shell { position: relative; width: min(1480px, calc(100% - 42px)); min-height: calc(100vh - 94px); margin: 20px auto 86px; padding: 18px 26px 42px; perspective: 1800px; }
@@ -179,7 +179,7 @@ body:has(.trip-book-shell) {
 .trip-book-shell.turning-back .trip-book-leaf { animation: book-turn-back .3s ease; }
 
 @media (max-width: 680px) {
-  body:has(.trip-book-shell) { background-image: url("/assets/homepage-v3/mobile-shell.webp"); }
+  body:has(.trip-book-shell) { background-image: var(--journal-shell-mobile, none); }
   .trip-book-shell { width: 100%; min-height: calc(100svh - var(--mobile-header-height,56px) - var(--mobile-nav-height,68px)); margin: 0 0 var(--mobile-nav-height,68px); padding: 0; perspective: 1200px; touch-action: pan-y; }
   .trip-book-shell::before { inset: 4px 3px 0; border-radius: 0; transform: translateY(3px); }
   .trip-book-leaf { min-height: inherit; border-radius: 0; background: linear-gradient(90deg,#fffaf0,#f8f0df); box-shadow: none; }

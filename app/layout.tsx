@@ -1,3 +1,4 @@
+import { DeferredJournalDecorations } from "@/components/site/DeferredJournalDecorations";
 import type { Metadata } from "next";
 import type { CSSProperties } from "react";
 import "./globals.css";
@@ -43,6 +44,7 @@ export default function RootLayout({
         className="antialiased" style={nativeFonts}
       >
         {children}
+        <DeferredJournalDecorations />
       </body>
     </html>
   );

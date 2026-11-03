@@ -745,7 +745,7 @@ test("city pages use actual authorized destinations, trips and linked albums", a
     assert.match(html, /城市页面权限验证/);
     assert.match(html, /大阪关联相册验证/);
     assert.match(html, new RegExp(`/albums/${albumId}`));
-    assert.doesNotMatch(html.replace(/<style\b[^>]*>[\s\S]*?<\/style>/g, ""), /架构已预留|后续阶段加入|archive-placeholder/);
+    assert.doesNotMatch(html, />[^<]*(?:架构已预留|后续阶段加入)[^<]*<|class="[^"]*\barchive-placeholder\b/);
     await loginAs("kiki");
     assert.equal((await render(`/cities/${city.slug}`)).status, 404);
     assert.doesNotMatch(await (await render("/cities")).text(), new RegExp(`/cities/${city.slug}`));

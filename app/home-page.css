@@ -20,7 +20,7 @@
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: url("/assets/scrapbook-paper-desktop.webp") center / cover no-repeat;
+  background: var(--journal-paper-desktop, none) center / cover no-repeat;
   opacity: .22;
   pointer-events: none;
 }
@@ -64,7 +64,7 @@
 }
 
 .home-atlas::before {
-  background: url("/assets/scrapbook-paper-desktop.webp") center / cover no-repeat;
+  background: var(--journal-paper-desktop, none) center / cover no-repeat;
   opacity: .19;
   mix-blend-mode: multiply;
 }
@@ -191,7 +191,7 @@
   .home-manifesto { min-height: 315px; padding: 34px 29px 28px; background: linear-gradient(90deg, rgba(255, 253, 248, .94), rgba(255, 253, 248, .72)); }
   .home-title-asset { width: min(108%, 560px); margin-left: -4%; }
   .home-atlas { min-height: clamp(500px, 145vw, 680px); background-image: radial-gradient(circle at 22% 32%, rgba(247, 227, 145, .6), transparent 29%), radial-gradient(circle at 76% 58%, rgba(106, 184, 212, .48), transparent 38%), radial-gradient(circle at 46% 78%, rgba(138, 193, 147, .36), transparent 34%); }
-  .home-atlas::before { background: url("/assets/scrapbook-paper-mobile.webp") center / cover no-repeat; opacity: .17; }
+  .home-atlas::before { background: var(--journal-paper-mobile, none) center / cover no-repeat; opacity: .17; }
   .atlas-paper-map { inset: 4% 0 7%; width: 100%; height: 90%; opacity: .78; }
   .home-atlas > svg { inset: 11% 7% 8%; width: 86%; height: 81%; }
   .atlas-polaroid { width: 42%; }
@@ -218,7 +218,7 @@
   min-height: calc(100vh - 72px);
   padding: 0 30px 46px;
   overflow: hidden;
-  background: #e8d9bf url("/assets/homepage-v3/desktop-shell.webp") center top / cover no-repeat;
+  background: #e8d9bf var(--journal-shell-desktop, none) center top / cover no-repeat;
 }
 
 .home-hero {
@@ -468,7 +468,7 @@
   .home-journal {
     min-height: calc(100vh - 82px);
     padding: 0 0 38px;
-    background: #d7c29e url("/assets/homepage-v3/mobile-shell.webp") center top / cover no-repeat;
+    background: #d7c29e var(--journal-shell-mobile, none) center top / cover no-repeat;
   }
   .home-decor-layer { display: none; }
   .home-hero { display: block; height: auto; min-height: 0; overflow: visible; }
@@ -529,7 +529,7 @@
     max-width: none;
     min-height: calc(100vh - 72px);
     padding: 0 24px 46px;
-    background: #e8d9bf url("/assets/homepage-v3/desktop-shell.webp") center top / cover no-repeat;
+    background: #e8d9bf var(--journal-shell-desktop, none) center top / cover no-repeat;
   }
   .mobile-book-page {
     position: relative;
@@ -592,7 +592,7 @@
     inset: 0;
     z-index: 0;
     display: block;
-    background: url("/assets/homepage-v3/mobile-shell.webp") center / cover no-repeat;
+    background: var(--journal-shell-mobile, none) center / cover no-repeat;
     pointer-events: none;
   }
   .mobile-book-page > .home-manifesto {

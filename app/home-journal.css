@@ -146,7 +146,7 @@
 /* Whole-site reference lock.  Subpages keep their real data and controls, but
  * use the same supplied paper shell and tactile card language as the homepage. */
 body:has(.map-index),body:has(.journal-subpage) {
-  background: #e8d9bf url("/assets/homepage-v3/desktop-shell.webp") center top / cover fixed no-repeat;
+  background: #e8d9bf var(--journal-shell-desktop, none) center top / cover fixed no-repeat;
 }
 
 .map-index,.journal-subpage {
@@ -183,7 +183,7 @@ body:has(.map-index),body:has(.journal-subpage) {
 
 @media (max-width: 680px) {
   body:has(.map-index),body:has(.journal-subpage) {
-    background-image: url("/assets/homepage-v3/mobile-shell.webp");
+    background-image: var(--journal-shell-mobile, none);
   }
 
   .map-index,.journal-subpage {
