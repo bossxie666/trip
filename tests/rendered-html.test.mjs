@@ -547,12 +547,12 @@ test("lets an administrator disable a member and revoke every active session", a
 
 test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership consistent", () => {
   const css = ["globals.css", "workspace-base.css", "trip-books.css"].map(file => readFileSync(new URL(`../app/${file}`, import.meta.url), "utf8")).join("\n");
-  const accommodation = readFileSync(new URL("../components/trip/BookingCreateControl.tsx", import.meta.url), "utf8");
+  const accommodation = readFileSync(new URL("../components/trip/BookingCreateEditor.tsx", import.meta.url), "utf8");
   const transport = ["PlanAddControl.tsx", "PlanAddEditor.tsx"].map(file => readFileSync(new URL(`../components/trip/${file}`, import.meta.url), "utf8")).join("\n");
   const presence = ["DayPresenceControl.tsx", "DayPresenceEditor.tsx"].map(file => readFileSync(new URL(`../components/trip/${file}`, import.meta.url), "utf8")).join("\n");
   const placeDiscovery = ["PlaceDiscoveryControl.tsx", "PlaceDiscoveryEditor.tsx"].map(file => readFileSync(new URL(`../components/trip/${file}`, import.meta.url), "utf8")).join("\n");
-  const bookingEdit = readFileSync(new URL("../components/trip/BookingEditControl.tsx", import.meta.url), "utf8");
-  const budget = readFileSync(new URL("../components/trip/BudgetWorkspace.tsx", import.meta.url), "utf8");
+  const bookingEdit = ["BookingEditControl.tsx", "BookingEditor.tsx"].map(file => readFileSync(new URL(`../components/trip/${file}`, import.meta.url), "utf8")).join("\n");
+  const budget = ["BudgetWorkspace.tsx", "BudgetEditors.tsx"].map(file => readFileSync(new URL(`../components/trip/${file}`, import.meta.url), "utf8")).join("\n");
   const overlay = readFileSync(new URL("../components/trip/WorkspaceOverlay.tsx", import.meta.url), "utf8");
   const header = readFileSync(new URL("../components/site/SiteHeader.tsx", import.meta.url), "utf8");
   const desktopMap = readFileSync(new URL("../components/trip/PlanningDesktopMap.tsx", import.meta.url), "utf8");
@@ -623,8 +623,8 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
 test("releases save state after success, API errors, refresh errors, and request failures", () => {
   const files = [
     "PlanAddEditor.tsx", "PlaceDiscoveryEditor.tsx", "RecommendationAddControl.tsx",
-    "BookingCreateControl.tsx", "BookingEditControl.tsx", "BookingPlaceControl.tsx",
-    "BudgetWorkspace.tsx", "DayPresenceEditor.tsx", "EditTripDialog.tsx",
+    "BookingCreateEditor.tsx", "BookingEditor.tsx", "BookingPlaceControl.tsx",
+    "BudgetWorkspace.tsx", "BudgetEditors.tsx", "DayPresenceEditor.tsx", "EditTripDialog.tsx",
     "ItineraryItemControl.tsx", "ItineraryItemPlaceControl.tsx", "ItineraryOrderControls.tsx",
     "NewTripForm.tsx", "PlanMap.tsx",
   ];
@@ -670,7 +670,7 @@ test("keeps the performance boundaries for metadata, workspace views, and client
   assert.doesNotMatch(budgetWorkspace, /<a\b[^>]*href=/);
   assert.match(planMap, /WorkspaceNavLink as Link/);
   assert.doesNotMatch(planMap, /<a\b[^>]*href=/);
-  for (const file of ["PlanAddControl.tsx", "PlanAddEditor.tsx", "ItineraryItemControl.tsx", "ItineraryOrderControls.tsx", "BookingCreateControl.tsx", "BookingEditControl.tsx", "BookingPlaceControl.tsx", "DayPresenceControl.tsx", "DayPresenceEditor.tsx", "PlaceDiscoveryControl.tsx", "PlaceDiscoveryEditor.tsx", "ItineraryItemPlaceControl.tsx", "RecommendationAddControl.tsx", "BudgetWorkspace.tsx", "PlanMap.tsx"]) {
+  for (const file of ["PlanAddControl.tsx", "PlanAddEditor.tsx", "ItineraryItemControl.tsx", "ItineraryOrderControls.tsx", "BookingCreateControl.tsx", "BookingCreateEditor.tsx", "BookingEditControl.tsx", "BookingEditor.tsx", "BookingPlaceControl.tsx", "DayPresenceControl.tsx", "DayPresenceEditor.tsx", "PlaceDiscoveryControl.tsx", "PlaceDiscoveryEditor.tsx", "ItineraryItemPlaceControl.tsx", "RecommendationAddControl.tsx", "BudgetWorkspace.tsx", "BudgetEditors.tsx", "PlanMap.tsx"]) {
     const source = readFileSync(new URL(`../components/trip/${file}`, import.meta.url), "utf8");
     assert.doesNotMatch(source, /location\.(reload|assign)/, `${file} should use router invalidation`);
   }
@@ -1268,7 +1268,7 @@ test("keeps accommodation Bookings out of Day Plan until a Hotel Item is explici
 });
 
 test("renders accommodation editor as an independent modal without an inline details block", () => {
-  const source = readFileSync(new URL("../components/trip/BookingEditControl.tsx", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../components/trip/BookingEditor.tsx", import.meta.url), "utf8");
   assert.match(source, /<EditorDialog[\s\S]*busy=\{saving\}/);
   assert.match(source, /className=\{`booking-edit-dialog\$\{booking\.type === "hotel" \? " accommodation-edit-dialog" : ""\}`\}/);
   assert.match(source, /dirty=\{!deleting && snapshot !== initial\}/);

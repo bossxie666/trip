@@ -4,6 +4,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import { Heart, MessageCircle, Pencil, Plus, Trash2 } from "lucide-react";
+import { useClientReady } from "@/components/trip/useClientReady";
 import { EditorDialog } from "@/components/trip/EditorDialog";
 import { editorRequest } from "@/components/trip/editor-request";
 import type { GuestbookMessageView } from "@/services/guestbook-service.server";
@@ -13,11 +14,12 @@ function dateLabel(value: string) { return value.slice(0, 10).replaceAll("-", ".
 type MemberOption = { id: string; displayName: string };
 
 export function GuestbookBoard({ initialMessages, currentMemberId, members = [], compact = false }: { initialMessages: GuestbookMessageView[]; currentMemberId: string; members?: MemberOption[]; compact?: boolean }) {
+  const ready = useClientReady();
   const [messages, setMessages] = useState(initialMessages);
   const [editor, setEditor] = useState<{ message?: GuestbookMessageView; deleting?: boolean } | null>(null);
   const save = (saved: GuestbookMessageView) => setMessages(current => current.some(item => item.id === saved.id) ? current.map(item => item.id === saved.id ? saved : item) : [saved, ...current]);
   return <div className={`guestbook-board${compact ? " guestbook-compact" : ""}`}>
-    {!compact && <button type="button" className="global-floating-add" aria-label="写下留言" onClick={() => setEditor({})}><Plus size={30} /></button>}
+    {!compact && <button type="button" className="global-floating-add" disabled={!ready} aria-label="写下留言" onClick={() => setEditor({})}><Plus size={30} /></button>}
     {editor && <GuestbookEditor message={editor.message} currentMemberId={currentMemberId} members={members} initialDelete={editor.deleting} onClose={() => setEditor(null)}
       onSaved={saved => { save(saved); setEditor(null); }}
       onDeleted={id => { setMessages(current => current.filter(item => item.id !== id)); setEditor(null); }} />}
@@ -29,6 +31,7 @@ export function GuestbookBoard({ initialMessages, currentMemberId, members = [],
 }
 
 function GuestbookNote({ message, index, memberId, onSaved, onEdit }: { message: GuestbookMessageView; index: number; memberId: string; onSaved: (saved: GuestbookMessageView) => void; onEdit: (deleting?: boolean) => void }) {
+  const ready = useClientReady();
   const [replying, setReplying] = useState(false), [draft, setDraft] = useState("");
   const [deletingReply, setDeletingReply] = useState<string | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
@@ -52,16 +55,16 @@ function GuestbookNote({ message, index, memberId, onSaved, onEdit }: { message:
     {message.body && <p>{message.body}</p>}
     {!!message.media.length && <div className="guestbook-images">{message.media.map(media => <img key={media.id} src={`/api/media/${media.id}?variant=thumb`} alt="留言图片" loading="lazy" width={240} height={180} />)}</div>}
     <footer>
-      <button type="button" aria-label={liked ? "取消点赞" : "点赞"} aria-pressed={liked} disabled={busy} onClick={() => void perform("/like", "PUT", { liked: !liked })}><Heart size={16} fill={liked ? "currentColor" : "none"} />{likes.length || "点赞"}</button>
-      <button type="button" onClick={() => { setError(""); setReplying(true); }}><MessageCircle size={16} />回复{replies.length ? ` ${replies.length}` : ""}</button>
-      {message.author.id === memberId && <><button type="button" onClick={() => onEdit()}><Pencil size={13} />编辑</button><button type="button" onClick={() => onEdit(true)}><Trash2 size={13} />删除</button></>}
+      <button type="button" aria-label={liked ? "取消点赞" : "点赞"} aria-pressed={liked} disabled={!ready || busy} onClick={() => void perform("/like", "PUT", { liked: !liked })}><Heart size={16} fill={liked ? "currentColor" : "none"} />{likes.length || "点赞"}</button>
+      <button type="button" disabled={!ready || busy} onClick={() => { setError(""); setReplying(true); }}><MessageCircle size={16} />回复{replies.length ? ` ${replies.length}` : ""}</button>
+      {message.author.id === memberId && <><button type="button" disabled={!ready || busy} onClick={() => onEdit()}><Pencil size={13} />编辑</button><button type="button" disabled={!ready || busy} onClick={() => onEdit(true)}><Trash2 size={13} />删除</button></>}
     </footer>
     {!!likes.length && <p className="guestbook-likes">{likes.map(person => person.displayName).join("、")} 赞了</p>}
     {!!replies.length && <div className="guestbook-reply-preview">{replies.slice(-2).map(reply => <p key={reply.id}><b>{reply.author.displayName}：</b>{reply.body}</p>)}</div>}
     {error && !replying && <p role="alert" className="form-error">{error}</p>}
     {replying && <EditorDialog open title={deletingReply ? "删除回复" : "回复留言"} onClose={() => { if (deletingReply) setDeletingReply(null); else { setReplying(false); setError(""); } }} dirty={!deletingReply && !!draft.trim()} busy={busy} onSubmit={submitReply} submitLabel={deletingReply ? "确认删除" : "发送"}>
       {deletingReply ? <p>确定删除这条回复吗？</p> : <>
-        <div className="guestbook-thread">{replies.length ? replies.map(reply => <div key={reply.id}><div><b>{reply.author.displayName}</b><time dateTime={reply.createdAt}>{dateLabel(reply.createdAt)}</time>{reply.author.id === memberId && <button type="button" aria-label={`删除${reply.author.displayName}的回复`} disabled={busy} onClick={() => setDeletingReply(reply.id)}><Trash2 size={15} /></button>}</div><p>{reply.body}</p></div>) : <p>暂无回复</p>}</div>
+        <div className="guestbook-thread">{replies.length ? replies.map(reply => <div key={reply.id}><div><b>{reply.author.displayName}</b><time dateTime={reply.createdAt}>{dateLabel(reply.createdAt)}</time>{reply.author.id === memberId && <button type="button" aria-label={`删除${reply.author.displayName}的回复`} disabled={!ready || busy} onClick={() => setDeletingReply(reply.id)}><Trash2 size={15} /></button>}</div><p>{reply.body}</p></div>) : <p>暂无回复</p>}</div>
         <label>回复内容<textarea rows={3} maxLength={1000} value={draft} onChange={event => setDraft(event.target.value)} /></label>
       </>}
       {error && <p role="alert" className="form-error">{error}</p>}
