@@ -93,6 +93,17 @@
 .workspace:before{left:0;right:0}
 @media(max-width:650px){.date{visibility:hidden}}
 
+.record-corner:has(.track-panel:not([hidden])){z-index:6}
+.vinyl{touch-action:manipulation}
+.track-picker{position:relative;display:flex;justify-content:flex-end;margin-top:5px}
+#track-toggle{min-height:48px;padding:0 12px;border:0;border-radius:24px;background:#f7f2e5;color:#284b42;font-size:17px}
+#track-toggle:hover,#track-toggle[aria-expanded="true"]{background:#eae3d1}
+.track-panel{position:absolute;top:calc(100% + 5px);right:0;width:230px;padding:8px;border:1px solid #cfc3a7;border-radius:12px;background:#f7f2e5;box-shadow:0 8px 22px #3e362833;transform:rotate(-7deg);transform-origin:top right}
+.track-panel button{display:block;width:100%;min-height:64px;padding:8px 14px;border:0;border-radius:8px;background:none;text-align:left;font-size:19px}
+.track-panel button:hover,.track-panel button[aria-current="true"]{background:#e1e8d9;color:#284b42}
+.track-panel button[aria-current="true"]::after{content:"♪";float:right}
+@media(prefers-reduced-motion:reduce){.on .vinyl{animation-play-state:paused}}
+
 :host{display:block;min-height:calc(100vh - 74px);font:13px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}.desk-access{display:flex;justify-content:center;gap:20px;flex-wrap:wrap;padding:20px 0}.desk-access a{padding:10px;border-bottom:1px solid #b9a986}.scene-wrap{touch-action:pan-y}.photo button.photo-open{padding:0;border:0;width:100%;background:none}.photo-open img{width:100%;object-fit:cover}.empty{padding:24px;grid-column:1/-1}.modal-head{height:auto;min-height:54px}.caption span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.scene-error{position:absolute;inset:20%;padding:20px;background:#f5ecd7}.desk-stats{margin:4px 0;color:#677969}dialog{background:#fffaf0;background-image:none!important}dialog::backdrop{background:#172c2570}.intro h1{font-size:24px}@media(max-width:650px){.workspace{padding-bottom:90px}.desk-access{gap:10px;font-size:12px}.intro h1{font-size:20px}.scene-controls button{min-height:36px}.scene-wrap{overflow:hidden}}
 .chapter-links{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;position:relative;z-index:3}.chapter-links a{font-size:13px;line-height:1.5;padding:8px 12px;background:#fffaf0;border-radius:5px;max-width:230px;overflow-wrap:anywhere}.chapter-links:empty{display:none}
 
