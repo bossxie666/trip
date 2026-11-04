@@ -31,7 +31,7 @@ test("album members are selectable and book dragging does not open a book",async
 test("homepage favorites follow dragging without opening the photo",async({page})=>{
   const image=await readFile("tests/fixtures/photo.png");
   await page.route("**/desk-drag-fixture.png",route=>route.fulfill({contentType:"image/png",body:image}));
-  await page.route("**/assets/travel-desk/desk.js",async route=>{
+  await page.route("**/assets/travel-desk/desk.js*",async route=>{
     const response=await route.fetch();const body=await response.text();
     await route.fulfill({response,body:body.replace('const escape=value=>','data={...data,photos:Array.from({length:15},(_,i)=>({id:"fixture-"+i,albumId:"fixture",title:"测试照片"+i,src:"/desk-drag-fixture.png",full:"/desk-drag-fixture.png"}))};const escape=value=>')});
   });
