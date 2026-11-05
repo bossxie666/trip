@@ -22,10 +22,24 @@ export async function uploadMediaFile(file: File, purpose: UploadPurpose, attemp
   }
   const authorized = attempt.authorization;
   if (!attempt.uploaded) {
-    const uploaded = await fetch(authorized.uploadUrl, { method: authorized.method || "PUT", headers: authorized.headers, body: file, signal: AbortSignal.timeout(120_000) });
+    const direct = /^https:\/\//i.test(authorized.uploadUrl);
+    let uploaded: Response;
+    try {
+      uploaded = await fetch(authorized.uploadUrl, { method: authorized.method || "PUT", headers: authorized.headers, body: file, signal: AbortSignal.timeout(120_000) });
+    } catch (error) {
+      // Only transport failures use the authenticated same-origin fallback.
+      // Timeouts remain explicit so a slow connection cannot silently wait twice.
+      if (!direct || !(error instanceof TypeError)) throw error;
+      uploaded = new Response(null, { status: 502 });
+    }
+    if (direct && !uploaded.ok) {
+      uploaded = await fetch(`/api/media/uploads/${encodeURIComponent(authorized.assetId)}/content`, {
+        method: "PUT", headers: { "content-type": normalizedType(file) }, body: file, signal: AbortSignal.timeout(120_000),
+      });
+    }
     if (!uploaded.ok) {
       if (uploaded.status === 404) { attempt.authorization = undefined; attempt.uploaded = false; await checkpoint?.(); }
-      throw new Error("图片上传失败，请重试。");
+      throw new Error(`图片上传失败（HTTP ${uploaded.status}），请重试。`);
     }
     attempt.uploaded = true;
     await checkpoint?.();
