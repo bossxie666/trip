@@ -70,7 +70,7 @@ export function AlbumDetailClient({ album: initial }: { album: AlbumDetail }) {
     running.current = true; setBusy("upload"); setError("");
     try {
       const results = await runAlbumUploadQueue(items, {
-        upload: file => uploadMediaFile(file, "album"), capturedAt: readPhotoCapturedAt, changed: setQueue,
+        upload: (file, attempt) => uploadMediaFile(file, "album", attempt), capturedAt: readPhotoCapturedAt, changed: setQueue,
         attach: (assetId, capturedAt) => json(`/api/albums/${album.id}/media`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ assetIds: [assetId], capturedAtByAsset: capturedAt ? { [assetId]: capturedAt } : {} }) }),
       });
       const errors = results.filter(item => item.status === "error");

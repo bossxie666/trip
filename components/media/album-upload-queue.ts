@@ -1,8 +1,10 @@
-export type AlbumUploadItem = { file: File; status: "waiting" | "uploading" | "attaching" | "done" | "error"; assetId?: string; capturedAt?: string | null; error?: string };
+import type { MediaUploadAttempt } from "./client-upload";
+
+export type AlbumUploadItem = { file: File; status: "waiting" | "uploading" | "attaching" | "done" | "error"; assetId?: string; attempt?: MediaUploadAttempt; capturedAt?: string | null; error?: string };
 
 /** Retain completed uploads when attachment fails; retry never uploads them twice. */
 export async function runAlbumUploadQueue(items: AlbumUploadItem[], actions: {
-  upload: (file: File) => Promise<string>;
+  upload: (file: File, attempt: MediaUploadAttempt) => Promise<string>;
   capturedAt: (file: File) => Promise<string | null>;
   attach: (assetId: string, capturedAt: string | null) => Promise<unknown>;
   changed: (items: AlbumUploadItem[]) => void;
@@ -16,7 +18,8 @@ export async function runAlbumUploadQueue(items: AlbumUploadItem[], actions: {
       if (item.capturedAt === undefined) item.capturedAt = await actions.capturedAt(item.file);
       if (!item.assetId) {
         item.status = "uploading"; publish();
-        item.assetId = await actions.upload(item.file);
+        item.attempt ??= {};
+        item.assetId = await actions.upload(item.file, item.attempt);
       }
       item.status = "attaching"; publish();
       await actions.attach(item.assetId, item.capturedAt ?? null);

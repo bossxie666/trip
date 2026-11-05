@@ -10,6 +10,7 @@ import { isTransportBooking, railwayDisplayLabel } from "../services/booking-sem
 import { isFerryLeg, transitLineSummary } from "../services/amap/route-presentation.ts";
 import { selectUpcomingTrip } from "../services/upcoming-trip.ts";
 import { knowledgeHref } from "../services/knowledge-navigation.ts";
+import { uploadMediaFile } from "../components/media/client-upload.ts";
 import { runAlbumUploadQueue } from "../components/media/album-upload-queue.ts";
 import { drainMediaDeletionQueue } from "../services/media-deletion.server.ts";
 import { editorRequest } from "../components/trip/editor-request.ts";
@@ -810,6 +811,14 @@ test("creates and fully manages shared albums without leaking album media into o
     const detailHtml = await (await render(`/albums/${albumId}`)).text(); assert.match(detailHtml, /aria-label="添加照片"/); assert.match(detailHtml, /照片筛选/);
     assert.equal(DB.database.prepare("SELECT cover_media_asset_id cover FROM albums WHERE id=?").get(albumId).cover, assetA);
     const reordered = await render(`/api/albums/${albumId}/media`, { method: "PATCH", body: { assetIds: [assetB, assetA] } }); assert.equal(reordered.status, 200);
+    const orderBeforeFailure = DB.database.prepare("SELECT media_asset_id,sort_order FROM album_media WHERE album_id=? ORDER BY sort_order").all(albumId);
+    assert.deepEqual(orderBeforeFailure.map(row => row.media_asset_id), [assetB, assetA]);
+    const updatedBeforeFailure = DB.database.prepare("SELECT updated_at FROM albums WHERE id=?").get(albumId);
+    DB.failBatchAt = 1;
+    const failedReorder = await render(`/api/albums/${albumId}/media`, { method: "PATCH", body: { assetIds: [assetA, assetB] } });
+    assert.equal(failedReorder.status, 500);
+    assert.deepEqual(DB.database.prepare("SELECT media_asset_id,sort_order FROM album_media WHERE album_id=? ORDER BY sort_order").all(albumId), orderBeforeFailure);
+    assert.deepEqual(DB.database.prepare("SELECT updated_at FROM albums WHERE id=?").get(albumId), updatedBeforeFailure);
     const covered = await render(`/api/albums/${albumId}`, { method: "PATCH", body: { coverMediaAssetId: assetB } }); assert.equal(covered.status, 200);
     await loginAs("kiki");
     const collaborativeEdit = await render(`/api/albums/${albumId}`, { method: "PATCH", body: { title: "全员共同整理" } }); assert.equal(collaborativeEdit.status, 403);
@@ -2471,4 +2480,49 @@ test("same-location routes require shared identity or identical coordinates, not
   assert.equal(sameRoutePlace({ id: "a", latitude: 36.6, longitude: 101.8 }, { id: "b", latitude: 36.6001, longitude: 101.8 }), false);
   assert.equal(sameRoutePlace({ id: "a" }, { id: "b" }), false);
   assert.equal(sameRoutePlace({ id: "a", latitude: NaN, longitude: 101.8 }, { id: "b", latitude: NaN, longitude: 101.8 }), false);
+});
+
+
+test("photo completion retry reuses uploaded bytes even after the signed URL expires", async () => {
+  const originalFetch = globalThis.fetch;
+  const attempt = {};
+  let authorizations = 0, puts = 0, completions = 0;
+  globalThis.fetch = async (url, init) => {
+    if (url === "/api/media/uploads") {
+      authorizations++;
+      return Response.json({ assetId: "retry-photo", uploadUrl: "/signed-put", expiresInSeconds: 600 });
+    }
+    if (url === "/signed-put") { puts++; assert.equal(init.method, "PUT"); return new Response(null, { status: 200 }); }
+    assert.equal(url, "/api/media/uploads/retry-photo/complete");
+    completions++;
+    if (completions === 1) throw new TypeError("Lost completion response");
+    return Response.json({ asset: { id: "retry-photo" } });
+  };
+  try {
+    const file = new File(["photo"], "photo.heic", { type: "image/heic" });
+    await assert.rejects(uploadMediaFile(file, "album", attempt), /Lost completion response/);
+    attempt.authorization.expiresAt = 0;
+    assert.equal(await uploadMediaFile(file, "album", attempt), "retry-photo");
+    assert.deepEqual({ authorizations, puts, completions }, { authorizations: 1, puts: 1, completions: 2 });
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("photo PUT retry keeps its object and refreshes an expired unused authorization", async () => {
+  const originalFetch = globalThis.fetch;
+  const attempt = {};
+  let authorizations = 0, puts = 0;
+  globalThis.fetch = async (url, init) => {
+    if (url === "/api/media/uploads") return Response.json({ assetId: `retry-${++authorizations}`, uploadUrl: `/put-${authorizations}`, expiresInSeconds: 600 });
+    if (init.method === "PUT") { puts++; return new Response(null, { status: puts < 3 ? 503 : 200 }); }
+    return Response.json({ asset: { id: "retry-2" } });
+  };
+  try {
+    const file = new File(["photo"], "photo.heic", { type: "image/heic" });
+    await assert.rejects(uploadMediaFile(file, "album", attempt));
+    await assert.rejects(uploadMediaFile(file, "album", attempt));
+    assert.equal(authorizations, 1);
+    attempt.authorization.expiresAt = 0;
+    assert.equal(await uploadMediaFile(file, "album", attempt), "retry-2");
+    assert.deepEqual({ authorizations, puts }, { authorizations: 2, puts: 3 });
+  } finally { globalThis.fetch = originalFetch; }
 });

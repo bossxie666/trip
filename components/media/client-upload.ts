@@ -6,17 +6,29 @@ function normalizedType(file: File) {
   return extension === "heic" ? "image/heic" : extension === "heif" ? "image/heif" : "";
 }
 
-export async function uploadMediaFile(file: File, purpose: UploadPurpose) {
-  const contentType = normalizedType(file);
-  const authorization = await fetch("/api/media/uploads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ purpose, filename: file.name, contentType, byteSize: file.size }) });
-  const authorized = await authorization.json() as { assetId?: string; uploadUrl?: string; method?: string; headers?: Record<string, string>; error?: string };
-  if (!authorization.ok || !authorized.assetId || !authorized.uploadUrl) throw new Error(authorized.error || "无法准备图片上传。");
-  const uploaded = await fetch(authorized.uploadUrl, { method: authorized.method || "PUT", headers: authorized.headers, body: file });
-  if (!uploaded.ok) throw new Error("图片上传失败，请重试。");
+type UploadAuthorization = { assetId: string; uploadUrl: string; method?: string; headers?: Record<string, string>; expiresAt: number };
+/** Scoped to one file in one queue; never shared between members or purposes. */
+export type MediaUploadAttempt = { authorization?: UploadAuthorization; uploaded?: boolean };
+
+export async function uploadMediaFile(file: File, purpose: UploadPurpose, attempt: MediaUploadAttempt = {}) {
+  if (!attempt.authorization || (!attempt.uploaded && attempt.authorization.expiresAt <= Date.now())) {
+    const contentType = normalizedType(file);
+    const response = await fetch("/api/media/uploads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ purpose, filename: file.name, contentType, byteSize: file.size }), signal: AbortSignal.timeout(20_000) });
+    const authorized = await response.json() as { assetId?: string; uploadUrl?: string; method?: string; headers?: Record<string, string>; expiresInSeconds?: number; error?: string; message?: string };
+    if (!response.ok || !authorized.assetId || !authorized.uploadUrl) throw new Error(authorized.message || authorized.error || "无法准备图片上传。");
+    attempt.authorization = { ...authorized, assetId: authorized.assetId, uploadUrl: authorized.uploadUrl, expiresAt: Date.now() + (authorized.expiresInSeconds ?? 600) * 1000 - 5_000 };
+    attempt.uploaded = false;
+  }
+  const authorized = attempt.authorization;
+  if (!attempt.uploaded) {
+    const uploaded = await fetch(authorized.uploadUrl, { method: authorized.method || "PUT", headers: authorized.headers, body: file, signal: AbortSignal.timeout(120_000) });
+    if (!uploaded.ok) throw new Error("图片上传失败，请重试。");
+    attempt.uploaded = true;
+  }
   const dimensions = await readImageDimensions(file);
-  const completed = await fetch(`/api/media/uploads/${encodeURIComponent(authorized.assetId)}/complete`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(dimensions) });
-  const result = await completed.json() as { asset?: { id: string }; error?: string };
-  if (!completed.ok) throw new Error(result.error || "图片校验失败，请重试。");
+  const completed = await fetch(`/api/media/uploads/${encodeURIComponent(authorized.assetId)}/complete`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(dimensions), signal: AbortSignal.timeout(20_000) });
+  const result = await completed.json() as { asset?: { id: string }; error?: string; message?: string };
+  if (!completed.ok) throw new Error(result.message || result.error || "图片校验失败，请重试。");
   return authorized.assetId;
 }
 

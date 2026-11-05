@@ -327,7 +327,9 @@ test("partial photo uploads keep successes and retry only the failed attachment"
     await page.goto(`/albums/${album.id}`);
     await expect(page.getByRole("button", { name: "添加照片", exact: true })).toBeVisible();
     const buffer = await readFile("tests/fixtures/photo.png");
-    await page.locator("input.album-floating-input").setInputFiles([{ name: "photo.png", mimeType: "image/png", buffer }, { name: "second.png", mimeType: "image/png", buffer }]);
+    const chooser = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "添加照片", exact: true }).click();
+    await (await chooser).setFiles([{ name: "photo.png", mimeType: "image/png", buffer }, { name: "second.png", mimeType: "image/png", buffer }]);
     await expect(page.locator(".album-photo-tile")).toHaveCount(1);
     await page.getByRole("button", { name: "重试失败的 1 张", exact: true }).click();
     await expect(page.locator(".album-photo-tile")).toHaveCount(2);
@@ -357,4 +359,31 @@ test("map configuration failure stays local and leaves map controls and primary 
   await page.getByRole("link", { name: "我的旅行", exact: true }).first().click();
   await expect(page.getByRole("navigation", { name: "行程状态" })).toBeVisible();
   await expect(page.getByText("行程读取失败", { exact: true })).toHaveCount(0);
+});
+
+
+test("lost photo completion response retries confirmation without uploading another copy", async ({ page }) => {
+  const created = await fixtureRequest(page, "POST", "/api/albums", { title: `确认重试-${randomUUID()}`, tripId: "trip-e2e" });
+  expect(created.status()).toBe(201);
+  const { album } = await created.json();
+  let authorizations = 0, puts = 0, completions = 0;
+  page.on("request", request => {
+    if (new URL(request.url()).pathname === "/api/media/uploads" && request.method() === "POST") authorizations++;
+    if (request.method() === "PUT") puts++;
+  });
+  await page.route("**/api/media/uploads/*/complete", async route => {
+    const response = await route.fetch();
+    expect(response.status()).toBe(200);
+    if (++completions === 1) await route.fulfill({ status: 503, json: { message: "确认响应暂时丢失" } });
+    else await route.fulfill({ response });
+  });
+  try {
+    await page.goto(`/albums/${album.id}`);
+    const chooser = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "添加照片", exact: true }).click();
+    await (await chooser).setFiles("tests/fixtures/photo.png");
+    await page.getByRole("button", { name: "重试失败的 1 张", exact: true }).click();
+    await expect(page.locator(".album-photo-tile")).toHaveCount(1);
+    expect({ authorizations, puts, completions }).toEqual({ authorizations: 1, puts: 1, completions: 2 });
+  } finally { await fixtureRequest(page, "DELETE", `/api/albums/${album.id}`); }
 });

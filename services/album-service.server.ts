@@ -265,9 +265,13 @@ export async function reorderAlbumMedia(id: string, memberId: string, assetIds: 
   await requireAlbumEditor(id, memberId);
   const current = await getDb().select().from(albumMediaRecords).where(eq(albumMediaRecords.albumId, id));
   if (assetIds.length !== current.length || new Set(assetIds).size !== current.length || current.some((row) => !assetIds.includes(row.mediaAssetId))) throw new Error("INVALID_ALBUM_ORDER");
-  for (let index = 0; index < assetIds.length; index += 1) await getDb().update(albumMediaRecords).set({ sortOrder: -index - 1 }).where(and(eq(albumMediaRecords.albumId, id), eq(albumMediaRecords.mediaAssetId, assetIds[index])));
-  for (let index = 0; index < assetIds.length; index += 1) await getDb().update(albumMediaRecords).set({ sortOrder: index }).where(and(eq(albumMediaRecords.albumId, id), eq(albumMediaRecords.mediaAssetId, assetIds[index])));
-  await getDb().update(albumRecords).set({ updatedAt: new Date().toISOString() }).where(eq(albumRecords.id, id));
+  const db = getRuntimeEnv().DB;
+  // Both positioning passes must commit together, including the album timestamp.
+  await db.batch([
+    ...assetIds.map((assetId, index) => db.prepare("UPDATE album_media SET sort_order=? WHERE album_id=? AND media_asset_id=?").bind(-index - 1, id, assetId)),
+    ...assetIds.map((assetId, index) => db.prepare("UPDATE album_media SET sort_order=? WHERE album_id=? AND media_asset_id=?").bind(index, id, assetId)),
+    db.prepare("UPDATE albums SET updated_at=? WHERE id=?").bind(new Date().toISOString(), id),
+  ]);
   return getAlbum(id, memberId);
 }
 
