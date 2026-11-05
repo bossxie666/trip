@@ -53,7 +53,6 @@ test("last-page blank paper closes the 3D book and all pages share the home back
   await canvas.click({ position: { x: box.width * .33, y: box.height * .5 } });
   await expect(wrap).toHaveAttribute("data-state", "closed");
   await expect(page.locator("#scene-links a")).toHaveCount(0);
-  expect(await page.locator("audio").getAttribute("src")).toBeNull();
   for (const route of ["/", "/trips", "/trips/e2e-shanghai/plan", "/albums", "/messages", "/knowledge", "/persona"]) {
     await page.goto(route);
     const style = await page.locator("body").evaluate(element => ({ image: getComputedStyle(element).backgroundImage, texture: getComputedStyle(element, "::before").display }));
@@ -63,6 +62,27 @@ test("last-page blank paper closes the 3D book and all pages share the home back
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
   }
   expect(errors).toEqual([]);
+});
+
+test("starts home audio after the first interaction if autoplay is blocked", async ({ page }) => {
+  await page.addInitScript(() => {
+    const play = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function () {
+      HTMLMediaElement.prototype.play = play;
+      return Promise.reject(new DOMException("Autoplay blocked", "NotAllowedError"));
+    };
+  });
+  await page.goto("/");
+  const audio = page.locator("audio");
+  await expect(audio).toHaveAttribute("src", /track-01-web\.mp3$/);
+  await expect(audio).toHaveJSProperty("paused", true);
+  await page.getByRole("button", { name: "曲目", exact: true }).click();
+  await expect(audio).toHaveJSProperty("paused", false);
+  await page.locator("#disc").press("Enter");
+  await expect(audio).toHaveJSProperty("paused", true);
+  await page.reload();
+  await expect(page.locator("#disc")).toHaveAttribute("aria-label", "播放音乐");
+  await expect(audio).not.toHaveAttribute("src", /.+/);
 });
 
 

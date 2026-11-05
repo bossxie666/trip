@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, inArray, isNull, ne } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import { getDb } from "@/db";
 import {
   bookingCostLineRecords, bookingParticipantRecords, bookingRecords, dayPresenceRecords,
@@ -39,10 +40,27 @@ export async function getPlanWorkspace(slug: string, memberId?: string, loaderOp
     : eq(routePreferenceRecords.tripId, stored.id);
   const budgetPromise = view === "budget" && memberId ? getPersonalBudgetWorkspace(slug, memberId, loaderOptions.requestContext).catch(() => null) : Promise.resolve(null);
 
-  const [recommendations, storedItems, bookings, bookingParticipants, presenceRows, presenceWindows, dayPresenceRows, participantOverrides, savedPlaceRows, routePreferences, legacyTripPlaces] = await Promise.all([
+  const activeBookings = and(eq(bookingRecords.tripId, stored.id), isNull(bookingRecords.deletedAt), ne(bookingRecords.status, "cancelled"));
+  const origin = alias(placeRecords, "booking_origin");
+  const destination = alias(placeRecords, "booking_destination");
+  // The workspace header only totals lodging. Budget reads its own cost data.
+  const accommodationCosts = view === "map" ? Promise.resolve([]) :
+    db.select({ line: bookingCostLineRecords }).from(bookingCostLineRecords)
+      .innerJoin(bookingRecords, eq(bookingRecords.id, bookingCostLineRecords.bookingId))
+      .where(and(activeBookings, eq(bookingRecords.type, "hotel")))
+      .orderBy(asc(bookingCostLineRecords.sortOrder))
+      .then(rows => rows.map(({ line }) => line));
+
+  const [recommendations, storedItems, bookings, bookingParticipants, presenceRows, presenceWindows, dayPresenceRows, participantOverrides, savedPlaceRows, routePreferences, legacyTripPlaces, costLines] = await Promise.all([
     recommendationRowsPromise,
     db.select({ item: itineraryItemRecords, place: placeRecords, recommendationTitle: recommendationRecords.title, knowledge: { id: knowledgeEntryRecords.id, title: knowledgeEntryRecords.title, summary: knowledgeEntryRecords.summary, deletedAt: knowledgeEntryRecords.deletedAt } }).from(itineraryItemRecords).leftJoin(placeRecords, eq(placeRecords.id, itineraryItemRecords.placeId)).leftJoin(recommendationRecords, eq(recommendationRecords.id, itineraryItemRecords.recommendationId)).leftJoin(knowledgeEntryRecords, eq(knowledgeEntryRecords.id, itineraryItemRecords.knowledgeEntryId)).where(itemWhere).orderBy(asc(itineraryItemRecords.dayId), asc(itineraryItemRecords.sortOrder), asc(itineraryItemRecords.id)),
-    db.select({ booking: bookingRecords, place: placeRecords }).from(bookingRecords).leftJoin(placeRecords, eq(placeRecords.id, bookingRecords.placeId)).where(and(eq(bookingRecords.tripId, stored.id), isNull(bookingRecords.deletedAt), ne(bookingRecords.status, "cancelled"))).orderBy(asc(bookingRecords.startAt), asc(bookingRecords.startDateLocal), asc(bookingRecords.id)),
+    db.select({ booking: bookingRecords, place: placeRecords, originPlace: origin, destinationPlace: destination })
+      .from(bookingRecords)
+      .leftJoin(placeRecords, eq(placeRecords.id, bookingRecords.placeId))
+      .leftJoin(origin, eq(origin.id, bookingRecords.originPlaceId))
+      .leftJoin(destination, eq(destination.id, bookingRecords.destinationPlaceId))
+      .where(activeBookings)
+      .orderBy(asc(bookingRecords.startAt), asc(bookingRecords.startDateLocal), asc(bookingRecords.id)),
     db.select().from(bookingParticipantRecords).innerJoin(bookingRecords, eq(bookingRecords.id, bookingParticipantRecords.bookingId)).where(and(eq(bookingRecords.tripId, stored.id), isNull(bookingRecords.deletedAt))),
     db.select().from(tripMemberRecords).where(eq(tripMemberRecords.tripId, stored.id)),
     needsPresence ? db.select().from(memberPresenceWindowRecords).where(eq(memberPresenceWindowRecords.tripId, stored.id)).orderBy(asc(memberPresenceWindowRecords.startsAt)) : Promise.resolve([]),
@@ -51,6 +69,7 @@ export async function getPlanWorkspace(slug: string, memberId?: string, loaderOp
     needsSavedPlaces ? db.select({ saved: tripSavedPlaceRecords, place: placeRecords, city: cityRecords }).from(tripSavedPlaceRecords).innerJoin(placeRecords, eq(placeRecords.id, tripSavedPlaceRecords.placeId)).innerJoin(cityRecords, eq(cityRecords.id, placeRecords.cityId)).where(eq(tripSavedPlaceRecords.tripId, stored.id)).orderBy(asc(tripSavedPlaceRecords.createdAt)) : Promise.resolve([]),
     needsRoutes ? db.select().from(routePreferenceRecords).where(routePreferenceWhere).orderBy(asc(routePreferenceRecords.updatedAt), asc(routePreferenceRecords.id)) : Promise.resolve([]),
     needsSavedPlaces ? db.select({ place: placeRecords, planStatus: tripPlaceRecords.planStatus }).from(tripPlaceRecords).innerJoin(placeRecords, eq(tripPlaceRecords.placeId, placeRecords.id)).where(eq(tripPlaceRecords.tripId, stored.id)) : Promise.resolve([]),
+    accommodationCosts,
   ]);
   const items = storedItems.map((row) => {
     const source = row.knowledge?.id ? row.knowledge : null;
@@ -65,19 +84,16 @@ export async function getPlanWorkspace(slug: string, memberId?: string, loaderOp
 
   const timezone = stored.timezone || "Asia/Shanghai";
 
-  const bookingPlaceIds = [...new Set(bookings.flatMap(({ booking }) => [booking.placeId, booking.originPlaceId, booking.destinationPlaceId].filter((id): id is string => Boolean(id))) )];
-  const bookingIds = bookings.map(({ booking }) => booking.id);
-  const [bookingRelatedPlaces, costLines, budget] = await Promise.all([
-    bookingPlaceIds.length ? db.select().from(placeRecords).where(inArray(placeRecords.id, bookingPlaceIds)) : Promise.resolve([]),
-    bookingIds.length ? db.select().from(bookingCostLineRecords).where(inArray(bookingCostLineRecords.bookingId, bookingIds)).orderBy(asc(bookingCostLineRecords.sortOrder)) : Promise.resolve([]),
-    budgetPromise,
-  ]);
+  const budget = await budgetPromise;
   const savedPlaces = savedPlaceRows.map(({ saved, place, city }) => ({ ...saved, place, city }));
   const placeById = new Map<string, typeof placeRecords.$inferSelect>();
   const recommendationMetaByPlace = new Map<string, { id: string; kind: "place" | "guide"; category: string; areaKey: string | null; title: string; sortOrder: number }[]>();
   for (const { place } of items) if (place) placeById.set(place.id, place);
   for (const { place } of bookings) if (place) placeById.set(place.id, place);
-  for (const place of bookingRelatedPlaces) placeById.set(place.id, place);
+  for (const { originPlace, destinationPlace } of bookings) {
+    if (originPlace) placeById.set(originPlace.id, originPlace);
+    if (destinationPlace) placeById.set(destinationPlace.id, destinationPlace);
+  }
   for (const { option, place, recommendation } of options) {
     void option;
     placeById.set(place.id, place);
@@ -148,10 +164,10 @@ export async function getPlanWorkspace(slug: string, memberId?: string, loaderOp
   const timelineAssembly = assembleTimeline({
     days: days.map((day) => ({ id: day.id, date: day.date, dayNumber: day.dayNumber })),
     items: items.map(({ item, place }) => ({ ...item, place, lockedAt: item.lockedAt, memberStates: itemStates(item, days.find((day) => day.id === item.dayId)?.date || null) })),
-    bookings: bookings.map(({ booking }) => ({
+    bookings: bookings.map(({ booking, originPlace, destinationPlace }) => ({
       ...booking,
-      originPlace: booking.originPlaceId ? bookingRelatedPlaces.find((candidate) => candidate.id === booking.originPlaceId) || null : null,
-      destinationPlace: booking.destinationPlaceId ? bookingRelatedPlaces.find((candidate) => candidate.id === booking.destinationPlaceId) || null : null,
+      originPlace,
+      destinationPlace,
       memberStates: bookingMemberStates(booking.id),
     })),
   });
@@ -164,15 +180,11 @@ export async function getPlanWorkspace(slug: string, memberId?: string, loaderOp
     routeStopsByDay.set(day.id, stops);
     routeSegmentsByDay.set(day.id, assembly.localEdges.map((edge) => { const from = toRouteStop(edge.from), to = toRouteStop(edge.to); return from && to ? { id: edge.id, from, to, crossCity: edge.crossCity } : null; }).filter((segment): segment is { id: string; from: RouteStop; to: RouteStop; crossCity: boolean } => Boolean(segment)));
   }
-  const bookingPlace = (id: string | null) => {
-    const place = id ? bookingRelatedPlaces.find((candidate) => candidate.id === id) : null;
-    return place || null;
-  };
   return {
     trip,
     days: days.map((day) => ({ ...day, items: items.filter(({ item }) => item.dayId === day.id).map(({ item, place, recommendationTitle, knowledge }) => ({ item, place, recommendationTitle, knowledge, participantStates: itemStates(item, day.date), participantOverrides: itemOverrides(item.id) })), timeline: [] })),
     recommendations: recommendations.map((recommendation) => ({ ...recommendation, options: options.filter(({ option }) => option.recommendationId === recommendation.id), addedDays: items.map(({ item }) => item).filter((item) => item.recommendationId === recommendation.id).map((item) => item.dayId), locked: items.map(({ item }) => item).some((item) => item.recommendationId === recommendation.id && item.lockedAt != null) })),
-    bookings: bookings.map(({ booking, place }) => ({ booking, place, originPlace: bookingPlace(booking.originPlaceId), destinationPlace: bookingPlace(booking.destinationPlaceId), memberStates: bookingMemberStates(booking.id) })),
+    bookings: bookings.map((record) => ({ ...record, memberStates: bookingMemberStates(record.booking.id) })),
     costLines,
     presenceUnknown: days.some((day) => memberIds.some((memberId) => dayPresenceState(day.id, day.date, memberId) === "unknown" || dayPresenceState(day.id, day.date, memberId) === "partial")),
     dayPresenceByDay: Object.fromEntries(days.map((day) => [day.id, Object.fromEntries(memberIds.map((memberId) => [memberId, dayPresenceState(day.id, day.date, memberId)]))])),

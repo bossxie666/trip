@@ -328,6 +328,18 @@ test("avoids repeated session verification within a protected request", async ()
   }
 });
 
+test("exposes trip timing only on successful signed-in trip pages", async () => {
+  for (const path of ["/trips", "/trips/shanghai-hangzhou-2026/plan?view=planning"]) {
+    const signedIn = await render(path);
+    assert.equal(signedIn.status, 200);
+    assert.match(signedIn.headers.get("server-timing") || "", /trip-worker;dur=\d+, trip-session;dur=\d+/);
+    await signedIn.text();
+    const anonymous = await render(path, { headers: { cookie: "" } });
+    assert.equal(anonymous.status, 302);
+    assert.doesNotMatch(anonymous.headers.get("server-timing") || "", /trip-worker/);
+  }
+});
+
 test("rejects forged identity headers and revoked sessions on the next request", async () => {
   const original = sessionCookie;
   try {
@@ -610,7 +622,7 @@ test("keeps V2.4-R1 primary actions, page scrolling, and main editor ownership c
   assert.match(mobileNavigation, />留言</);
   assert.match(mobileNavigation, />地图</);
   assert.match(desktopMap, /IntersectionObserver/);
-  assert.match(desktopMap, /rootMargin: "240px 0px"/);
+  assert.match(desktopMap, /observer\.observe\(placeholder\.current\)/);
   assert.match(desktopMap, /dynamic<PlanMapProps>/);
   assert.match(tripEditor, /uploadMediaFile\(coverFile, "trip_cover"\)/);
   assert.match(mediaService, /"trip_cover"/);

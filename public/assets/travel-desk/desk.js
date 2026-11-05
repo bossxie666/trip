@@ -7,13 +7,26 @@ const disc = $("disc");
 const trackToggle = $("track-toggle");
 const trackList = $("track-list");
 const tracks = [
-  { title: "音乐 01", file: "track-01.mp3" },
-  { title: "音乐 02", file: "track-02.mp3" },
+  { title: "音乐 01", file: "track-01-web.mp3" },
+  { title: "音乐 02", file: "track-02-web.mp3" },
 ];
 audio.volume = .3;
 let track = 0;
 let playRequest = 0;
 let discClick;
+let awaitingGesture = false;
+const musicPauseKey = "trip-home-music-paused";
+let manuallyPaused = false;
+try {
+  manuallyPaused = sessionStorage.getItem(musicPauseKey) === "true";
+} catch { /* Playback is still available without session storage. */ }
+
+function rememberPause(paused) {
+  manuallyPaused = paused;
+  try {
+    sessionStorage.setItem(musicPauseKey, String(paused));
+  } catch { /* Keep the preference for this visit. */ }
+}
 
 function musicState() {
   const playing = !audio.paused;
@@ -22,21 +35,29 @@ function musicState() {
 }
 
 async function play() {
+  awaitingGesture = false;
   if (!audio.getAttribute("src")) audio.src = "/assets/travel-desk/music/" + tracks[track].file;
   const request = ++playRequest;
   $("audio-status").textContent = "";
   try {
     await audio.play();
   } catch (error) {
-    if (request === playRequest && error.name !== "AbortError") {
+    if (request !== playRequest) return;
+    if (error.name === "NotAllowedError") {
+      awaitingGesture = !manuallyPaused;
+    } else if (error.name !== "AbortError") {
       $("audio-status").textContent = "播放失败，请重试";
     }
   }
 }
 
 function togglePlay() {
-  if (audio.paused) play();
+  if (audio.paused) {
+    rememberPause(false);
+    play();
+  }
   else {
+    rememberPause(true);
     playRequest++;
     audio.pause();
   }
@@ -78,6 +99,7 @@ const trackButtons = tracks.map(({ title }, index) => {
   button.textContent = title;
   if (index === track) button.setAttribute("aria-current", "true");
   listen(button, "click", () => {
+    rememberPause(false);
     selectTrack(index);
     setTrackList(false, true);
   });
@@ -92,13 +114,25 @@ listen(disc, "click", event => {
     return;
   }
   if (discClick !== undefined) {
+    rememberPause(false);
     nextTrack();
+    return;
+  }
+  if (audio.paused) {
+    togglePlay();
+    discClick = setTimeout(clearDiscClick, 320);
     return;
   }
   discClick = setTimeout(() => {
     discClick = undefined;
     togglePlay();
   }, 320);
+});
+listen(document, "click", event => {
+  if (!awaitingGesture || manuallyPaused || !event.isTrusted) return;
+  const path = event.composedPath();
+  if (path.includes(disc) || trackButtons.some(button => path.includes(button))) return;
+  play();
 });
 listen(trackToggle, "click", () => setTrackList(trackList.hidden));
 listen(document, "pointerdown", event => {
@@ -123,6 +157,7 @@ audio.onerror = () => {
   musicState();
 };
 render();
+if (!manuallyPaused) play();
 const stateKey=data.memberId?"trip-home-book:"+data.memberId:null;let restored;try{const saved=stateKey?JSON.parse(sessionStorage.getItem(stateKey)):null;if(saved&&saved.open===true&&Number.isInteger(saved.page)&&saved.page>=1&&saved.page<=3)restored={open:true,page:saved.page};}catch{/* Storage unavailable: keep normal opening behavior. */}
 const chapterObserver=new MutationObserver(()=>{const links=$("scene-links");if(!links)return;const page=$("scene-wrap").dataset.page;const state=$("scene-wrap").dataset.state;if(stateKey&&(state==="open"||state==="closed")){try{sessionStorage.setItem(stateKey,JSON.stringify({open:state==="open",page:Number(page)}))}catch{/* Navigation works without storage. */}}const items=$("scene-wrap").dataset.state!=="open"?[]:page==="2"?data.trips:page==="3"?data.albums:[];links.replaceChildren();items.slice(0,2).forEach(item=>{const a=document.createElement("a");a.href=item.href;a.textContent=item.title;links.append(a)});});chapterObserver.observe($("scene-wrap"),{attributes:true,attributeFilter:["data-page","data-state"]});let sceneCleanup,sceneLoading;
 const sceneWrap=$("scene-wrap"),openButton=$("scene-open");sceneWrap.tabIndex=0;
