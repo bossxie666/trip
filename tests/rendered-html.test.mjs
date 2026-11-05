@@ -2526,3 +2526,23 @@ test("photo PUT retry keeps its object and refreshes an expired unused authoriza
     assert.deepEqual({ authorizations, puts }, { authorizations: 2, puts: 3 });
   } finally { globalThis.fetch = originalFetch; }
 });
+
+
+test("persisted photo retries can renew a pending upload removed by server cleanup", async () => {
+  const originalFetch = globalThis.fetch;
+  const attempt = { authorization: { assetId: "expired", uploadUrl: "/old", expiresAt: 0 }, uploaded: true };
+  let puts = 0;
+  globalThis.fetch = async (url, init) => {
+    if (url === "/api/media/uploads/expired/complete") return Response.json({ error: "expired" }, { status: 404 });
+    if (url === "/api/media/uploads") return Response.json({ assetId: "renewed", uploadUrl: "/new", expiresInSeconds: 600 });
+    if (init.method === "PUT") { puts++; return new Response(null, { status: 200 }); }
+    return Response.json({ asset: { id: "renewed" } });
+  };
+  try {
+    const file = new File(["photo"], "photo.heic", { type: "image/heic" });
+    await assert.rejects(uploadMediaFile(file, "album", attempt));
+    assert.equal(attempt.authorization, undefined);
+    assert.equal(await uploadMediaFile(file, "album", attempt), "renewed");
+    assert.equal(puts, 1);
+  } finally { globalThis.fetch = originalFetch; }
+});

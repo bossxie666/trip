@@ -23,14 +23,24 @@ export async function uploadMediaFile(file: File, purpose: UploadPurpose, attemp
   const authorized = attempt.authorization;
   if (!attempt.uploaded) {
     const uploaded = await fetch(authorized.uploadUrl, { method: authorized.method || "PUT", headers: authorized.headers, body: file, signal: AbortSignal.timeout(120_000) });
-    if (!uploaded.ok) throw new Error("图片上传失败，请重试。");
+    if (!uploaded.ok) {
+      if (uploaded.status === 404) { attempt.authorization = undefined; attempt.uploaded = false; await checkpoint?.(); }
+      throw new Error("图片上传失败，请重试。");
+    }
     attempt.uploaded = true;
     await checkpoint?.();
   }
   const dimensions = await readImageDimensions(file);
   const completed = await fetch(`/api/media/uploads/${encodeURIComponent(authorized.assetId)}/complete`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(dimensions), signal: AbortSignal.timeout(20_000) });
   const result = await completed.json() as { asset?: { id: string }; error?: string; message?: string };
-  if (!completed.ok) throw new Error(result.message || result.error || "图片校验失败，请重试。");
+  if (!completed.ok) {
+    if (completed.status === 404 || completed.status === 409) {
+      if (completed.status === 404) attempt.authorization = undefined;
+      attempt.uploaded = false;
+      await checkpoint?.();
+    }
+    throw new Error(result.message || result.error || "图片校验失败，请重试。");
+  }
   return authorized.assetId;
 }
 
