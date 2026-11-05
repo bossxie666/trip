@@ -238,19 +238,21 @@ export async function findTripBySlug(slug: string) {
  */
 export async function findWorkspaceTripBySlug(slug: string) {
   const db = getDb();
-  const row = (await db.select().from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1))[0];
-  if (!row) return seedFallbackAllowed() ? getSeedTripBySlug(slug) : undefined;
-  const [cityLinks, storedDays, memberLinks, stageLinks] = await Promise.all([
+  // Resolve the indexed slug inside each query so the related reads can start
+  // immediately instead of waiting for a separate trip-row round trip.
+  const tripIdQuery = db.select({ id: tripRecords.id }).from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1);
+  const [rows, cityLinks, storedDays, memberLinks, stageLinks] = await Promise.all([
+    db.select().from(tripRecords).where(eq(tripRecords.slug, slug)).limit(1),
     db.select({ id: cityRecords.id, slug: cityRecords.slug, name: cityRecords.name })
       .from(tripCityRecords)
       .innerJoin(cityRecords, eq(tripCityRecords.cityId, cityRecords.id))
-      .where(eq(tripCityRecords.tripId, row.id))
+      .where(inArray(tripCityRecords.tripId, tripIdQuery))
       .orderBy(asc(tripCityRecords.position)),
-    db.select().from(dayRecords).where(eq(dayRecords.tripId, row.id)).orderBy(asc(dayRecords.dayNumber)),
+    db.select().from(dayRecords).where(inArray(dayRecords.tripId, tripIdQuery)).orderBy(asc(dayRecords.dayNumber)),
     db.select({ id: memberRecords.id, name: memberRecords.name, displayName: memberRecords.displayName, avatar: memberRecords.avatar, active: memberRecords.active, createdAt: memberRecords.createdAt })
       .from(tripMemberRecords)
       .innerJoin(memberRecords, eq(tripMemberRecords.memberId, memberRecords.id))
-      .where(eq(tripMemberRecords.tripId, row.id)),
+      .where(inArray(tripMemberRecords.tripId, tripIdQuery)),
     db.select({
       id: tripStageRecords.id,
       cityId: tripStageRecords.cityId,
@@ -270,9 +272,11 @@ export async function findWorkspaceTripBySlug(slug: string) {
       .innerJoin(cityRecords, eq(tripStageRecords.cityId, cityRecords.id))
       .leftJoin(tripStageMemberRecords, eq(tripStageMemberRecords.stageId, tripStageRecords.id))
       .leftJoin(memberRecords, eq(tripStageMemberRecords.memberId, memberRecords.id))
-      .where(eq(tripStageRecords.tripId, row.id))
+      .where(inArray(tripStageRecords.tripId, tripIdQuery))
       .orderBy(asc(tripStageRecords.sortOrder)),
   ]);
+  const row = rows[0];
+  if (!row) return seedFallbackAllowed() ? getSeedTripBySlug(slug) : undefined;
   const stages = [...new Map(stageLinks.map((stage) => [stage.id, stage])).values()].map((stage) => ({
     id: stage.id,
     tripId: row.id,
