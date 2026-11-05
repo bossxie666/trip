@@ -382,8 +382,38 @@ test("lost photo completion response retries confirmation without uploading anot
     const chooser = page.waitForEvent("filechooser");
     await page.getByRole("button", { name: "添加照片", exact: true }).click();
     await (await chooser).setFiles("tests/fixtures/photo.png");
+    await expect(page.getByRole("button", { name: "重试失败的 1 张", exact: true })).toBeEnabled();
+    await page.reload();
     await page.getByRole("button", { name: "重试失败的 1 张", exact: true }).click();
     await expect(page.locator(".album-photo-tile")).toHaveCount(1);
     expect({ authorizations, puts, completions }).toEqual({ authorizations: 1, puts: 1, completions: 2 });
+    await page.reload();
+    await expect(page.getByRole("button", { name: "添加照片", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "重试失败的 1 张", exact: true })).toHaveCount(0);
+    await expect(page.locator(".album-photo-tile")).toHaveCount(1);
+  } finally { await fixtureRequest(page, "DELETE", `/api/albums/${album.id}`); }
+});
+
+
+test("failed photo bytes survive refresh and resume with the same upload authorization", async ({ page }) => {
+  const created = await fixtureRequest(page, "POST", "/api/albums", { title: `刷新重试-${randomUUID()}`, tripId: "trip-e2e" });
+  expect(created.status()).toBe(201);
+  const { album } = await created.json();
+  let authorizations = 0, puts = 0;
+  page.on("request", request => { if (new URL(request.url()).pathname === "/api/media/uploads" && request.method() === "POST") authorizations++; });
+  await page.route("**/api/media/uploads/*/content", async route => {
+    if (++puts === 1) await route.fulfill({ status: 503, body: "Synthetic upload failure" });
+    else await route.continue();
+  });
+  try {
+    await page.goto(`/albums/${album.id}`);
+    const chooser = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "添加照片", exact: true }).click();
+    await (await chooser).setFiles("tests/fixtures/photo.png");
+    await expect(page.getByRole("button", { name: "重试失败的 1 张", exact: true })).toBeEnabled();
+    await page.reload();
+    await page.getByRole("button", { name: "重试失败的 1 张", exact: true }).click();
+    await expect(page.locator(".album-photo-tile")).toHaveCount(1);
+    expect({ authorizations, puts }).toEqual({ authorizations: 1, puts: 2 });
   } finally { await fixtureRequest(page, "DELETE", `/api/albums/${album.id}`); }
 });

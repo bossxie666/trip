@@ -7,15 +7,28 @@ import { runAlbumUploadQueue, type AlbumUploadItem } from "./album-upload-queue"
 import { WorkspaceOverlay } from "@/components/trip/WorkspaceOverlay";
 import { EditorDialog } from "@/components/trip/EditorDialog";
 import type { AlbumDetail, AlbumPhoto as Photo } from "@/models/album";
+import { loadUploadQueue, saveUploadQueue } from "./album-upload-storage";
 import { useAlbumPhotos } from "./useAlbumPhotos";
 
 const dateLabel = (date: string) => { const parsed = new Date(date); return Number.isFinite(parsed.getTime()) ? parsed.toLocaleDateString("zh-CN") : "日期未知"; };
 
-export function AlbumDetailClient({ album: initial }: { album: AlbumDetail }) {
+export function AlbumDetailClient({ album: initial, currentMemberId }: { album: AlbumDetail; currentMemberId: string }) {
   const { album, loading, error: pageError, refresh, loadMore, changeFilter } = useAlbumPhotos(initial);
   const inputRef = useRef<HTMLInputElement>(null), moreRef = useRef<HTMLDivElement>(null), running = useRef(false);
   const hold = useRef<ReturnType<typeof setTimeout> | null>(null), pointerStart = useRef<{ x: number; y: number } | null>(null), held = useRef(false), swipeStart = useRef<{ x: number; y: number } | null>(null);
   const [busy, setBusy] = useState(""), [error, setError] = useState(""), [queue, setQueue] = useState<AlbumUploadItem[]>([]);
+  const queueKey = `${currentMemberId}:${album.id}`;
+  const [queueReady, setQueueReady] = useState(false), [storageError, setStorageError] = useState("");
+  useEffect(() => {
+    let active = true;
+    loadUploadQueue(queueKey).then(items => { if (active) { setQueue(items); setQueueReady(true); } }).catch(() => { if (active) { setStorageError("浏览器无法保存上传记录，刷新前请完成上传。"); setQueueReady(true); } });
+    return () => { active = false; };
+  }, [queueKey]);
+  async function rememberUploads(items: AlbumUploadItem[]) {
+    setQueue(items);
+    try { await saveUploadQueue(queueKey, items); }
+    catch { setStorageError("浏览器无法保存上传记录，刷新前请完成上传。"); }
+  }
   const filter = album.pagination.filter;
   const [selecting, setSelecting] = useState(false), [selected, setSelected] = useState<Set<string>>(new Set()), [viewer, setViewer] = useState<string | null>(null);
   const [editAction, setEditAction] = useState<"tag" | "date" | "delete" | null>(null), [tagName, setTagName] = useState(""), [date, setDate] = useState("");
@@ -66,11 +79,11 @@ export function AlbumDetailClient({ album: initial }: { album: AlbumDetail }) {
     if (!response.ok) throw new Error(payload.message || payload.error || "操作失败，请重试。"); return payload;
   }
   async function processUploads(items: AlbumUploadItem[]) {
-    if (running.current) return;
+    if (running.current || !queueReady) return;
     running.current = true; setBusy("upload"); setError("");
     try {
       const results = await runAlbumUploadQueue(items, {
-        upload: (file, attempt) => uploadMediaFile(file, "album", attempt), capturedAt: readPhotoCapturedAt, changed: setQueue,
+        upload: (file, attempt, checkpoint) => uploadMediaFile(file, "album", attempt, checkpoint), capturedAt: readPhotoCapturedAt, changed: rememberUploads,
         attach: (assetId, capturedAt) => json(`/api/albums/${album.id}/media`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ assetIds: [assetId], capturedAtByAsset: capturedAt ? { [assetId]: capturedAt } : {} }) }),
       });
       const errors = results.filter(item => item.status === "error");
@@ -80,7 +93,7 @@ export function AlbumDetailClient({ album: initial }: { album: AlbumDetail }) {
   }
   async function upload(event: ChangeEvent<HTMLInputElement>) {
     const files = [...(event.target.files || [])]; event.target.value = "";
-    if (!files.length || busy) return;
+    if (!files.length || busy || !queueReady) return;
     if (files.length > 20) { setError("每次最多上传 20 张照片。"); return; }
     await processUploads([...failed, ...files.map(file => ({ file, status: "waiting" as const }))]);
   }
@@ -134,11 +147,12 @@ export function AlbumDetailClient({ album: initial }: { album: AlbumDetail }) {
   return <>
     <nav className="album-photo-toolbar" aria-label="照片筛选"><div><button className={filter === "all" ? "active" : ""} disabled={!!busy || !!loading} onClick={() => void filterPhotos("all")}>全部</button><button className={filter === "favorite" ? "active" : ""} disabled={!!busy || !!loading} onClick={() => void filterPhotos("favorite")}><Heart size={15} />收藏</button>{album.tags.map(tag => <button className={filter === tag.id ? "active" : ""} key={tag.id} disabled={!!busy || !!loading} onClick={() => void filterPhotos(tag.id)}>{tag.name}</button>)}</div><button disabled={!!busy || !!loading} onClick={() => { setSelecting(!selecting); setSelected(new Set()); }}>{selecting ? "取消" : "选择"}</button></nav>
     {error && <p className="form-error album-error" role="alert">{error}</p>}
+    {storageError && <p className="form-error" role="alert">{storageError}</p>}
     {!!queue.length && <section className="album-upload-status" aria-live="polite"><p>{busy === "upload" ? `已完成 ${uploaded} / ${queue.length} 张` : `已添加 ${uploaded} 张`}</p>{failed.length > 0 && <><ul>{failed.map((item, index) => <li key={index}>{item.file.name}：{item.error}</li>)}</ul><button disabled={!!busy || !!loading} onClick={() => processUploads(queue)}>重试失败的 {failed.length} 张</button></>}{!busy && !failed.length && <button onClick={() => setQueue([])}>关闭</button>}</section>}
     {!visible.length ? <section className="album-photo-empty"><ImagePlus size={45} /><p>{album.pagination.totalPhotos ? "暂无匹配照片" : "暂无照片"}</p></section> : <div className="album-photo-timeline" aria-busy={!!loading}>{groups.map(([date, photos]) => <section key={date}><header><h2>{dateLabel(`${date}T12:00:00`)}</h2><span>{dateCounts.get(date) || photos.length} 张</span></header><div className="album-photo-grid">{photos.map(photo => <button type="button" aria-label={selecting ? `${selected.has(photo.assetId) ? "取消选择" : "选择"}${photo.filename}` : `查看${photo.filename}`} aria-pressed={selecting ? selected.has(photo.assetId) : undefined} className={`album-photo-tile${selected.has(photo.assetId) ? " selected" : ""}`} key={photo.assetId} onPointerDown={event => startHold(event, photo.assetId)} onPointerMove={event => { const start = pointerStart.current; if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > 8) cancelHold(); }} onPointerUp={cancelHold} onPointerCancel={cancelHold} onPointerLeave={cancelHold} onContextMenu={event => event.preventDefault()} onClick={() => open(photo)}><img src={`/api/media/${photo.assetId}?variant=thumb`} alt={photo.filename} width={320} height={320} loading="lazy" draggable={false} />{photo.isFavorite && <Heart className="album-photo-heart" size={17} fill="currentColor" />}{selecting && <i className="album-photo-check">{selected.has(photo.assetId) && <Check size={16} />}</i>}</button>)}</div></section>)}</div>}
     {pageError && <p className="form-error" role="alert">{pageError}<button type="button" disabled={!!loading} onClick={() => void refresh()}>重新加载照片</button></p>}
     <div ref={moreRef} className="album-page-loader" aria-live="polite">{loading && <span>正在读取照片…</span>}{album.pagination.nextCursor && <button type="button" disabled={!!loading || !!busy} onClick={() => void loadMore()}>加载更多 · {visible.length} / {album.pagination.total}</button>}</div>
-    <input ref={inputRef} className="album-floating-input" type="file" tabIndex={-1} aria-hidden="true" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" multiple disabled={!!busy || !!loading} onChange={upload} />{!selecting && <button type="button" className={`album-floating-add${busy === "upload" ? " busy" : ""}`} aria-label={busy === "upload" ? "照片上传中" : "添加照片"} disabled={!!busy || !!loading} onClick={() => inputRef.current?.click()}>{busy === "upload" ? <span>{uploaded}/{queue.length}</span> : <Plus size={30} />}</button>}
+    <input ref={inputRef} className="album-floating-input" type="file" tabIndex={-1} aria-hidden="true" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" multiple disabled={!queueReady || !!busy || !!loading} onChange={upload} />{!selecting && <button type="button" className={`album-floating-add${busy === "upload" ? " busy" : ""}`} aria-label={busy === "upload" ? "照片上传中" : "添加照片"} disabled={!queueReady || !!busy || !!loading} onClick={() => inputRef.current?.click()}>{busy === "upload" ? <span>{uploaded}/{queue.length}</span> : <Plus size={30} />}</button>}
     {selecting && <aside className="album-selection-bar"><b>已选 {selected.size} 张</b><button disabled={!!busy || !!loading || !album.pagination.total} onClick={() => void selectAll()}>{allSelected ? "取消全选" : "全选"}</button><button disabled={!selected.size || !!busy || !!loading} onClick={() => batch("favorite", { isFavorite: true })}><Heart size={18} />收藏</button><button disabled={!selected.size || !!busy || !!loading} onClick={() => batch("favorite", { isFavorite: false })}>取消收藏</button><button disabled={!selected.size || !!busy || !!loading} onClick={() => openAction("tag")}><Tag size={18} />标签</button>{album.canEditAlbum && <><button disabled={!selected.size || !!busy || !!loading} onClick={() => openAction("date")}>日期</button><button className="danger" disabled={!selected.size || !!busy || !!loading} onClick={() => openAction("delete")}><Trash2 size={18} />删除</button></>}</aside>}
     {editAction && <EditorDialog key={editAction} open title={editAction === "tag" ? "管理照片标签" : editAction === "date" ? "修改拍摄日期" : "删除照片"}
       onClose={() => setEditAction(null)} busy={!!busy || !!loading} dirty={editAction === "tag" ? Boolean(tagName) : editAction === "date" ? Boolean(date) : false}

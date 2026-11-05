@@ -10,7 +10,7 @@ type UploadAuthorization = { assetId: string; uploadUrl: string; method?: string
 /** Scoped to one file in one queue; never shared between members or purposes. */
 export type MediaUploadAttempt = { authorization?: UploadAuthorization; uploaded?: boolean };
 
-export async function uploadMediaFile(file: File, purpose: UploadPurpose, attempt: MediaUploadAttempt = {}) {
+export async function uploadMediaFile(file: File, purpose: UploadPurpose, attempt: MediaUploadAttempt = {}, checkpoint?: () => Promise<void>) {
   if (!attempt.authorization || (!attempt.uploaded && attempt.authorization.expiresAt <= Date.now())) {
     const contentType = normalizedType(file);
     const response = await fetch("/api/media/uploads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ purpose, filename: file.name, contentType, byteSize: file.size }), signal: AbortSignal.timeout(20_000) });
@@ -18,17 +18,29 @@ export async function uploadMediaFile(file: File, purpose: UploadPurpose, attemp
     if (!response.ok || !authorized.assetId || !authorized.uploadUrl) throw new Error(authorized.message || authorized.error || "无法准备图片上传。");
     attempt.authorization = { ...authorized, assetId: authorized.assetId, uploadUrl: authorized.uploadUrl, expiresAt: Date.now() + (authorized.expiresInSeconds ?? 600) * 1000 - 5_000 };
     attempt.uploaded = false;
+    await checkpoint?.();
   }
   const authorized = attempt.authorization;
   if (!attempt.uploaded) {
     const uploaded = await fetch(authorized.uploadUrl, { method: authorized.method || "PUT", headers: authorized.headers, body: file, signal: AbortSignal.timeout(120_000) });
-    if (!uploaded.ok) throw new Error("图片上传失败，请重试。");
+    if (!uploaded.ok) {
+      if (uploaded.status === 404) { attempt.authorization = undefined; attempt.uploaded = false; await checkpoint?.(); }
+      throw new Error("图片上传失败，请重试。");
+    }
     attempt.uploaded = true;
+    await checkpoint?.();
   }
   const dimensions = await readImageDimensions(file);
   const completed = await fetch(`/api/media/uploads/${encodeURIComponent(authorized.assetId)}/complete`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(dimensions), signal: AbortSignal.timeout(20_000) });
   const result = await completed.json() as { asset?: { id: string }; error?: string; message?: string };
-  if (!completed.ok) throw new Error(result.message || result.error || "图片校验失败，请重试。");
+  if (!completed.ok) {
+    if (completed.status === 404 || completed.status === 409) {
+      if (completed.status === 404) attempt.authorization = undefined;
+      attempt.uploaded = false;
+      await checkpoint?.();
+    }
+    throw new Error(result.message || result.error || "图片校验失败，请重试。");
+  }
   return authorized.assetId;
 }
 

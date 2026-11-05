@@ -14,5 +14,5 @@ export default async function AlbumDetailPage({ params, searchParams }: { params
     if (caught instanceof Error && ["ALBUM_NOT_FOUND", "ALBUM_FORBIDDEN"].includes(caught.message)) notFound();
     throw caught;
   }
-  return <><SiteHeader active="albums" currentMember={{ id: actor.id, displayName: actor.displayName, avatar: actor.avatar, role: actor.role }} /><main className="journal-subpage album-page album-detail-page"><header><Link href="/albums">← 返回相册</Link><h1>{album.title}</h1>{album.description && <p>{album.description}</p>}</header><AlbumDetailClient key={album.id} album={album} /></main></>;
+  return <><SiteHeader active="albums" currentMember={{ id: actor.id, displayName: actor.displayName, avatar: actor.avatar, role: actor.role }} /><main className="journal-subpage album-page album-detail-page"><header><Link href="/albums">← 返回相册</Link><h1>{album.title}</h1>{album.description && <p>{album.description}</p>}</header><AlbumDetailClient key={`${actor.id}:${album.id}`} album={album} currentMemberId={actor.id} /></main></>;
 }
