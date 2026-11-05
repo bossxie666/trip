@@ -25,6 +25,7 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      - run: pnpm test:backup
   browser:
     needs: verify
     runs-on: ubuntu-latest
