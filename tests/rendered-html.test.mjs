@@ -2546,3 +2546,45 @@ test("persisted photo retries can renew a pending upload removed by server clean
     assert.equal(puts, 1);
   } finally { globalThis.fetch = originalFetch; }
 });
+
+
+test("direct photo transport failures fall back to the same authorized asset without a new upload", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    for (const failure of ["http", "network"]) {
+      let authorizations = 0, fallbacks = 0;
+      globalThis.fetch = async (url, init) => {
+        if (url === "/api/media/uploads") { authorizations++; return Response.json({ assetId: "fallback-photo", uploadUrl: "https://synthetic-r2.example/photo", expiresInSeconds: 600 }); }
+        if (url === "https://synthetic-r2.example/photo") {
+          if (failure === "network") throw new TypeError("Network failure");
+          return new Response(null, { status: 403 });
+        }
+        if (url === "/api/media/uploads/fallback-photo/content") {
+          fallbacks++;
+          assert.equal(init.method, "PUT");
+          assert.equal(init.headers["content-type"], "image/heic");
+          assert.equal(await init.body.text(), "synthetic-photo");
+          return new Response(null, { status: 200 });
+        }
+        assert.equal(url, "/api/media/uploads/fallback-photo/complete");
+        return Response.json({ asset: { id: "fallback-photo" } });
+      };
+      assert.equal(await uploadMediaFile(new File(["synthetic-photo"], "photo.heic", { type: "image/heic" }), "album"), "fallback-photo");
+      assert.deepEqual({ authorizations, fallbacks }, { authorizations: 1, fallbacks: 1 });
+    }
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("direct upload timeout does not start a second long transfer", async () => {
+  const originalFetch = globalThis.fetch;
+  let requests = 0;
+  globalThis.fetch = async url => {
+    requests++;
+    if (url === "/api/media/uploads") return Response.json({ assetId: "timeout-photo", uploadUrl: "https://synthetic-r2.example/photo" });
+    throw new DOMException("Synthetic timeout", "TimeoutError");
+  };
+  try {
+    await assert.rejects(uploadMediaFile(new File(["photo"], "photo.heic", { type: "image/heic" }), "album"), { name: "TimeoutError" });
+    assert.equal(requests, 2);
+  } finally { globalThis.fetch = originalFetch; }
+});
