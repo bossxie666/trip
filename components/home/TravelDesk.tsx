@@ -13,10 +13,10 @@ export function TravelDesk({data}:{data:Awaited<ReturnType<typeof getHomeDesk>>}
     const shadow = element.shadowRoot || element.attachShadow({mode:"open"});
     async function start(){
       try {
-        const response=await fetch("/assets/travel-desk/desk.html?v=music-20261104",{signal:controller.signal});
+        const response=await fetch("/assets/travel-desk/desk.html?v=music-20261105",{signal:controller.signal});
         if(!response.ok)throw new Error("DESK_UNAVAILABLE");
         const html=await response.text();
-        const moduleUrl="/assets/travel-desk/desk.js?v=music-20261104";
+        const moduleUrl="/assets/travel-desk/desk.js?v=music-20261105";
         const deskModule=await import(/* @vite-ignore */ moduleUrl);
         if(controller.signal.aborted)return;
         shadow.innerHTML=html;

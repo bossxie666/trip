@@ -46,9 +46,10 @@ function isPublicPath(pathname: string) {
     || publicAssetPrefixes.some((prefix) => pathname.startsWith(prefix));
 }
 
-function withSecurityHeaders(response: Response, url: URL, requestId: string) {
+function withSecurityHeaders(response: Response, url: URL, requestId: string, timing?: { workerMs: number; sessionMs: number }) {
   const headers = new Headers(response.headers);
   headers.set("x-request-id", requestId);
+  if (timing) headers.append("server-timing", `trip-worker;dur=${timing.workerMs}, trip-session;dur=${timing.sessionMs}`);
   headers.set("x-content-type-options", "nosniff");
   headers.set("x-frame-options", "DENY");
   headers.set("referrer-policy", "strict-origin-when-cross-origin");
@@ -86,10 +87,14 @@ const worker = {
     const requestId = crypto.randomUUID();
     const startedAt = Date.now();
     const sessionStats = { reuses: 0 };
+    const measureTripPage = request.method === "GET" && (url.pathname === "/trips" || /^\/trips\/[^/]+\/plan$/.test(url.pathname));
+    let sessionMs: number | undefined;
 
     const finish = (response: Response, failureCategory?: string) => {
-      const secured = withSecurityHeaders(response, url, requestId);
-      console.log(JSON.stringify({ type: "request", requestId, method: request.method, route: url.pathname, status: secured.status, durationMs: Date.now() - startedAt, sessionReuses: sessionStats.reuses, failureCategory: failureCategory || null }));
+      const durationMs = Date.now() - startedAt;
+      const timing = measureTripPage && sessionMs !== undefined && response.ok ? { workerMs: durationMs, sessionMs } : undefined;
+      const secured = withSecurityHeaders(response, url, requestId, timing);
+      console.log(JSON.stringify({ type: "request", requestId, method: request.method, route: url.pathname, status: secured.status, durationMs, sessionReuses: sessionStats.reuses, failureCategory: failureCategory || null }));
       return secured;
     };
 
@@ -110,7 +115,9 @@ const worker = {
       const token = readCookie(request, sessionCookieName);
       let memberId: string | null = null;
       if (!isPublicPath(url.pathname)) {
+        const sessionStartedAt = Date.now();
         memberId = await verifySessionMemberId(token, env.TRIP_SPACE_SESSION_SECRET, env.DB);
+        if (memberId && measureTripPage) sessionMs = Date.now() - sessionStartedAt;
         // Session verification already joins the member and checks enabled status.
         if (!memberId) {
           if (url.pathname.startsWith("/api/")) return finish(Response.json({ code: "UNAUTHORIZED", message: "登录已失效，请重新登录。", error: "登录已失效，请重新登录。", requestId }, { status: 401, headers: { "cache-control": "no-store" } }), "authentication");

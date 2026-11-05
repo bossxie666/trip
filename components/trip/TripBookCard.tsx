@@ -6,7 +6,7 @@ import { useClientReady } from "./useClientReady";
 import { tripCoverCardUrl } from "@/components/media/cover-url";
 import { MoreHorizontal, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useRef, useState, type ChangeEvent, type MouseEvent as ReactMouseEvent, type PointerEvent } from "react";
+import { useRef, useState, useTransition, type ChangeEvent, type MouseEvent as ReactMouseEvent, type PointerEvent } from "react";
 import { uploadMediaFile } from "@/components/media/client-upload";
 import type { TripStatus } from "@/models/travel";
 import { EditTripDialog } from "./EditTripDialog";
@@ -24,6 +24,7 @@ export function TripBookCard({ trip, index, canDelete, members }: Props) {
   const [editOpen, setEditOpen] = useState(false);
   const [replacing, setReplacing] = useState(false);
   const [coverError, setCoverError] = useState("");
+  const [opening, startOpening] = useTransition();
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressOrigin = useRef({ x: 0, y: 0 });
   const coverInputRef = useRef<HTMLInputElement>(null);
@@ -48,12 +49,12 @@ export function TripBookCard({ trip, index, canDelete, members }: Props) {
   function openBook(event: ReactMouseEvent<HTMLAnchorElement>) {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
     event.preventDefault();
+    if (opening || editOpen) return;
     if ((event.target as HTMLElement).closest(".trip-book-image")) {
       coverInputRef.current?.click();
       return;
     }
-    if (editOpen) return;
-    router.push(href);
+    startOpening(() => router.push(href));
   }
 
   async function replaceCover(event: ChangeEvent<HTMLInputElement>) {
@@ -82,7 +83,7 @@ export function TripBookCard({ trip, index, canDelete, members }: Props) {
       <span className="trip-book-spine" aria-hidden="true" />
       <span className="trip-book-image">{cover ? <img src={cover} alt="" width={640} height={480} fetchPriority={index < 2 ? "high" : "auto"} loading={index < 4 ? "eager" : "lazy"} /> : <span className="trip-book-empty">NO COVER</span>}</span>
       <span className="trip-book-status">{trip.statusLabel}</span>
-      <span className="trip-book-meta"><strong title="打开行程">{trip.title}</strong><small><Users size={14} />{trip.participantSummary}</small></span>
+      <span className="trip-book-meta"><strong title="打开行程">{trip.title}</strong>{opening ? <small role="status">正在打开…</small> : <small><Users size={14} />{trip.participantSummary}</small>}</span>
       <i className="trip-book-mark" aria-hidden="true" />
     </a>
     <button className="trip-book-menu-trigger" disabled={!ready} type="button" aria-label={`编辑旅行：${trip.title}`} aria-haspopup="dialog" aria-expanded={editOpen} onClick={() => setEditOpen(true)}><MoreHorizontal size={18} /></button>
