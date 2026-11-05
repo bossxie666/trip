@@ -41,7 +41,9 @@ test("photo actions preserve drafts, retry failures and confirm the selected del
   try {
     await page.goto(`/albums/${album.id}`);
     const buffer = await readFile("tests/fixtures/photo.png");
-    await page.locator("input.album-floating-input").setInputFiles([{ name: "first.png", mimeType: "image/png", buffer }, { name: "second.png", mimeType: "image/png", buffer }]);
+    const chooser = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "添加照片", exact: true }).click();
+    await (await chooser).setFiles([{ name: "first.png", mimeType: "image/png", buffer }, { name: "second.png", mimeType: "image/png", buffer }]);
     await expect(page.locator(".album-photo-tile")).toHaveCount(2);
     const original = (await (await fixtureRequest(page, "GET", root)).json()).album;
     const first = original.photos.find((photo: { filename: string }) => photo.filename === "first.png");
