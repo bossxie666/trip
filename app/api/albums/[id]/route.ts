@@ -16,7 +16,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const actor = await getCurrentMember(); if (!actor) return Response.json({ error: "请先验证旅行成员身份。" }, { status: 401 });
   try {const input=await request.json();const album=await updateAlbum((await params).id,actor.id,input);if(input.memberIds!==undefined)await recordAuditEvent({memberId:actor.id,action:"album.members.update",resourceType:"album",resourceId:album.id,requestId:requestIdFrom(request),metadata:{memberCount:album.memberIds.length}});return Response.json({album}); } catch (error) { return albumError(error); }
 }
-export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!hasValidRequestOrigin(request)) return apiError(request, 403, "INVALID_ORIGIN", "请求来源无效。");
   const actor = await getCurrentMember(); if (!actor) return Response.json({ error: "请先验证旅行成员身份。" }, { status: 401 });
   try { await softDeleteAlbum((await params).id, actor.id); return Response.json({ ok: true }); } catch (error) { return albumError(error); }
 }

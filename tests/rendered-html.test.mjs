@@ -879,8 +879,69 @@ test("album membership is independent, revocable and protects favorites and medi
     assert.equal((await render(`/api/albums/${id}/selection`)).status,403);
     assert.equal((await render(`/api/albums/${id}/media/${asset}`,{method:"PATCH",body:{isFavorite:false}})).status,403);
     assert.equal((await render(`/api/media/${asset}`)).status,404);
+    for (const variant of ["thumb", "card", "display", "original"]) {
+      const denied = await render(`/api/media/${asset}?variant=${variant}`);
+      assert.equal(denied.status, 404);
+      assert.match(denied.headers.get("cache-control"), /no-store/);
+    }
+    for (const [path, method, body] of [
+      [`/api/albums/${id}?filter=favorite`, "GET"],
+      [`/api/albums/${id}/selection?filter=favorite`, "GET"],
+      [`/api/albums/${id}/media`, "POST", { assetIds: [asset] }],
+      [`/api/albums/${id}/media`, "PATCH", { assetIds: [asset] }],
+      [`/api/albums/${id}/media/batch`, "PATCH", { action: "addTag", tagName: "无权标签", assetIds: [asset] }],
+      [`/api/albums/${id}/media/${asset}`, "DELETE"],
+      [`/api/albums/${id}/media/batch`, "DELETE", { assetIds: [asset] }],
+      [`/api/albums/${id}`, "DELETE"],
+    ]) assert.equal((await render(path, { method, body })).status, 403, method + " " + path);
+    const search = await render("/search?q=" + encodeURIComponent("相册独立人员测试"));
+    assert.doesNotMatch(await search.text(), new RegExp(`href="/albums/${id}`));
     await loginAs("nini");assert.equal((await render(`/api/albums/${id}`)).status,200);
   }finally{if(id){DB.database.prepare("DELETE FROM album_media WHERE album_id=?").run(id);DB.database.prepare("DELETE FROM albums WHERE id=?").run(id);}DB.database.prepare("DELETE FROM media_assets WHERE id=?").run(asset);if(trip){await loginAs("nini");await render(`/api/trips/${trip.slug}`,{method:"DELETE"});}sessionCookie=saved;}
+});
+
+test("rejects foreign origins across all album write endpoints without changing data", async () => {
+  const saved = sessionCookie, asset = "album-origin-regression-photo", now = new Date().toISOString();
+  let id;
+  try {
+    await loginAs("nini");
+    const created = await render("/api/albums", { method: "POST", body: { title: "相册来源校验" } });
+    assert.equal(created.status, 201);
+    id = (await created.json()).album.id;
+    DB.database.prepare("INSERT INTO media_assets(id,uploader_member_id,purpose,object_key,original_filename,content_type,byte_size,status,created_at,updated_at) VALUES(?,'member-nini','album',?,'private.jpg','image/jpeg',10,'ready',?,?)").run(asset, asset, now, now);
+    assert.equal((await render(`/api/albums/${id}/media`, { method: "POST", body: { assetIds: [asset] } })).status, 200);
+    const snapshot = () => ({
+      album: DB.database.prepare("SELECT * FROM albums WHERE id=?").get(id),
+      photos: DB.database.prepare("SELECT * FROM album_media WHERE album_id=?").all(id),
+      asset: DB.database.prepare("SELECT * FROM media_assets WHERE id=?").get(asset),
+    });
+    const before = snapshot(), root = `/api/albums/${id}`;
+    const writes = [
+      [root, "PATCH", { title: "不应修改" }],
+      [root + "/media", "POST", { assetIds: [asset] }],
+      [root + "/media", "PATCH", { assetIds: [asset] }],
+      [root + "/media/" + asset, "PATCH", { isFavorite: true }],
+      [root + "/media/batch", "PATCH", { action: "favorite", isFavorite: true, assetIds: [asset] }],
+      [root + "/media/" + asset, "DELETE"],
+      [root + "/media/batch", "DELETE", { assetIds: [asset] }],
+      [root, "DELETE"],
+    ];
+    for (const headers of [{ origin: "https://foreign.example" }, { "sec-fetch-site": "cross-site" }]) {
+      for (const [path, method, body] of writes) {
+        const result = await render(path, { method, body, headers });
+        assert.equal(result.status, 403, method + " " + path);
+        assert.equal((await result.json()).code, "INVALID_ORIGIN");
+        assert.deepEqual(snapshot(), before);
+      }
+    }
+  } finally {
+    if (id) {
+      DB.database.prepare("DELETE FROM album_media WHERE album_id=?").run(id);
+      DB.database.prepare("DELETE FROM albums WHERE id=?").run(id);
+    }
+    DB.database.prepare("DELETE FROM media_assets WHERE id=?").run(asset);
+    sessionCookie = saved;
+  }
 });
 
 test("creates an already completed Trip from the new Trip flow", async () => {
@@ -2343,6 +2404,13 @@ test("guestbook audience protects notes, reactions, replies and direct images af
     assert.ok(!(await list()).some(m => m.id === id));
     assert.equal((await render(image)).status, 404);
     assert.equal((await render(`${root}/replies/${replyId}`, { method: "DELETE" })).status, 404);
+    for (const variant of ["thumb", "card", "display", "original"]) {
+      const denied = await render(image + "?variant=" + variant);
+      assert.equal(denied.status, 404);
+      assert.match(denied.headers.get("cache-control"), /no-store/);
+    }
+    assert.equal((await render(`${root}/replies`, { method: "POST", body: { body: "撤权后不可回复" } })).status, 404);
+    assert.equal((await render(`${root}/like`, { method: "PUT", body: { liked: true } })).status, 404);
     await loginAs("nini");
     await render(root, { method: "PATCH", body: { body: message.body, visibility: "all", memberIds: [] } });
     await loginAs("kiki");
