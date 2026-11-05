@@ -5,12 +5,20 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: production-d1-backup
+  cancel-in-progress: false
 jobs:
   backup:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - name: Check backup credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo '::error::Missing GitHub Actions secret CLOUDFLARE_API_TOKEN. Backup has not started.'; exit 1; }
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -19,19 +27,31 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Export and copy the encrypted-account backup to isolated R2
+      - name: Export, restore locally and verify the private R2 backup
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          stamp="$(date -u +%Y%m%d-%H%M%S)"
+          set -euo pipefail
+          umask 077
+          stamp="$(date -u +%Y%m%d-%H%M%S)-${GITHUB_RUN_ID}"
           mkdir -p backups
-          pnpm exec wrangler d1 export DB --remote --output "backups/trip-${stamp}.sql"
-          pnpm exec wrangler r2 object put "trip-archive-backups/d1/trip-${stamp}.sql" --remote --file "backups/trip-${stamp}.sql"
-          pnpm exec wrangler d1 execute DB --remote --command "PRAGMA foreign_key_check;"
-      - uses: actions/upload-artifact@v4
-        if: always()
+          raw="backups/raw.sql"
+          sql="backups/trip-${stamp}.sql"
+          report="backups/trip-${stamp}.verified.json"
+          downloaded="backups/downloaded.sql"
+          trap 'rm -f backups/*.sql' EXIT
+          pnpm exec wrangler d1 export DB --config wrangler.jsonc --remote --skip-confirmation --output "$raw"
+          node scripts/verify-d1-backup.mjs "$raw" backups/raw-report.json --restore "$sql"
+          node scripts/verify-d1-backup.mjs "$sql" "$report"
+          pnpm exec wrangler r2 object put --config wrangler.jsonc "trip-archive-backups/d1/trip-${stamp}.sql" --remote --file "$sql"
+          pnpm exec wrangler r2 object get --config wrangler.jsonc "trip-archive-backups/d1/trip-${stamp}.sql" --remote --file "$downloaded"
+          node scripts/verify-d1-backup.mjs "$downloaded" backups/readback.json "$report"
+          pnpm exec wrangler r2 object put --config wrangler.jsonc "trip-archive-backups/d1/trip-${stamp}.verified.json" --remote --file "$report"
+      - name: Save verification reports only
+        uses: actions/upload-artifact@v4
+        if: success()
         with:
-          name: d1-backup-${{ github.run_id }}
-          path: backups/*.sql
+          name: d1-backup-verification-${{ github.run_id }}
+          path: backups/*.verified.json
+          if-no-files-found: error
           retention-days: 30
