@@ -1,8 +1,10 @@
 import { getCurrentMember } from "@/services/auth.server";
 import { deleteAlbumMediaBatch, updateAlbumMedia } from "@/services/album-service.server";
 import { albumError } from "../../../route";
+import { apiError, hasValidRequestOrigin } from "@/services/api-response";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!hasValidRequestOrigin(request)) return apiError(request, 403, "INVALID_ORIGIN", "请求来源无效。");
   const actor = await getCurrentMember(); if (!actor) return Response.json({ error: "请先验证旅行成员身份。" }, { status: 401 });
   try {
     const body = await request.json() as { assetIds?: string[]; action?: string; isFavorite?: boolean; capturedAt?: string; tagName?: string; tagId?: string };
@@ -14,6 +16,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!hasValidRequestOrigin(request)) return apiError(request, 403, "INVALID_ORIGIN", "请求来源无效。");
   const actor = await getCurrentMember(); if (!actor) return Response.json({ error: "请先验证旅行成员身份。" }, { status: 401 });
   try { const body = await request.json() as { assetIds?: string[] }; return Response.json({ album: await deleteAlbumMediaBatch((await params).id, actor.id, Array.isArray(body.assetIds) ? body.assetIds.map(String) : []) }); } catch (error) { return albumError(error); }
 }
