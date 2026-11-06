@@ -3,14 +3,16 @@ export type UploadPurpose = "home_featured" | "guestbook" | "recommendation_refe
 function normalizedType(file: File) {
   if (file.type) return file.type;
   const extension = file.name.split(".").pop()?.toLowerCase();
-  return extension === "heic" ? "image/heic" : extension === "heif" ? "image/heif" : "";
+  return ({ jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", heic: "image/heic", heif: "image/heif" } as Record<string, string>)[extension || ""] || "";
 }
 
 type UploadAuthorization = { assetId: string; uploadUrl: string; method?: string; headers?: Record<string, string>; expiresAt: number };
 /** Scoped to one file in one queue; never shared between members or purposes. */
-export type MediaUploadAttempt = { authorization?: UploadAuthorization; uploaded?: boolean };
+export type MediaUploadAttempt = { authorization?: UploadAuthorization; uploaded?: boolean; stage?: string };
 
 export async function uploadMediaFile(file: File, purpose: UploadPurpose, attempt: MediaUploadAttempt = {}, checkpoint?: () => Promise<void>) {
+  attempt.stage = "准备上传";
+  await checkpoint?.();
   if (!attempt.authorization || (!attempt.uploaded && attempt.authorization.expiresAt <= Date.now())) {
     const contentType = normalizedType(file);
     const response = await fetch("/api/media/uploads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ purpose, filename: file.name, contentType, byteSize: file.size }), signal: AbortSignal.timeout(20_000) });
@@ -22,6 +24,8 @@ export async function uploadMediaFile(file: File, purpose: UploadPurpose, attemp
   }
   const authorized = attempt.authorization;
   if (!attempt.uploaded) {
+    attempt.stage = "传输照片";
+    await checkpoint?.();
     const direct = /^https:\/\//i.test(authorized.uploadUrl);
     let uploaded: Response;
     try {
@@ -44,7 +48,11 @@ export async function uploadMediaFile(file: File, purpose: UploadPurpose, attemp
     attempt.uploaded = true;
     await checkpoint?.();
   }
+  attempt.stage = "读取图片尺寸";
+  await checkpoint?.();
   const dimensions = await readImageDimensions(file);
+  attempt.stage = "确认上传";
+  await checkpoint?.();
   const completed = await fetch(`/api/media/uploads/${encodeURIComponent(authorized.assetId)}/complete`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(dimensions), signal: AbortSignal.timeout(20_000) });
   const result = await completed.json() as { asset?: { id: string }; error?: string; message?: string };
   if (!completed.ok) {
@@ -61,7 +69,12 @@ export async function uploadMediaFile(file: File, purpose: UploadPurpose, attemp
 export async function readPhotoCapturedAt(file: File) {
   if (!/jpe?g/i.test(file.type) && !/\.jpe?g$/i.test(file.name)) return null;
   try {
-    const view = new DataView(await file.arrayBuffer());
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let bytes: ArrayBuffer;
+    try {
+      bytes = await Promise.race([file.arrayBuffer(), new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("PHOTO_METADATA_TIMEOUT")), 3000); })]);
+    } finally { clearTimeout(timer); }
+    const view = new DataView(bytes);
     if (view.getUint16(0) !== 0xffd8) return null;
     let offset = 2;
     while (offset + 4 < view.byteLength) {
@@ -86,18 +99,22 @@ export async function readPhotoCapturedAt(file: File) {
   return null;
 }
 
-async function readImageDimensions(file: File) {
+export async function readImageDimensions(file: File) {
   if (!file.type.startsWith("image/") || file.type === "image/heic" || file.type === "image/heif") return {};
   const url = URL.createObjectURL(file);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let image: HTMLImageElement | undefined;
   try {
-    const image = new Image();
-    const loaded = new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error("图片无法读取。")); });
+    image = new Image();
+    const loaded = new Promise<void>((resolve, reject) => { image!.onload = () => resolve(); image!.onerror = () => reject(new Error("图片无法读取。")); timer = setTimeout(() => reject(new Error("PHOTO_DIMENSIONS_TIMEOUT")), 5000); });
     image.src = url;
     await loaded;
     return { width: image.naturalWidth, height: image.naturalHeight };
   } catch {
     return {};
   } finally {
+    clearTimeout(timer);
+    if (image) { image.onload = null; image.onerror = null; image.src = ""; }
     URL.revokeObjectURL(url);
   }
 }

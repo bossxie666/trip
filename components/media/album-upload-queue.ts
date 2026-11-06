@@ -1,6 +1,6 @@
 import type { MediaUploadAttempt } from "./client-upload";
 
-export type AlbumUploadItem = { file: File; status: "waiting" | "uploading" | "attaching" | "done" | "error"; assetId?: string; attempt?: MediaUploadAttempt; capturedAt?: string | null; error?: string };
+export type AlbumUploadItem = { file: File; status: "waiting" | "uploading" | "attaching" | "done" | "error"; stage?: string; assetId?: string; attempt?: MediaUploadAttempt; capturedAt?: string | null; error?: string };
 
 /** Retain completed uploads when attachment fails; retry never uploads them twice. */
 export async function runAlbumUploadQueue(items: AlbumUploadItem[], actions: {
@@ -16,13 +16,13 @@ export async function runAlbumUploadQueue(items: AlbumUploadItem[], actions: {
     if (item.status === "done") continue;
     try {
       item.error = undefined;
-      if (item.capturedAt === undefined) item.capturedAt = await actions.capturedAt(item.file);
+      if (item.capturedAt === undefined) { item.stage = "读取拍摄日期"; await publish(); item.capturedAt = await actions.capturedAt(item.file); }
       if (!item.assetId) {
         item.status = "uploading"; await publish();
         item.attempt ??= {};
         item.assetId = await actions.upload(item.file, item.attempt, publish);
       }
-      item.status = "attaching"; await publish();
+      item.status = "attaching"; item.stage = "加入相册"; if (item.attempt) item.attempt.stage = undefined; await publish();
       await actions.attach(item.assetId, item.capturedAt ?? null);
       item.status = "done";
     } catch (error) {
