@@ -179,3 +179,9 @@
 .album-drag-shelf:active{scroll-snap-type:none;cursor:grabbing}
 
 .album-shelf-controls[hidden] { display: none; }
+
+@media (max-width: 680px) {
+  .journal-subpage.album-detail-page { padding-top: 16px; }
+  .album-detail-page > header { padding-bottom: 10px; }
+  .album-detail-page .album-photo-toolbar { margin: 10px 0 12px; }
+}
