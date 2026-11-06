@@ -33,7 +33,7 @@ export async function loadUploadQueue(key: string): Promise<AlbumUploadItem[]> {
         if (!row) return;
         const record = row.value as { updatedAt: number; items: AlbumUploadItem[] };
         if (Date.now() - record.updatedAt > lifetime) row.delete();
-        else if (row.key === key) result = record.items.map(item => ({ ...item, status: "error", error: item.error || "上传未完成，请重试。" }));
+        else if (row.key === key) result = record.items.map(item => ({ ...item, status: "error", error: item.error || ((item.attempt?.stage || item.stage) ? `上次在“${item.attempt?.stage || item.stage}”时中断，请重试。` : "上传未完成，请重试。") }));
         row.continue();
       };
       tx.oncomplete = () => resolve(result); tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error);

@@ -10,7 +10,7 @@ import { isTransportBooking, railwayDisplayLabel } from "../services/booking-sem
 import { isFerryLeg, transitLineSummary } from "../services/amap/route-presentation.ts";
 import { selectUpcomingTrip } from "../services/upcoming-trip.ts";
 import { knowledgeHref } from "../services/knowledge-navigation.ts";
-import { uploadMediaFile } from "../components/media/client-upload.ts";
+import { uploadMediaFile, readImageDimensions, readPhotoCapturedAt } from "../components/media/client-upload.ts";
 import { runAlbumUploadQueue } from "../components/media/album-upload-queue.ts";
 import { drainMediaDeletionQueue } from "../services/media-deletion.server.ts";
 import { editorRequest } from "../components/trip/editor-request.ts";
@@ -2587,4 +2587,39 @@ test("direct upload timeout does not start a second long transfer", async () => 
     await assert.rejects(uploadMediaFile(new File(["photo"], "photo.heic", { type: "image/heic" }), "album"), { name: "TimeoutError" });
     assert.equal(requests, 2);
   } finally { globalThis.fetch = originalFetch; }
+});
+
+
+test("photo dimension decoding times out without blocking upload completion", async t => {
+  const originalImage = globalThis.Image;
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  globalThis.Image = class {};
+  try {
+    const result = readImageDimensions(new File(["synthetic"], "photo.jpg", { type: "image/jpeg" }));
+    t.mock.timers.tick(5001);
+    assert.deepEqual(await result, {});
+  } finally { globalThis.Image = originalImage; t.mock.timers.reset(); }
+});
+
+test("unresponsive mobile photo metadata falls back to upload time", async t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const file = { type: "image/jpeg", name: "mobile.jpg", arrayBuffer: () => new Promise(() => {}) };
+    const result = readPhotoCapturedAt(file);
+    t.mock.timers.tick(3001);
+    assert.equal(await result, null);
+  } finally { t.mock.timers.reset(); }
+});
+
+test("mobile photo with missing MIME type uses its supported extension", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    if (url === "/api/media/uploads") {
+      assert.equal(JSON.parse(init.body).contentType, "image/jpeg");
+      return Response.json({ assetId: "mobile-jpeg", uploadUrl: "/synthetic-put" });
+    }
+    return Response.json({ asset: { id: "mobile-jpeg" } });
+  };
+  try { assert.equal(await uploadMediaFile(new File(["photo"], "mobile.jpg"), "album"), "mobile-jpeg"); }
+  finally { globalThis.fetch = originalFetch; }
 });
