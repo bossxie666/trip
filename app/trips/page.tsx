@@ -1,7 +1,6 @@
 import { tripCoverCardUrl } from "@/components/media/cover-url";
 import { listTripSummaries } from "@/services/trip-repository.server";
 import { getCurrentMember } from "@/services/auth.server";
-import { isAdminMember } from "@/services/identity-auth.server";
 import type { TripStatus } from "@/models/travel";
 import { TripBookCard } from "@/components/trip/TripBookCard";
 import { WorkspaceNavLink as Link } from "@/components/trip/WorkspaceNavLink";
@@ -27,7 +26,8 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
   const requested = (await searchParams).status;
   const activeStatus = filters.some((filter) => filter.value === requested) ? requested as TripStatus : "all";
   const actor = await getCurrentMember();
-  const [trips, members, canDeleteTrips] = actor ? await Promise.all([listTripSummaries(activeStatus, actor.id), listActiveMembers(), isAdminMember(actor.id)]) : [[], [], false];
+  const [trips, members] = actor ? await Promise.all([listTripSummaries(activeStatus, actor.id), listActiveMembers()]) : [[], []];
+  const canDeleteTrips = actor?.role === "admin";
 
   const firstCover = tripCoverCardUrl(trips[0]?.cover ?? null);
   return (<>

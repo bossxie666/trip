@@ -25,6 +25,8 @@ export function TripBookCard({ trip, index, canDelete, members }: Props) {
   const [replacing, setReplacing] = useState(false);
   const [coverError, setCoverError] = useState("");
   const [opening, startOpening] = useTransition();
+  const prefetched = useRef(false);
+  function prefetchBook() { if (!prefetched.current) { prefetched.current = true; router.prefetch(href); } }
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressOrigin = useRef({ x: 0, y: 0 });
   const coverInputRef = useRef<HTMLInputElement>(null);
@@ -79,7 +81,7 @@ export function TripBookCard({ trip, index, canDelete, members }: Props) {
   const cover = tripCoverCardUrl(trip.cover);
   return <article className={`trip-book-card trip-book-tone-${index % 4}`}>
     <input ref={coverInputRef} className="trip-book-cover-input" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" tabIndex={-1} aria-hidden="true" onChange={replaceCover} />
-    <a className={`trip-book-cover${replacing ? " is-replacing" : ""}`} href={href} onClick={openBook} onPointerEnter={() => router.prefetch(href)} onFocus={() => router.prefetch(href)} onTouchStart={() => router.prefetch(href)} onPointerDown={beginPress} onPointerMove={movePress} onPointerUp={clearPress} onPointerCancel={clearPress} onContextMenu={(event) => { event.preventDefault(); setEditOpen(true); }}>
+    <a className={`trip-book-cover${replacing ? " is-replacing" : ""}`} href={href} onClick={openBook} onPointerEnter={event => { if (event.pointerType === "mouse") prefetchBook(); }} onFocus={event => { if (event.currentTarget.matches(":focus-visible")) prefetchBook(); }} onPointerDown={beginPress} onPointerMove={movePress} onPointerUp={clearPress} onPointerCancel={clearPress} onContextMenu={(event) => { event.preventDefault(); setEditOpen(true); }}>
       <span className="trip-book-spine" aria-hidden="true" />
       <span className="trip-book-image">{cover ? <img src={cover} alt="" width={640} height={480} fetchPriority={index < 2 ? "high" : "auto"} loading={index < 4 ? "eager" : "lazy"} /> : <span className="trip-book-empty">NO COVER</span>}</span>
       <span className="trip-book-status">{trip.statusLabel}</span>

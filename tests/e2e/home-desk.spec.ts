@@ -16,8 +16,10 @@ test("restores the open chapter while keeping entries keyboard accessible withou
   const entry = page.locator("#scene-links").getByRole("link", { name: "上海测试旅行", exact: true });
   await entry.focus();
   await expect(entry).toBeVisible();
+  await page.evaluate(()=>{ (window as unknown as {__navigationMarker?:string}).__navigationMarker="home-client-navigation"; });
   await entry.press("Enter");
   await expect(page).toHaveURL(/\/trips\/e2e-shanghai\/plan$/);
+  expect(await page.evaluate(()=>(window as unknown as {__navigationMarker?:string}).__navigationMarker)).toBe("home-client-navigation");
   await page.getByRole("link", { name: "首页", exact: true }).first().click();
   await expect(wrap).toHaveAttribute("data-state", "open");
   await expect(wrap).toHaveAttribute("data-page", "2");

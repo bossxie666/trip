@@ -1,34 +1,45 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, useTransition } from "react";
 import type { getHomeDesk } from "@/services/home-desk.server";
 import { WorkspaceNavLink as Link } from "@/components/trip/WorkspaceNavLink";
 
 export function TravelDesk({data}:{data:Awaited<ReturnType<typeof getHomeDesk>>}) {
+  const router = useRouter();
+  const [navigating,startNavigation] = useTransition();
   const host = useRef<HTMLDivElement>(null);
   const [ready,setReady] = useState(false);
   const [failed,setFailed] = useState(false);
   useEffect(()=>{
+    let navigationRequested=false;
     const controller = new AbortController(); let cleanup: (()=>void)|undefined;
     const element = host.current!;
     const shadow = element.shadowRoot || element.attachShadow({mode:"open"});
     async function start(){
       try {
-        const response=await fetch("/assets/travel-desk/desk.html?v=music-20261105",{signal:controller.signal});
+        const response=await fetch("/assets/travel-desk/desk.html?v=navigation-20261106",{signal:controller.signal});
         if(!response.ok)throw new Error("DESK_UNAVAILABLE");
         const html=await response.text();
-        const moduleUrl="/assets/travel-desk/desk.js?v=music-20261105";
+        const moduleUrl="/assets/travel-desk/desk.js?v=navigation-20261106";
         const deskModule=await import(/* @vite-ignore */ moduleUrl);
         if(controller.signal.aborted)return;
         shadow.innerHTML=html;
-        cleanup=await deskModule.mount(shadow,data,controller.signal);
+        cleanup=await deskModule.mount(shadow,data,controller.signal,(href: string)=>{
+          const url=new URL(href,window.location.href);
+          if(url.origin!==window.location.origin||!/^https?:$/.test(url.protocol))return false;
+          if(navigationRequested)return true;
+          navigationRequested=true;
+          startNavigation(()=>router.push(url.pathname+url.search+url.hash));
+          return true;
+        });
         if(controller.signal.aborted){cleanup?.();return;}
         setReady(true);
       }catch{if(!controller.signal.aborted)setFailed(true);}
     }
     void start();
     return ()=>{controller.abort();cleanup?.();shadow.replaceChildren();};
-  },[data]);
-  return <div className="travel-desk-container" style={{position:"relative",minHeight:"calc(100svh - 74px)"}}>
+  },[data,router]);
+  return <div className="travel-desk-container" aria-busy={navigating || undefined} style={{position:"relative",opacity:navigating ? 0.75 : 1,minHeight:"calc(100svh - 74px)"}}>
     <style>{`.travel-desk-poster{position:absolute;top:44px;left:53px;width:calc(100% - 226px);height:570px;pointer-events:none}.travel-desk-poster img{width:100%;height:100%;object-fit:contain}@media(max-width:650px){.travel-desk-poster{top:55px;left:4px;width:calc(100% - 8px);height:400px}}@media(max-width:350px){.travel-desk-poster{height:370px}}`}</style>
     <div ref={host} />
     {!ready && <picture className="travel-desk-poster"><source media="(max-width:650px)" srcSet="/assets/travel-desk/assets/book-closed-mobile.webp" /><img src="/assets/travel-desk/assets/book-closed-desktop.webp" width={1054} height={570} alt="跳进地理书的旅行" fetchPriority="high" /></picture>}

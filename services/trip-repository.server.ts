@@ -193,23 +193,18 @@ export async function listTripSummaries(status: TripStatus | "all" = "all", memb
   const db = getDb();
   const conditions = [eq(tripMemberRecords.memberId, memberId)];
   if (status !== "all") conditions.push(eq(tripRecords.status, status));
-  const rows = await db.select({ trip: tripRecords })
-    .from(tripRecords)
-    .innerJoin(tripMemberRecords, eq(tripMemberRecords.tripId, tripRecords.id))
-    .where(and(...conditions))
-    .orderBy(desc(tripRecords.createdAt));
-  if (!rows.length) return [];
-  const tripIds = rows.map(({ trip }) => trip.id);
-  const [cityLinks, memberLinks] = await Promise.all([
+  const accessibleTripIds = db.select({ id: tripRecords.id }).from(tripRecords)
+    .innerJoin(tripMemberRecords, eq(tripMemberRecords.tripId, tripRecords.id)).where(and(...conditions));
+  const [rows, cityLinks, memberLinks] = await Promise.all([
+    db.select({ trip: tripRecords }).from(tripRecords)
+      .innerJoin(tripMemberRecords, eq(tripMemberRecords.tripId, tripRecords.id))
+      .where(and(...conditions)).orderBy(desc(tripRecords.createdAt)),
     db.select({ tripId: tripCityRecords.tripId, cityId: cityRecords.id, name: cityRecords.name, slug: cityRecords.slug, centerLat: cityRecords.centerLat, centerLng: cityRecords.centerLng })
-      .from(tripCityRecords)
-      .innerJoin(cityRecords, eq(tripCityRecords.cityId, cityRecords.id))
-      .where(inArray(tripCityRecords.tripId, tripIds))
-      .orderBy(asc(tripCityRecords.position)),
+      .from(tripCityRecords).innerJoin(cityRecords, eq(tripCityRecords.cityId, cityRecords.id))
+      .where(inArray(tripCityRecords.tripId, accessibleTripIds)).orderBy(asc(tripCityRecords.position)),
     db.select({ tripId: tripMemberRecords.tripId, id: memberRecords.id, displayName: memberRecords.displayName })
-      .from(tripMemberRecords)
-      .innerJoin(memberRecords, eq(tripMemberRecords.memberId, memberRecords.id))
-      .where(inArray(tripMemberRecords.tripId, tripIds)),
+      .from(tripMemberRecords).innerJoin(memberRecords, eq(tripMemberRecords.memberId, memberRecords.id))
+      .where(inArray(tripMemberRecords.tripId, accessibleTripIds)),
   ]);
   return rows.map(({ trip }) => ({
     ...trip,
