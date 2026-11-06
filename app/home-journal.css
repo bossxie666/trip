@@ -236,3 +236,6 @@ body:has(.map-index),body:has(.journal-subpage) {
 .guestbook-thread time { color: #63717a; font-size: 12px; }
 .guestbook-thread button { margin-left: auto; min-width: 40px; min-height: 40px; }
 .guestbook-thread p { margin: 5px 0; line-height: 1.65; }
+
+.site-header nav a[aria-busy="true"], .site-mobile-nav a[aria-busy="true"] { color: var(--home-blue); opacity: .7; cursor: progress; }
+.site-header nav a[aria-busy="true"]::after { transform: scaleX(1); }

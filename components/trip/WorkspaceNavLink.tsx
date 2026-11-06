@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { forwardRef, useRef, type AnchorHTMLAttributes, type MouseEvent } from "react";
+import { forwardRef, useRef, useTransition, type AnchorHTMLAttributes, type MouseEvent } from "react";
 
 type WorkspaceNavLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href"> & {
   href: string;
@@ -11,6 +11,7 @@ type WorkspaceNavLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href
 export const WorkspaceNavLink = forwardRef<HTMLAnchorElement, WorkspaceNavLinkProps>(function WorkspaceNavLink({ href, onClick, onPointerEnter, onTouchStart, onFocus, target, children, ...props }, ref) {
   const router = useRouter();
   const prefetched = useRef(false);
+  const [pending, startNavigation] = useTransition();
 
   function prefetch() {
     if (prefetched.current || typeof window === "undefined") return;
@@ -34,8 +35,9 @@ export const WorkspaceNavLink = forwardRef<HTMLAnchorElement, WorkspaceNavLinkPr
     ) return;
 
     event.preventDefault();
-    router.push(href);
+    if (pending) return;
+    startNavigation(() => router.push(href));
   }
 
-  return <a {...props} ref={ref} href={href} target={target} onClick={navigate} onPointerEnter={(event) => { onPointerEnter?.(event); prefetch(); }} onTouchStart={(event) => { onTouchStart?.(event); prefetch(); }} onFocus={(event) => { onFocus?.(event); prefetch(); }}>{children}</a>;
+  return <a {...props} ref={ref} href={href} target={target} aria-busy={pending || undefined} onClick={navigate} onPointerEnter={(event) => { onPointerEnter?.(event); if (event.pointerType === "mouse") prefetch(); }} onTouchStart={(event) => { onTouchStart?.(event); }} onFocus={(event) => { onFocus?.(event); if (event.currentTarget.matches(":focus-visible")) prefetch(); }}>{children}</a>;
 });
