@@ -16,8 +16,9 @@ function safeExtension(filename: string, contentType: string) {
 }
 
 export function validateMediaInput(input: { purpose?: string; filename?: string; contentType?: string; byteSize?: number }) {
+  if (!input || typeof input !== "object") throw new Error("INVALID_MEDIA_INPUT");
   if (!mediaPurposes.includes(input.purpose as MediaPurpose)) throw new Error("INVALID_MEDIA_PURPOSE");
-  if (!input.filename?.trim() || input.filename.length > 180) throw new Error("INVALID_MEDIA_FILENAME");
+  if (typeof input.filename !== "string" || !input.filename.trim() || input.filename.length > 180) throw new Error("INVALID_MEDIA_FILENAME");
   if (!input.contentType || !allowedTypes.has(input.contentType)) throw new Error("INVALID_MEDIA_TYPE");
   if (!Number.isSafeInteger(input.byteSize) || Number(input.byteSize) <= 0 || Number(input.byteSize) > maxImageBytes) throw new Error("INVALID_MEDIA_SIZE");
   return { purpose: input.purpose as MediaPurpose, filename: input.filename.trim(), contentType: input.contentType, byteSize: Number(input.byteSize) };

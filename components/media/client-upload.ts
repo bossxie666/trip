@@ -1,22 +1,39 @@
 export type UploadPurpose = "home_featured" | "guestbook" | "recommendation_reference" | "trip_cover" | "album" | "member_avatar" | "knowledge_image";
 
 function normalizedType(file: File) {
-  if (file.type) return file.type;
+  const type = file.type.toLowerCase().split(";", 1)[0].trim();
+  if (type === "image/jpg" || type === "image/pjpeg") return "image/jpeg";
+  if (type && type !== "application/octet-stream") return type;
   const extension = file.name.split(".").pop()?.toLowerCase();
   return ({ jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", heic: "image/heic", heif: "image/heif" } as Record<string, string>)[extension || ""] || "";
 }
 
 type UploadAuthorization = { assetId: string; uploadUrl: string; method?: string; headers?: Record<string, string>; expiresAt: number };
 /** Scoped to one file in one queue; never shared between members or purposes. */
-export type MediaUploadAttempt = { authorization?: UploadAuthorization; uploaded?: boolean; stage?: string };
+export type MediaUploadAttempt = { authorization?: UploadAuthorization; uploaded?: boolean; stage?: string; retryAt?: number };
+
+function checkUploadRateLimit(response: Response, attempt: MediaUploadAttempt) {
+  if (response.status !== 429) return;
+  const seconds = Number(response.headers.get("retry-after"));
+  attempt.retryAt = Date.now() + (Number.isFinite(seconds) && seconds > 0 ? seconds : 60) * 1000;
+  throwUploadCooldown(attempt.retryAt);
+}
+
+function throwUploadCooldown(retryAt: number) {
+  const minutes = Math.max(1, Math.ceil((retryAt - Date.now()) / 60_000));
+  throw Object.assign(new Error(`上传暂时达到频率限制，请约 ${minutes} 分钟后重试。`), { retryAt });
+}
 
 export async function uploadMediaFile(file: File, purpose: UploadPurpose, attempt: MediaUploadAttempt = {}, checkpoint?: () => Promise<void>) {
+  if (attempt.retryAt && attempt.retryAt > Date.now()) throwUploadCooldown(attempt.retryAt);
+  attempt.retryAt = undefined;
   attempt.stage = "准备上传";
   await checkpoint?.();
   if (!attempt.authorization || (!attempt.uploaded && attempt.authorization.expiresAt <= Date.now())) {
     const contentType = normalizedType(file);
     const response = await fetch("/api/media/uploads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ purpose, filename: file.name, contentType, byteSize: file.size }), signal: AbortSignal.timeout(20_000) });
     const authorized = await response.json() as { assetId?: string; uploadUrl?: string; method?: string; headers?: Record<string, string>; expiresInSeconds?: number; error?: string; message?: string };
+    checkUploadRateLimit(response, attempt);
     if (!response.ok || !authorized.assetId || !authorized.uploadUrl) throw new Error(authorized.message || authorized.error || "无法准备图片上传。");
     attempt.authorization = { ...authorized, assetId: authorized.assetId, uploadUrl: authorized.uploadUrl, expiresAt: Date.now() + (authorized.expiresInSeconds ?? 600) * 1000 - 5_000 };
     attempt.uploaded = false;
@@ -55,6 +72,7 @@ export async function uploadMediaFile(file: File, purpose: UploadPurpose, attemp
   await checkpoint?.();
   const completed = await fetch(`/api/media/uploads/${encodeURIComponent(authorized.assetId)}/complete`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(dimensions), signal: AbortSignal.timeout(20_000) });
   const result = await completed.json() as { asset?: { id: string }; error?: string; message?: string };
+  checkUploadRateLimit(completed, attempt);
   if (!completed.ok) {
     if (completed.status === 404 || completed.status === 409) {
       if (completed.status === 404) attempt.authorization = undefined;

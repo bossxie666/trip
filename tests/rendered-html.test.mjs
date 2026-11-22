@@ -2620,6 +2620,42 @@ test("mobile photo with missing MIME type uses its supported extension", async (
     }
     return Response.json({ asset: { id: "mobile-jpeg" } });
   };
-  try { assert.equal(await uploadMediaFile(new File(["photo"], "mobile.jpg"), "album"), "mobile-jpeg"); }
+  try {
+    for (const type of ["", "application/octet-stream", "image/jpg", "image/pjpeg"]) {
+      assert.equal(await uploadMediaFile(new File(["photo"], "mobile.jpg", { type }), "album"), "mobile-jpeg");
+    }
+  }
   finally { globalThis.fetch = originalFetch; }
+});
+
+test("upload validation does not consume quota and permits 10MB photos after the old 30-request ceiling", async () => {
+  const body = { purpose: "album", filename: "photo.jpg", contentType: "image/jpeg", byteSize: 10 * 1024 * 1024 };
+  for (const invalid of [null, { ...body, byteSize: body.byteSize + 1 }, { ...body, contentType: "image/svg+xml" }]) {
+    assert.equal((await render("/api/media/uploads", { method: "POST", body: invalid })).status, 400);
+  }
+  assert.equal(DB.database.prepare("SELECT count(*) n FROM rate_limits").get().n, 0);
+  // No R2 in this harness: reaching 503 means validation/quota accepted the file.
+  for (let i = 0; i < 120; i++) {
+    assert.equal((await render("/api/media/uploads", { method: "POST", body })).status, 503);
+  }
+  const blocked = await render("/api/media/uploads", { method: "POST", body });
+  assert.equal(blocked.status, 429);
+  assert.ok(Number(blocked.headers.get("retry-after")) <= 600);
+  DB.database.exec("UPDATE rate_limits SET window_started_at=0");
+  assert.equal((await render("/api/media/uploads", { method: "POST", body })).status, 503);
+});
+
+test("rate limited upload pauses the batch and persists cooldown without losing files", async () => {
+  const originalFetch = globalThis.fetch;
+  let requests = 0, saved;
+  globalThis.fetch = async () => { requests++; return Response.json({ error: "limited" }, { status: 429, headers: { "retry-after": "90" } }); };
+  const actions = { upload: (file, attempt, checkpoint) => uploadMediaFile(file, "album", attempt, checkpoint), capturedAt: async () => null, attach: async () => assert.fail("must not attach"), changed: async items => { saved = items; } };
+  try {
+    const queue = await runAlbumUploadQueue([1, 2].map(n => ({ file: new File(["photo"], `${n}.jpg`), status: "waiting" })), actions);
+    assert.equal(requests, 1);
+    assert.equal(saved.length, 2);
+    assert.ok(queue.every(item => item.status === "error" && item.attempt.retryAt > Date.now()));
+    await runAlbumUploadQueue(queue, actions);
+    assert.equal(requests, 1);
+  } finally { globalThis.fetch = originalFetch; }
 });

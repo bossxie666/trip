@@ -28,6 +28,18 @@ export async function runAlbumUploadQueue(items: AlbumUploadItem[], actions: {
     } catch (error) {
       item.status = "error";
       item.error = error instanceof Error ? error.message : "上传失败，请重试。";
+      if (error instanceof Error && "retryAt" in error && typeof error.retryAt === "number") {
+        // Pause the batch instead of sending every remaining file into the same 429.
+        for (const pending of queue) {
+          if (pending.status === "done") continue;
+          pending.attempt ??= {};
+          pending.attempt.retryAt = error.retryAt;
+          pending.status = "error";
+          pending.error = item.error;
+        }
+        await publish();
+        break;
+      }
     }
     await publish();
   }
