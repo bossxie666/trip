@@ -28,7 +28,8 @@ jobs:
       - run: pnpm test:backup
   browser:
     needs: verify
-    runs-on: ubuntu-latest
+    # Keep the browser runner on the OS supported by our pinned Playwright.
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
