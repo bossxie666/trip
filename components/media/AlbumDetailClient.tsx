@@ -94,7 +94,7 @@ export function AlbumDetailClient({ album: initial, currentMemberId }: { album: 
   async function upload(event: ChangeEvent<HTMLInputElement>) {
     const files = [...(event.target.files || [])]; event.target.value = "";
     if (!files.length || busy || !queueReady) return;
-    if (files.length > 20) { setError("每次最多上传 20 张照片。"); return; }
+    if (files.length > 100) { setError("每次最多选择 100 张照片，可分批追加。"); return; }
     await processUploads([...failed, ...files.map(file => ({ file, status: "waiting" as const }))]);
   }
   async function batch(action: string, extra: Record<string, unknown> = {}, ids = [...selected]) {
