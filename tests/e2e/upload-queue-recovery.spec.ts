@@ -3,6 +3,51 @@ import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { enterTestSession, fixtureRequest } from "./session";
 
+test("oversized photos are compressed locally before authorization", async ({ page }) => {
+  await enterTestSession(page);
+  const { album } = await (await fixtureRequest(page, "POST", "/api/albums", { title: `自动压缩-${randomUUID()}` })).json();
+  const original = Buffer.concat([readFileSync("tests/fixtures/photo.png"), Buffer.alloc(10 * 1024 * 1024)]);
+  let authorizedSize = 0, authorizedType = "";
+  page.on("request", request => { if (new URL(request.url()).pathname === "/api/media/uploads") { const body = request.postDataJSON(); authorizedSize = body.byteSize; authorizedType = body.contentType; } });
+  try {
+    await page.goto(`/albums/${album.id}`);
+    const chooser = page.waitForEvent("filechooser"); await page.getByRole("button", { name: "添加照片", exact: true }).click();
+    await (await chooser).setFiles({ name: "oversized.png", mimeType: "image/png", buffer: original });
+    await expect(page.locator(".album-photo-tile")).toHaveCount(1);
+    expect(authorizedSize).toBeGreaterThan(0); expect(authorizedSize).toBeLessThan(10 * 1024 * 1024); expect(authorizedType).toBe("image/jpeg");
+    expect(original.length).toBeGreaterThan(10 * 1024 * 1024);
+    await page.reload(); await expect(page.locator(".album-photo-tile")).toHaveCount(1);
+  } finally { await fixtureRequest(page, "DELETE", `/api/albums/${album.id}`); }
+});
+
+test("failed task names survive refresh even when photo storage cannot write", async ({ page }) => {
+  await enterTestSession(page);
+  const { album } = await (await fixtureRequest(page, "POST", "/api/albums", { title: `独立任务记录-${randomUUID()}` })).json();
+  await page.addInitScript(() => {
+    const put = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (this: IDBObjectStore, value: unknown, key?: IDBValidKey) {
+      if (this.name === "files") throw new DOMException("full", "QuotaExceededError");
+      return put.call(this, value, key);
+    };
+  });
+  await page.route("**/api/media/uploads/*/content", route => route.fulfill({ status: 400, body: "synthetic failure" }));
+  try {
+    await page.goto(`/albums/${album.id}`);
+    const chooser = page.waitForEvent("filechooser"); await page.getByRole("button", { name: "添加照片", exact: true }).click();
+    await (await chooser).setFiles("tests/fixtures/photo.png");
+    await expect(page.locator(".album-upload-status")).toContainText("本次未完成 1 张");
+    await page.reload();
+    await expect(page.locator(".album-upload-status")).toContainText("上次未完成 1 张");
+    await expect(page.locator(".album-upload-status")).toContainText("photo.png");
+    await expect(page.locator(".album-upload-status")).toContainText("照片文件未保留");
+    await page.unroute("**/api/media/uploads/*/content");
+    const replacement = page.waitForEvent("filechooser"); await page.getByRole("button", { name: "重新选择", exact: true }).click();
+    await (await replacement).setFiles("tests/fixtures/photo.png");
+    await expect(page.locator(".album-photo-tile")).toHaveCount(1);
+    await page.reload(); await expect(page.locator(".album-photo-tile")).toHaveCount(1); await expect(page.locator(".album-upload-status")).toHaveCount(0);
+  } finally { await fixtureRequest(page, "DELETE", `/api/albums/${album.id}`); }
+});
+
 test("phone provider files upload even when JavaScript file reads fail", async ({ page }) => {
   await enterTestSession(page);
   const { album } = await (await fixtureRequest(page, "POST", "/api/albums", { title: `手机文件-${randomUUID()}` })).json();
@@ -83,7 +128,7 @@ test("empty and oversized files explain the cause and can be reselected without 
     await (await chooser).setFiles([{ name: "empty.jpg", mimeType: "image/jpeg", buffer: Buffer.alloc(0) }, { name: "large.jpg", mimeType: "image/jpeg", buffer: Buffer.alloc(10 * 1024 * 1024 + 1) }]);
     const status = page.locator(".album-upload-status");
     await expect(status).toContainText("本次未完成 2 张");
-    await expect(status).toContainText("未读取到照片文件"); await expect(status).toContainText("超出 1 字节");
+    await expect(status).toContainText("未读取到照片文件"); await expect(status).toContainText("手机无法解码");
     expect(authorizations).toBe(0);
     const replacement = page.waitForEvent("filechooser");
     await status.getByRole("listitem").filter({ hasText: "empty.jpg" }).getByRole("button", { name: "重新选择", exact: true }).click();
@@ -128,7 +173,7 @@ test("storage quota failure warns once and does not rewrite photos at every chec
     await page.goto(`/albums/${album.id}`); const chooser = page.waitForEvent("filechooser");
     await page.getByRole("button", { name: "添加照片", exact: true }).click(); await (await chooser).setFiles("tests/fixtures/photo.png");
     await expect(page.locator(".album-photo-tile")).toHaveCount(1);
-    await expect(page.getByRole("alert")).toContainText("本次上传请勿刷新");
+    await expect(page.getByRole("alert")).toContainText("任务记录已保留");
     expect(await page.evaluate(() => Reflect.get(window, "failedFileWrites"))).toBe(1);
   } finally { await fixtureRequest(page, "DELETE", `/api/albums/${album.id}`); }
 });

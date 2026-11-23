@@ -1,7 +1,7 @@
 import type { MediaUploadAttempt } from "./client-upload";
-import { photoFileIssue } from "./upload-file.ts";
+import { photoFileIssue, maxPhotoBytes } from "./upload-file.ts";
 
-export type AlbumUploadItem = { file: File; clientId?: string; restored?: boolean; errorCode?: string; status: "waiting" | "uploading" | "attaching" | "done" | "error"; stage?: string; assetId?: string; attempt?: MediaUploadAttempt; capturedAt?: string | null; error?: string };
+export type AlbumUploadItem = { file: File; clientId?: string; restored?: boolean; needsReselect?: boolean; originalBytes?: number; errorCode?: string; status: "waiting" | "uploading" | "attaching" | "done" | "error"; stage?: string; assetId?: string; attempt?: MediaUploadAttempt; capturedAt?: string | null; error?: string };
 
 /** Retain completed uploads when attachment fails; retry never uploads them twice. */
 export async function runAlbumUploadQueue(items: AlbumUploadItem[], actions: {
@@ -10,6 +10,7 @@ export async function runAlbumUploadQueue(items: AlbumUploadItem[], actions: {
   attach: (assetId: string, capturedAt: string | null) => Promise<unknown>;
   changed: (items: AlbumUploadItem[]) => void | Promise<void>;
   signal?: AbortSignal;
+  prepare?: (file: File) => Promise<File>;
 }) {
   const queue = items.map((item) => ({ ...item, clientId: item.clientId || crypto.randomUUID() }));
   const publish = async () => { await actions.changed(queue.map((item) => ({ ...item }))); };
@@ -21,6 +22,13 @@ export async function runAlbumUploadQueue(items: AlbumUploadItem[], actions: {
       item.error = undefined;
       item.errorCode = undefined;
       item.restored = false;
+      if (item.needsReselect && !item.assetId) throw Object.assign(new Error("上传记录已恢复，照片文件未保留，请重新选择这张照片。"), { code: "FILE_UNREADABLE" });
+      if (!item.assetId && !item.attempt?.uploaded && item.file.size > maxPhotoBytes && actions.prepare) {
+        item.status = "uploading"; item.stage = "压缩照片"; if (item.attempt) item.attempt.stage = undefined; await publish();
+        if (item.capturedAt === undefined) item.capturedAt = await actions.capturedAt(item.file);
+        const prepared = await actions.prepare(item.file);
+        if (prepared !== item.file) { item.originalBytes = item.file.size; item.file = prepared; item.clientId = crypto.randomUUID(); item.attempt = undefined; await publish(); }
+      }
       const issue = !item.assetId && !item.attempt?.uploaded && photoFileIssue(item.file);
       if (issue) throw Object.assign(new Error(issue.message), { code: issue.code });
       if (item.capturedAt === undefined) { item.stage = "读取拍摄日期"; await publish(); item.capturedAt = await actions.capturedAt(item.file); }

@@ -11,6 +11,8 @@ import type { AlbumDetail, AlbumPhoto as Photo } from "@/models/album";
 import { loadUploadQueue, saveUploadQueue } from "./album-upload-storage";
 import { useAlbumPhotos } from "./useAlbumPhotos";
 import { photoFileIssue, photoSizeLabel } from "./upload-file";
+import { compressOversizedPhoto } from "./compress-photo";
+import { saveUploadJournal } from "./upload-journal";
 
 const dateLabel = (date: string) => { const parsed = new Date(date); return Number.isFinite(parsed.getTime()) ? parsed.toLocaleDateString("zh-CN") : "日期未知"; };
 
@@ -31,9 +33,12 @@ export function AlbumDetailClient({ album: initial, currentMemberId }: { album: 
   }, [queueKey]);
   async function rememberUploads(items: AlbumUploadItem[]) {
     setQueue(items);
+    let journalSaved = false;
+    try { saveUploadJournal(queueKey, items); journalSaved = true; }
+    catch { setStorageError("浏览器无法保存上传任务，本次上传请勿刷新。"); }
     if (!canPersistQueue.current) return;
     try { await saveUploadQueue(queueKey, items); }
-    catch { canPersistQueue.current = false; setStorageError("浏览器暂时无法保存上传记录，本次上传请勿刷新。"); }
+    catch { canPersistQueue.current = false; setStorageError(journalSaved ? "照片文件暂时无法保存，任务记录已保留；刷新后需重新选择照片。" : "浏览器暂时无法保存上传记录，本次上传请勿刷新。"); }
   }
   const filter = album.pagination.filter;
   const [selecting, setSelecting] = useState(false), [selected, setSelected] = useState<Set<string>>(new Set()), [viewer, setViewer] = useState<string | null>(null);
@@ -100,7 +105,7 @@ export function AlbumDetailClient({ album: initial, currentMemberId }: { album: 
     const controller = new AbortController(); uploadController.current = controller; setPausing(false);
     try {
       const results = await runAlbumUploadQueue(items, {
-        upload: (file, attempt, checkpoint) => uploadMediaFile(file, "album", attempt, checkpoint, controller.signal), capturedAt: readPhotoCapturedAt, changed: rememberUploads, signal: controller.signal,
+        upload: (file, attempt, checkpoint) => uploadMediaFile(file, "album", attempt, checkpoint, controller.signal), capturedAt: readPhotoCapturedAt, changed: rememberUploads, signal: controller.signal, prepare: file => compressOversizedPhoto(file, controller.signal),
         attach: (assetId, capturedAt) => json(`/api/albums/${album.id}/media`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ assetIds: [assetId], capturedAtByAsset: capturedAt ? { [assetId]: capturedAt } : {} }), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]) }),
       });
       if (results.some(item => item.status === "done")) await refresh();
@@ -175,8 +180,8 @@ export function AlbumDetailClient({ album: initial, currentMemberId }: { album: 
       {busy === "upload" && <div className="album-upload-current"><span>{pausing ? "正在暂停…" : activeUpload ? `${activeUpload.file.name} · ${activeUpload.attempt?.stage || activeUpload.stage || "准备上传"}` : "正在更新上传记录…"}</span><button type="button" disabled={pausing} onClick={() => { setPausing(true); uploadController.current?.abort(); }}>暂停上传</button></div>}
       {failed.length > 0 && <><ul>{failed.map(item => {
         const issue = !item.assetId && !item.attempt?.uploaded && photoFileIssue(item.file);
-        const canReselect = !!issue || item.errorCode === "FILE_UNREADABLE";
-        return <li key={item.clientId}><div><b>{item.file.name}</b><small>{photoSizeLabel(item.file.size)}</small><span>{issue ? issue.message : item.error}</span></div><div className="album-upload-item-actions">{canReselect && <button type="button" disabled={!!busy || !!loading} onClick={() => { replacementId.current = item.clientId || null; replacementInput.current?.click(); }}>重新选择</button>}<button type="button" disabled={!!busy || !!loading} onClick={() => void rememberUploads(queue.filter(row => row.clientId !== item.clientId))}>移除任务</button></div></li>;
+        const canReselect = !!issue || item.needsReselect || item.errorCode === "FILE_UNREADABLE";
+        return <li key={item.clientId}><div><b>{item.file.name}</b><small>{photoSizeLabel(item.file.size || item.originalBytes || 0)}</small><span>{item.needsReselect ? item.error : item.error || issue && issue.message}</span></div><div className="album-upload-item-actions">{canReselect && <button type="button" disabled={!!busy || !!loading} onClick={() => { replacementId.current = item.clientId || null; replacementInput.current?.click(); }}>重新选择</button>}<button type="button" disabled={!!busy || !!loading} onClick={() => void rememberUploads(queue.filter(row => row.clientId !== item.clientId))}>移除任务</button></div></li>;
       })}</ul><button type="button" disabled={!!busy || !!loading} onClick={() => processUploads(queue)}>重试失败的 {failed.length} 张</button></>}
       {!busy && !failed.length && <button type="button" onClick={() => setQueue([])}>关闭</button>}
     </section>}
