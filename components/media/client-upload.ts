@@ -1,4 +1,5 @@
 import { queueFileVariants } from "./client-variants.ts";
+import { photoFileIssue } from "./upload-file.ts";
 export type UploadPurpose = "home_featured" | "guestbook" | "recommendation_reference" | "trip_cover" | "album" | "member_avatar" | "knowledge_image";
 
 function normalizedType(file: File) {
@@ -25,14 +26,22 @@ function throwUploadCooldown(retryAt: number) {
   throw Object.assign(new Error(`上传暂时达到频率限制，请约 ${minutes} 分钟后重试。`), { retryAt });
 }
 
-export async function uploadMediaFile(file: File, purpose: UploadPurpose, attempt: MediaUploadAttempt = {}, checkpoint?: () => Promise<void>) {
+export async function uploadMediaFile(file: File, purpose: UploadPurpose, attempt: MediaUploadAttempt = {}, checkpoint?: () => Promise<void>, signal?: AbortSignal) {
+  signal?.throwIfAborted();
+  const issue = !attempt.uploaded && photoFileIssue(file);
+  if (issue) throw Object.assign(new Error(issue.message), { code: issue.code });
+  if (!attempt.uploaded) {
+    attempt.stage = "检查照片文件";
+    await checkpoint?.();
+    await verifyPhotoReadable(file, signal);
+  }
   if (attempt.retryAt && attempt.retryAt > Date.now()) throwUploadCooldown(attempt.retryAt);
   attempt.retryAt = undefined;
   attempt.stage = "准备上传";
   await checkpoint?.();
   if (!attempt.authorization || (!attempt.uploaded && attempt.authorization.expiresAt <= Date.now())) {
     const contentType = normalizedType(file);
-    const response = await fetch("/api/media/uploads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ purpose, filename: file.name, contentType, byteSize: file.size }), signal: AbortSignal.timeout(20_000) });
+    const response = await fetch("/api/media/uploads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ purpose, filename: file.name, contentType, byteSize: file.size }), signal: uploadSignal(signal, 20_000) });
     const authorized = await response.json() as { assetId?: string; uploadUrl?: string; method?: string; headers?: Record<string, string>; expiresInSeconds?: number; error?: string; message?: string };
     checkUploadRateLimit(response, attempt);
     if (!response.ok || !authorized.assetId || !authorized.uploadUrl) throw new Error(authorized.message || authorized.error || "无法准备图片上传。");
@@ -47,19 +56,21 @@ export async function uploadMediaFile(file: File, purpose: UploadPurpose, attemp
     const direct = /^https:\/\//i.test(authorized.uploadUrl);
     let uploaded: Response;
     try {
-      uploaded = await fetch(authorized.uploadUrl, { method: authorized.method || "PUT", headers: authorized.headers, body: file, signal: AbortSignal.timeout(120_000) });
+      uploaded = await fetch(authorized.uploadUrl, { method: authorized.method || "PUT", headers: authorized.headers, body: file, signal: uploadSignal(signal, 120_000) });
     } catch (error) {
       // Only transport failures use the authenticated same-origin fallback.
       // Timeouts remain explicit so a slow connection cannot silently wait twice.
-      if (!direct || !(error instanceof TypeError)) throw error;
+      if (signal?.aborted || !direct || !(error instanceof TypeError)) throw error;
       uploaded = new Response(null, { status: 502 });
     }
     if (direct && !uploaded.ok) {
       uploaded = await fetch(`/api/media/uploads/${encodeURIComponent(authorized.assetId)}/content`, {
-        method: "PUT", headers: { "content-type": normalizedType(file) }, body: file, signal: AbortSignal.timeout(120_000),
+        method: "PUT", headers: { "content-type": normalizedType(file) }, body: file, signal: uploadSignal(signal, 120_000),
       });
     }
-    if (!uploaded.ok) {
+    // A restored checkpoint may predate a successful confirmation. The owned
+    // content endpoint's 409 means the same asset is ready; confirm it again.
+    if (!uploaded.ok && uploaded.status !== 409) {
       if (uploaded.status === 404) { attempt.authorization = undefined; attempt.uploaded = false; await checkpoint?.(); }
       throw new Error(`图片上传失败（HTTP ${uploaded.status}），请重试。`);
     }
@@ -69,9 +80,10 @@ export async function uploadMediaFile(file: File, purpose: UploadPurpose, attemp
   attempt.stage = "读取图片尺寸";
   await checkpoint?.();
   const dimensions = await readImageDimensions(file);
+  signal?.throwIfAborted();
   attempt.stage = "确认上传";
   await checkpoint?.();
-  const completed = await fetch(`/api/media/uploads/${encodeURIComponent(authorized.assetId)}/complete`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(dimensions), signal: AbortSignal.timeout(20_000) });
+  const completed = await fetch(`/api/media/uploads/${encodeURIComponent(authorized.assetId)}/complete`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(dimensions), signal: uploadSignal(signal, 20_000) });
   const result = await completed.json() as { asset?: { id: string }; error?: string; message?: string };
   checkUploadRateLimit(completed, attempt);
   if (!completed.ok) {
@@ -84,6 +96,26 @@ export async function uploadMediaFile(file: File, purpose: UploadPurpose, attemp
   }
   if (typeof document !== "undefined") queueFileVariants(file, authorized.assetId);
   return authorized.assetId;
+}
+
+function uploadSignal(signal: AbortSignal | undefined, timeout: number) {
+  return signal ? AbortSignal.any([signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout);
+}
+
+async function verifyPhotoReadable(file: File, signal?: AbortSignal) {
+  const check = uploadSignal(signal, 8000);
+  check.throwIfAborted();
+  let cancel: (() => void) | undefined;
+  try {
+    const bytes = await Promise.race([
+      file.slice(0, 1).arrayBuffer(),
+      new Promise<never>((_, reject) => { cancel = () => reject(check.reason); check.addEventListener("abort", cancel, { once: true }); }),
+    ]);
+    if (!bytes.byteLength) throw new Error("FILE_EMPTY_READ");
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    throw Object.assign(new Error("手机未能读取这张照片，请重新从相册选择。"), { code: "FILE_UNREADABLE" });
+  } finally { if (cancel) check.removeEventListener("abort", cancel); }
 }
 
 export async function readPhotoCapturedAt(file: File) {

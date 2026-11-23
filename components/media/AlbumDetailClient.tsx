@@ -10,25 +10,30 @@ import { EditorDialog } from "@/components/trip/EditorDialog";
 import type { AlbumDetail, AlbumPhoto as Photo } from "@/models/album";
 import { loadUploadQueue, saveUploadQueue } from "./album-upload-storage";
 import { useAlbumPhotos } from "./useAlbumPhotos";
+import { photoFileIssue, photoSizeLabel } from "./upload-file";
 
 const dateLabel = (date: string) => { const parsed = new Date(date); return Number.isFinite(parsed.getTime()) ? parsed.toLocaleDateString("zh-CN") : "日期未知"; };
 
 export function AlbumDetailClient({ album: initial, currentMemberId }: { album: AlbumDetail; currentMemberId: string }) {
   const { album, loading, error: pageError, refresh, loadMore, changeFilter } = useAlbumPhotos(initial);
   const inputRef = useRef<HTMLInputElement>(null), moreRef = useRef<HTMLDivElement>(null), running = useRef(false);
+  const uploadController = useRef<AbortController | null>(null), replacementInput = useRef<HTMLInputElement>(null), replacementId = useRef<string | null>(null);
+  const [pausing, setPausing] = useState(false);
   const hold = useRef<ReturnType<typeof setTimeout> | null>(null), pointerStart = useRef<{ x: number; y: number } | null>(null), held = useRef(false), swipeStart = useRef<{ x: number; y: number } | null>(null);
   const [busy, setBusy] = useState(""), [error, setError] = useState(""), [queue, setQueue] = useState<AlbumUploadItem[]>([]);
   const queueKey = `${currentMemberId}:${album.id}`;
   const [queueReady, setQueueReady] = useState(false), [storageError, setStorageError] = useState("");
+  const canPersistQueue = useRef(true);
   useEffect(() => {
     let active = true;
-    loadUploadQueue(queueKey).then(items => { if (active) { setQueue(items); setQueueReady(true); } }).catch(() => { if (active) { setStorageError("浏览器无法保存上传记录，刷新前请完成上传。"); setQueueReady(true); } });
+    loadUploadQueue(queueKey).then(items => { if (active) { canPersistQueue.current = true; setQueue(items); setQueueReady(true); } }).catch(() => { if (active) { canPersistQueue.current = false; setStorageError("暂时无法读取本地上传记录，本次上传请勿刷新。"); setQueueReady(true); } });
     return () => { active = false; };
   }, [queueKey]);
   async function rememberUploads(items: AlbumUploadItem[]) {
     setQueue(items);
+    if (!canPersistQueue.current) return;
     try { await saveUploadQueue(queueKey, items); }
-    catch { setStorageError("浏览器无法保存上传记录，刷新前请完成上传。"); }
+    catch { canPersistQueue.current = false; setStorageError("浏览器暂时无法保存上传记录，本次上传请勿刷新。"); }
   }
   const filter = album.pagination.filter;
   const [selecting, setSelecting] = useState(false), [selected, setSelected] = useState<Set<string>>(new Set()), [viewer, setViewer] = useState<string | null>(null);
@@ -46,6 +51,8 @@ export function AlbumDetailClient({ album: initial, currentMemberId }: { album: 
   const groups = useMemo(() => { const map = new Map<string, Photo[]>(); for (const p of visible) { const key = p.capturedAt.slice(0, 10); const group = map.get(key) || []; group.push(p); map.set(key, group); } return [...map.entries()]; }, [visible]);
   const activeIndex = viewer ? visible.findIndex(p => p.assetId === viewer) : -1, activePhoto = activeIndex >= 0 ? visible[activeIndex] : null;
   const failed = queue.filter(item => item.status === "error"), uploaded = queue.filter(item => item.status === "done").length;
+  const activeUpload = queue.find(item => item.status === "uploading" || item.status === "attaching") || queue.find(item => item.status === "waiting");
+  useEffect(() => () => uploadController.current?.abort(), []);
   const allSelected = album.pagination.total > 0 && selected.size >= album.pagination.total && visible.every(photo => selected.has(photo.assetId));
   const dateCounts = new Map(album.pagination.dateCounts.map(group => [group.date, group.count]));
   useEffect(() => () => { if (hold.current) clearTimeout(hold.current); }, []);
@@ -90,21 +97,27 @@ export function AlbumDetailClient({ album: initial, currentMemberId }: { album: 
   async function processUploads(items: AlbumUploadItem[]) {
     if (running.current || !queueReady) return;
     running.current = true; setBusy("upload"); setError("");
+    const controller = new AbortController(); uploadController.current = controller; setPausing(false);
     try {
       const results = await runAlbumUploadQueue(items, {
-        upload: (file, attempt, checkpoint) => uploadMediaFile(file, "album", attempt, checkpoint), capturedAt: readPhotoCapturedAt, changed: rememberUploads,
-        attach: (assetId, capturedAt) => json(`/api/albums/${album.id}/media`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ assetIds: [assetId], capturedAtByAsset: capturedAt ? { [assetId]: capturedAt } : {} }) }),
+        upload: (file, attempt, checkpoint) => uploadMediaFile(file, "album", attempt, checkpoint, controller.signal), capturedAt: readPhotoCapturedAt, changed: rememberUploads, signal: controller.signal,
+        attach: (assetId, capturedAt) => json(`/api/albums/${album.id}/media`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ assetIds: [assetId], capturedAtByAsset: capturedAt ? { [assetId]: capturedAt } : {} }), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]) }),
       });
-      const errors = results.filter(item => item.status === "error");
-      if (errors.length) setError(`${errors.length} 张照片未完成，可只重试失败项。`);
-      await refresh();
-    } finally { running.current = false; setBusy(""); }
+      if (results.some(item => item.status === "done")) await refresh();
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "上传未完成，照片已保留。"); }
+    finally { running.current = false; uploadController.current = null; setBusy(""); setPausing(false); }
   }
   async function upload(event: ChangeEvent<HTMLInputElement>) {
     const files = [...(event.target.files || [])]; event.target.value = "";
     if (!files.length || busy || !queueReady) return;
     if (files.length > 100) { setError("每次最多选择 100 张照片，可分批追加。"); return; }
-    await processUploads([...failed, ...files.map(file => ({ file, status: "waiting" as const }))]);
+    await processUploads([...failed, ...files.map(file => ({ file, clientId: crypto.randomUUID(), status: "waiting" as const }))]);
+  }
+  async function replaceUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0], id = replacementId.current; event.target.value = "";
+    if (!file || !id || busy) return;
+    const items = queue.map(item => item.clientId === id ? { file, clientId: crypto.randomUUID(), status: "waiting" as const } : item);
+    await rememberUploads(items); await processUploads(items);
   }
   async function batch(action: string, extra: Record<string, unknown> = {}, ids = [...selected]) {
     if (!ids.length || running.current) return;
@@ -157,7 +170,17 @@ export function AlbumDetailClient({ album: initial, currentMemberId }: { album: 
     <nav className="album-photo-toolbar" aria-label="照片筛选"><div><button className={filter === "all" ? "active" : ""} disabled={!!busy || !!loading} onClick={() => void filterPhotos("all")}>全部</button><button className={filter === "favorite" ? "active" : ""} disabled={!!busy || !!loading} onClick={() => void filterPhotos("favorite")}><Heart size={15} />收藏</button>{album.tags.map(tag => <button className={filter === tag.id ? "active" : ""} key={tag.id} disabled={!!busy || !!loading} onClick={() => void filterPhotos(tag.id)}>{tag.name}</button>)}</div><button disabled={!!busy || !!loading} onClick={() => { setSelecting(!selecting); setSelected(new Set()); }}>{selecting ? "取消" : "选择"}</button></nav>
     {error && <p className="form-error album-error" role="alert">{error}</p>}
     {storageError && <p className="form-error" role="alert">{storageError}</p>}
-    {!!queue.length && <section className="album-upload-status" aria-live="polite"><p>{busy === "upload" ? `已完成 ${uploaded} / ${queue.length} 张` : `已添加 ${uploaded} 张`}</p>{failed.length > 0 && <><ul>{failed.map((item, index) => <li key={index}>{item.file.name}：{item.error}</li>)}</ul><button disabled={!!busy || !!loading} onClick={() => processUploads(queue)}>重试失败的 {failed.length} 张</button></>}{!busy && !failed.length && <button onClick={() => setQueue([])}>关闭</button>}</section>}
+    {queue.length > 0 && <section className="album-upload-status" aria-live="polite">
+      <p>{busy === "upload" ? `已完成 ${uploaded} / ${queue.length} 张` : failed.length ? `${queue.some(item => item.restored) ? "上次" : "本次"}未完成 ${failed.length} 张` : `已添加 ${uploaded} 张`}</p>
+      {busy === "upload" && <div className="album-upload-current"><span>{pausing ? "正在暂停…" : activeUpload ? `${activeUpload.file.name} · ${activeUpload.attempt?.stage || activeUpload.stage || "准备上传"}` : "正在更新上传记录…"}</span><button type="button" disabled={pausing} onClick={() => { setPausing(true); uploadController.current?.abort(); }}>暂停上传</button></div>}
+      {failed.length > 0 && <><ul>{failed.map(item => {
+        const issue = !item.assetId && !item.attempt?.uploaded && photoFileIssue(item.file);
+        const canReselect = !!issue || item.errorCode === "FILE_UNREADABLE";
+        return <li key={item.clientId}><div><b>{item.file.name}</b><small>{photoSizeLabel(item.file.size)}</small><span>{issue ? issue.message : item.error}</span></div><div className="album-upload-item-actions">{canReselect && <button type="button" disabled={!!busy || !!loading} onClick={() => { replacementId.current = item.clientId || null; replacementInput.current?.click(); }}>重新选择</button>}<button type="button" disabled={!!busy || !!loading} onClick={() => void rememberUploads(queue.filter(row => row.clientId !== item.clientId))}>移除任务</button></div></li>;
+      })}</ul><button type="button" disabled={!!busy || !!loading} onClick={() => processUploads(queue)}>重试失败的 {failed.length} 张</button></>}
+      {!busy && !failed.length && <button type="button" onClick={() => setQueue([])}>关闭</button>}
+    </section>}
+    <input ref={replacementInput} className="album-floating-input" type="file" tabIndex={-1} aria-hidden="true" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" onChange={replaceUpload} />
     {!visible.length ? <section className="album-photo-empty"><ImagePlus size={45} /><p>{album.pagination.totalPhotos ? "暂无匹配照片" : "暂无照片"}</p></section> : <div className="album-photo-timeline" aria-busy={!!loading}>{groups.map(([date, photos]) => <section key={date}><header><h2>{dateLabel(`${date}T12:00:00`)}</h2><span>{dateCounts.get(date) || photos.length} 张</span></header><div className="album-photo-grid">{photos.map(photo => <button type="button" aria-label={selecting ? `${selected.has(photo.assetId) ? "取消选择" : "选择"}${photo.filename}` : `查看${photo.filename}`} aria-pressed={selecting ? selected.has(photo.assetId) : undefined} className={`album-photo-tile${selected.has(photo.assetId) ? " selected" : ""}`} key={photo.assetId} onPointerDown={event => startHold(event, photo.assetId)} onPointerMove={event => { const start = pointerStart.current; if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > 8) cancelHold(); }} onPointerUp={cancelHold} onPointerCancel={cancelHold} onPointerLeave={cancelHold} onContextMenu={event => event.preventDefault()} onClick={() => open(photo)}><img src={`/api/media/${photo.assetId}?variant=thumb`} alt={photo.filename} onLoad={event => { if (photo.uploadedByMemberId === currentMemberId) queueImageVariants(event.currentTarget, photo.assetId); }} width={320} height={320} loading="lazy" draggable={false} />{photo.isFavorite && <Heart className="album-photo-heart" size={17} fill="currentColor" />}{selecting && <i className="album-photo-check">{selected.has(photo.assetId) && <Check size={16} />}</i>}</button>)}</div></section>)}</div>}
     {pageError && <p className="form-error" role="alert">{pageError}<button type="button" disabled={!!loading} onClick={() => void refresh()}>重新加载照片</button></p>}
     <div ref={moreRef} className="album-page-loader" aria-live="polite">{loading && <span>正在读取照片…</span>}{album.pagination.nextCursor && <button type="button" disabled={!!loading || !!busy} onClick={() => void loadMore()}>加载更多 · {visible.length} / {album.pagination.total}</button>}</div>
