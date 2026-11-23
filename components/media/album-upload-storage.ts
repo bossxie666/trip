@@ -1,4 +1,5 @@
 import type { AlbumUploadItem } from "./album-upload-queue";
+import { restoreUploadJournal } from "./upload-journal";
 const database = "trip-photo-uploads", queues = "queues", files = "files";
 const lifetime = 7 * 24 * 60 * 60 * 1000;
 const persisted = new Set<string>();
@@ -59,6 +60,10 @@ export async function saveUploadQueue(key: string, items: AlbumUploadItem[]) {
   } finally { db.close(); }
 }
 export async function loadUploadQueue(key: string): Promise<AlbumUploadItem[]> {
+  try { const stored = await loadStoredUploadQueue(key); return restoreUploadJournal(key, stored) ?? stored; }
+  catch (error) { const journal = restoreUploadJournal(key, []); if (journal !== null) return journal; throw error; }
+}
+async function loadStoredUploadQueue(key: string): Promise<AlbumUploadItem[]> {
   const db = await open();
   const result: AlbumUploadItem[] = [];
   try {
