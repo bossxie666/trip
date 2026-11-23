@@ -8,7 +8,7 @@ export function saveUploadJournal(key: string, items: AlbumUploadItem[]) {
   const pending: Entry[] = items.filter(item => item.status !== "done").map(item => {
     const copy = { ...item }; delete copy.attempt;
     const { file, ...metadata } = copy;
-    return { ...metadata, name: file.name, size: file.size || item.originalBytes || 0, modified: file.lastModified, type: file.type };
+    return { ...metadata, stage: item.attempt?.stage || item.stage, name: file.name, size: file.size || item.originalBytes || 0, modified: file.lastModified, type: file.type };
   });
   localStorage.setItem(prefix + key, JSON.stringify({ updatedAt: Date.now(), items: pending }));
 }
@@ -25,7 +25,7 @@ export function restoreUploadJournal(key: string, stored: AlbumUploadItem[]): Al
       const file = existing?.file || new File([], name, { type, lastModified: modified });
       const needsReselect = !file.size && !metadata.assetId && !existing?.attempt?.uploaded;
       return { ...existing, ...metadata, file, restored: true, status: "error", originalBytes: metadata.originalBytes || size, needsReselect,
-        error: needsReselect ? "上传记录已恢复，照片文件未保留，请重新选择这张照片。" : metadata.error || "上次上传未完成，请重试。" };
+        error: needsReselect ? "上传记录已恢复，照片文件未保留，请重新选择这张照片。" : metadata.error || existing?.error || (metadata.stage ? `上次在“${metadata.stage}”时中断，请重试。` : "上次上传未完成，请重试。") };
     });
   } catch { return null; }
 }
