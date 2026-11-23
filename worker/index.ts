@@ -6,6 +6,7 @@ import { safeInternalReturnTo } from "../services/return-to";
 import { drainMediaDeletionQueue } from "../services/media-deletion.server";
 import { mapCanvasPath, mapCanvasCsp, mapCanvasResponse } from "../services/map-canvas";
 import { runWithVerifiedSession } from "../services/session-request-context.server";
+import { hasValidRequestOrigin, apiError } from "../services/api-response";
 
 interface Env {
   ASSETS: Fetcher;
@@ -99,6 +100,9 @@ const worker = {
     };
 
     try {
+      if (url.pathname.startsWith("/api/") && !["GET", "HEAD", "OPTIONS"].includes(request.method) && !hasValidRequestOrigin(request)) {
+        return finish(apiError(request, 403, "INVALID_ORIGIN", "无法验证请求来源。"), "origin");
+      }
       if (url.pathname === "/favicon.ico") return finish(Response.redirect(new URL("/favicon.svg", request.url), 308));
       if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
@@ -129,6 +133,18 @@ const worker = {
 
       const appHeaders = new Headers(request.headers); appHeaders.set("x-request-id", requestId);
       if (url.pathname === mapCanvasPath) return finish(mapCanvasResponse());
+      // Keep resource permissions in the shared service, without running every
+      // thumbnail through the RSC router after its session is already verified.
+      const mediaPath = request.method === "GET" && /^\/api\/media\/([^/]+)$/.exec(url.pathname);
+      if (mediaPath && memberId) {
+        const { serveMedia } = await import("../services/media-response.server");
+        return finish(await serveMedia(request, decodeURIComponent(mediaPath[1]), memberId));
+      }
+      const uploadPath = request.method === "PUT" && /^\/api\/media\/uploads\/([^/]+)\/content$/.exec(url.pathname);
+      if (uploadPath && memberId) {
+        const { serveMediaUpload } = await import("../services/media-response.server");
+        return finish(await serveMediaUpload(request, decodeURIComponent(uploadPath[1]), memberId));
+      }
       const serve = () => handler.fetch(new Request(request, { headers: appHeaders }), env, ctx);
       return finish(await (memberId ? runWithVerifiedSession({ token, database: env.DB, memberId, stats: sessionStats }, serve) : serve()));
     } catch (caught) {

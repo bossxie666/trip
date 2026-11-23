@@ -2645,6 +2645,14 @@ test("upload validation does not consume quota and permits 10MB photos after the
   assert.equal((await render("/api/media/uploads", { method: "POST", body })).status, 503);
 });
 
+test("worker rejects cross-site writes before media dispatch or authentication", async () => {
+  for (const headers of [{ origin: "https://untrusted.invalid" }, { "sec-fetch-site": "cross-site" }]) {
+    const response = await render("/api/media/uploads/missing/content", { method: "PUT", body: {}, headers });
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).code, "INVALID_ORIGIN");
+  }
+});
+
 test("rate limited upload pauses the batch and persists cooldown without losing files", async () => {
   const originalFetch = globalThis.fetch;
   let requests = 0, saved;

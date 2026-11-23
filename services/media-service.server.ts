@@ -1,5 +1,4 @@
 import {canAccessGuestbookMessage} from "./guestbook-service.server";
-import {canAccessAlbum} from "./album-access.server";
 import { and, eq, isNull, like } from "drizzle-orm";
 import { AwsV4Signer } from "aws4fetch";
 import { getDb, getRuntimeEnv } from "@/db";
@@ -78,14 +77,17 @@ async function createR2PresignedPut(objectKey: string, contentType: string) {
   return { url: signed.url.toString(), headers: { "content-type": contentType } };
 }
 
-export async function uploadMediaContent(actorMemberId: string, assetId: string, contentType: string | null, bytes: ArrayBuffer) {
+export async function uploadMediaContent(actorMemberId: string, assetId: string, contentType: string | null, body: ReadableStream<Uint8Array> | null, contentLength: string | null) {
   const env = getRuntimeEnv();
   if (!env.MEDIA) throw new Error("MEDIA_UPLOAD_NOT_CONFIGURED");
   const asset = (await getDb().select().from(mediaAssetRecords).where(and(eq(mediaAssetRecords.id, assetId), eq(mediaAssetRecords.uploaderMemberId, actorMemberId))).limit(1))[0];
   if (!asset) throw new Error("MEDIA_NOT_FOUND");
   if (asset.status !== "pending") throw new Error("MEDIA_UPLOAD_ALREADY_COMPLETE");
-  if (contentType !== asset.contentType || bytes.byteLength !== asset.byteSize) throw new Error("MEDIA_UPLOAD_MISMATCH");
-  await env.MEDIA.put(asset.objectKey, bytes, { httpMetadata: { contentType: asset.contentType } });
+  if (!body || contentType !== asset.contentType || !contentLength || Number(contentLength) !== asset.byteSize || asset.byteSize > maxImageBytes) throw new Error("MEDIA_UPLOAD_MISMATCH");
+  // Enforce the authorized length while streaming instead of buffering 10MB.
+  const stream = new FixedLengthStream(asset.byteSize);
+  const transfer = body.pipeTo(stream.writable).catch(() => { throw new Error("MEDIA_UPLOAD_MISMATCH"); });
+  await Promise.all([transfer, env.MEDIA.put(asset.objectKey, stream.readable, { httpMetadata: { contentType: asset.contentType } })]);
   return { ok: true };
 }
 
@@ -114,7 +116,22 @@ export async function getReadyMediaAsset(assetId: string) {
  * recommendation-reference media inherit the owning album/trip membership.
  */
 export async function getAuthorizedReadyMediaAsset(assetId: string, memberId: string) {
-  const asset = await getReadyMediaAsset(assetId);
+  // Album thumbnails are the busiest path: fetch metadata and enforce current
+  // membership in one D1 query instead of building ORM queries for each image.
+  const asset = await getRuntimeEnv().DB.prepare(`
+    SELECT m.id, m.uploader_member_id AS uploaderMemberId, m.purpose,
+      m.object_key AS objectKey, m.original_filename AS originalFilename,
+      m.content_type AS contentType, m.byte_size AS byteSize, m.width, m.height,
+      m.status, m.created_at AS createdAt, m.updated_at AS updatedAt, m.ready_at AS readyAt
+    FROM media_assets m WHERE m.id=? AND m.status='ready'
+      AND (m.purpose!='album' OR EXISTS (
+        SELECT 1 FROM album_media am JOIN albums a ON a.id=am.album_id
+        WHERE am.media_asset_id=m.id AND a.deleted_at IS NULL
+          AND (a.created_by_member_id=? OR EXISTS (
+            SELECT 1 FROM album_members members WHERE members.album_id=a.id AND members.member_id=?
+          ))
+      )) LIMIT 1
+  `).bind(assetId, memberId, memberId).first<typeof mediaAssetRecords.$inferSelect>();
   if (!asset) return null;
   if (asset.purpose === "home_featured" || asset.purpose === "member_avatar" || asset.purpose === "knowledge_image") return asset;
   if (asset.purpose === "guestbook") {
@@ -122,12 +139,8 @@ export async function getAuthorizedReadyMediaAsset(assetId: string, memberId: st
     for (const ref of refs.results) if (await canAccessGuestbookMessage(ref.id, memberId)) return asset;
     return !refs.results.length && asset.uploaderMemberId === memberId ? asset : null;
   }
+  if (asset.purpose === "album") return asset;
   const db = getDb();
-  if (asset.purpose === "album") {
-    const rows=await getRuntimeEnv().DB.prepare("SELECT album_id AS id FROM album_media WHERE media_asset_id=?").bind(assetId).all<{id:string}>();
-    for(const row of rows.results)if(await canAccessAlbum(row.id,memberId))return asset;
-    return null;
-  }
   if (asset.purpose === "recommendation_reference") {
     const shared = (await db.select({ id: knowledgeMediaRecords.entryId }).from(knowledgeMediaRecords)
       .innerJoin(knowledgeEntryRecords, eq(knowledgeEntryRecords.id, knowledgeMediaRecords.entryId))

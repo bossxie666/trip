@@ -33,3 +33,43 @@ test("10MB photo traverses authorization, content and confirmation", async ({ pa
   expect(put.status()).toBe(200);
   expect((await fixtureRequest(page, "POST", `/api/media/uploads/${assetId}/complete`, {})).status()).toBe(200);
 });
+
+test("streamed uploads reject mismatched size and allow a clean retry", async ({ page }) => {
+  await enterTestSession(page);
+  const buffer = readFileSync("tests/fixtures/photo.png");
+  const authorized = await fixtureRequest(page, "POST", "/api/media/uploads", { purpose: "album", filename: "bounded.png", contentType: "image/png", byteSize: buffer.length });
+  expect(authorized.status()).toBe(201);
+  const { assetId } = await authorized.json();
+  const cookie = (await page.context().cookies()).map(c => `${c.name}=${c.value}`).join("; ");
+  const path = `/api/media/uploads/${assetId}/content`;
+  expect((await page.request.put(path, { data: buffer.subarray(1), headers: { cookie, "content-type": "image/png" } })).status()).toBe(400);
+  expect((await fixtureRequest(page, "POST", `/api/media/uploads/${assetId}/complete`, {})).status()).toBe(409);
+  expect((await page.request.put(path, { data: buffer, headers: { cookie, "content-type": "image/png" } })).status()).toBe(200);
+  expect((await fixtureRequest(page, "POST", `/api/media/uploads/${assetId}/complete`, {})).status()).toBe(200);
+});
+
+test("direct image handler enforces login and immediately revoked album membership", async ({ page, browser }) => {
+  await enterTestSession(page);
+  const created = await fixtureRequest(page, "POST", "/api/albums", { title: `图片权限-${randomUUID()}`, memberIds: ["member-zhu-jingqi"] });
+  const { album } = await created.json();
+  const other = await browser.newContext({ baseURL: "http://127.0.0.1:8787" });
+  try {
+    const bytes = readFileSync("tests/fixtures/photo.png");
+    const authorization = await fixtureRequest(page, "POST", "/api/media/uploads", { purpose: "album", filename: "private.png", contentType: "image/png", byteSize: bytes.length });
+    const { assetId } = await authorization.json();
+    const cookie = (await page.context().cookies()).map(c => `${c.name}=${c.value}`).join("; ");
+    expect((await page.request.put(`/api/media/uploads/${assetId}/content`, { data: bytes, headers: { cookie, "content-type": "image/png" } })).status()).toBe(200);
+    expect((await fixtureRequest(page, "POST", `/api/media/uploads/${assetId}/complete`, {})).status()).toBe(200);
+    expect((await fixtureRequest(page, "POST", `/api/albums/${album.id}/media`, { assetIds: [assetId] })).status()).toBe(200);
+    const image = `/api/media/${assetId}?variant=thumb`;
+    expect((await other.request.get(image)).status()).toBe(401);
+    expect((await other.request.post("/api/session", { data: { memberName: "kiki", code: "test-invite" } })).status()).toBe(200);
+    const otherCookie = (await other.cookies()).map(c => `${c.name}=${c.value}`).join("; ");
+    expect((await other.request.get(image, { headers: { cookie: otherCookie } })).status()).toBe(200);
+    expect((await fixtureRequest(page, "PATCH", `/api/albums/${album.id}`, { memberIds: [] })).status()).toBe(200);
+    const denied = await other.request.get(image, { headers: { cookie: otherCookie } });
+    expect(denied.status()).toBe(404);
+    expect(denied.headers()["cache-control"]).toContain("no-store");
+    expect((await page.request.get(image, { headers: { cookie } })).status()).toBe(200);
+  } finally { await other.close(); await fixtureRequest(page, "DELETE", `/api/albums/${album.id}`); }
+});
