@@ -3,6 +3,25 @@ import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { enterTestSession, fixtureRequest } from "./session";
 
+test("phone provider files upload even when JavaScript file reads fail", async ({ page }) => {
+  await enterTestSession(page);
+  const { album } = await (await fixtureRequest(page, "POST", "/api/albums", { title: `手机文件-${randomUUID()}` })).json();
+  await page.addInitScript(() => {
+    File.prototype.slice = function () { throw new DOMException("Provider cannot slice", "NotReadableError"); };
+    File.prototype.arrayBuffer = function () { return Promise.reject(new DOMException("Provider cannot read", "NotReadableError")); };
+  });
+  try {
+    await page.goto(`/albums/${album.id}`);
+    const chooser = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "添加照片", exact: true }).click();
+    await (await chooser).setFiles("tests/fixtures/photo.png");
+    await expect(page.locator(".album-photo-tile")).toHaveCount(1);
+    await expect(page.locator(".album-upload-status")).toContainText("已添加 1 张");
+    await page.reload();
+    await expect(page.locator(".album-photo-tile")).toHaveCount(1);
+  } finally { await fixtureRequest(page, "DELETE", `/api/albums/${album.id}`); }
+});
+
 test("photo bytes are stored once while progress metadata changes repeatedly", async ({ page }) => {
   await enterTestSession(page);
   const { album } = await (await fixtureRequest(page, "POST", "/api/albums", { title: `存储-${randomUUID()}` })).json();
