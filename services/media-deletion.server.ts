@@ -8,7 +8,9 @@ export async function drainMediaDeletionQueue(env: { DB: D1Database; MEDIA?: Pic
   const rows = (await env.DB.prepare("SELECT q.object_key,q.attempts FROM media_deletion_queue q LEFT JOIN media_assets m ON m.object_key=q.object_key WHERE q.next_attempt_at<=? AND m.id IS NULL ORDER BY q.created_at,q.object_key LIMIT ?").bind(now.toISOString(), limit).all<{ object_key: string; attempts: number }>()).results || [];
   if (!rows.length) return { deleted: 0, failed: 0 };
   try {
-    await env.MEDIA.delete(rows.map((row) => row.object_key));
+    for (let offset = 0; offset < rows.length; offset += 25) {
+      await env.MEDIA.delete(rows.slice(offset, offset + 25).flatMap((row) => mediaStorageKeys(row.object_key)));
+    }
   } catch {
     const statements: D1PreparedStatement[] = [];
     for (let offset = 0; offset < rows.length; offset += 25) {
@@ -33,3 +35,4 @@ export async function drainMediaDeletionQueue(env: { DB: D1Database; MEDIA?: Pic
   await env.DB.batch(acknowledgments);
   return { deleted: rows.length, failed: 0 };
 }
+import { mediaStorageKeys } from "./media-variant.ts";

@@ -2183,7 +2183,8 @@ test("retains storage deletion intents through R2 failure and lost acknowledgmen
   await assert.rejects(drainMediaDeletionQueue(env, { now: new Date("2026-10-27T00:02:00.000Z") }), /INJECTED_BATCH_FAILURE/);
   assert.equal(db.database.prepare("SELECT count(*) n FROM media_deletion_queue WHERE asset_id='retry'").get().n, 1);
   assert.deepEqual(await drainMediaDeletionQueue(env, { now: new Date("2026-10-27T00:03:00.000Z") }), { deleted: 1, failed: 0 });
-  assert.deepEqual(calls, [["album/retry.jpg"], ["album/retry.jpg"], ["album/retry.jpg"]]);
+  const keys = ["album/retry.jpg", "album/retry.jpg.v1-thumb.webp", "album/retry.jpg.v1-card.webp", "album/retry.jpg.v1-display.webp"];
+  assert.deepEqual(calls, [keys, keys, keys]);
   assert.equal(db.database.prepare("SELECT count(*) n FROM media_deletion_queue WHERE asset_id='restored'").get().n, 1);
   for (let index = 0; index < 205; index++) enqueue.run(`album/page-${index}.jpg`, `page-${index}`, now.toISOString(), now.toISOString());
   fail = true;
@@ -2651,6 +2652,29 @@ test("worker rejects cross-site writes before media dispatch or authentication",
     assert.equal(response.status, 403);
     assert.equal((await response.json()).code, "INVALID_ORIGIN");
   }
+});
+
+test("private R2 variants avoid repeated transforms and a consumed transform stream falls back to a fresh original", async () => {
+  const { serveMedia } = await import("../services/media-read.server.ts");
+  const id = "variant-cache-regression", key = `member_avatar/${id}.png`, now = new Date().toISOString();
+  DB.database.prepare("INSERT INTO media_assets(id,uploader_member_id,purpose,object_key,original_filename,content_type,byte_size,status,created_at,updated_at) VALUES (?,'member-nini','member_avatar',?,'avatar.png','image/png',8,'ready',?,?)").run(id, key, now, now);
+  const stored = new Map([[key, "original"]]);
+  let transforms = 0;
+  const env = { DB, MEDIA: {
+    async get(name) { const bytes = stored.get(name); return bytes ? { body: new Response(bytes).body, writeHttpMetadata(headers) { headers.set("content-type", "image/png"); } } : null; },
+    async put(name, stream) { stored.set(name, await new Response(stream).text()); },
+  }, IMAGES: { input(stream) { return { transform() { return { async output() { transforms++; await new Response(stream).text(); return { response: () => new Response("resized", { headers: { "content-type": "image/webp" } }) }; } }; } }; } } };
+  try {
+    const request = new Request(`https://test.invalid/api/media/${id}?variant=thumb`);
+    assert.equal(await (await serveMedia(request, id, "member-nini", env)).text(), "resized");
+    assert.equal(await (await serveMedia(request, id, "member-nini", env)).text(), "resized");
+    assert.equal(transforms, 1);
+    stored.delete(`${key}.v1-thumb.webp`);
+    env.IMAGES.input = stream => ({ transform: () => ({ async output() { await new Response(stream).text(); throw new Error("transform unavailable"); } }) });
+    const fallback = await serveMedia(request, id, "member-nini", env);
+    assert.equal(fallback.status, 200);
+    assert.equal(await fallback.text(), "original");
+  } finally { DB.database.prepare("DELETE FROM media_assets WHERE id=?").run(id); }
 });
 
 test("rate limited upload pauses the batch and persists cooldown without losing files", async () => {
