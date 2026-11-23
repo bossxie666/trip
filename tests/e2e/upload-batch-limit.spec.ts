@@ -74,3 +74,35 @@ test("direct image handler enforces login and immediately revoked album membersh
     expect((await page.request.get(image, { headers: { cookie } })).status()).toBe(200);
   } finally { await other.close(); await fixtureRequest(page, "DELETE", `/api/albums/${album.id}`); }
 });
+
+test("browser generates a private thumbnail while retaining the original", async ({ page, browser }) => {
+  await enterTestSession(page);
+  const created = await fixtureRequest(page, "POST", "/api/albums", { title: `浏览器缩略图-${randomUUID()}` });
+  const { album } = await created.json();
+  const other = await browser.newContext({ baseURL: "http://127.0.0.1:8787" });
+  try {
+    await page.goto(`/albums/${album.id}`);
+    const encoded = await page.evaluate(() => {
+      const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1200;
+      const ctx = canvas.getContext("2d")!, gradient = ctx.createLinearGradient(0, 0, 1200, 1200);
+      gradient.addColorStop(0, "#204b3a"); gradient.addColorStop(1, "#e8dab8"); ctx.fillStyle = gradient; ctx.fillRect(0, 0, 1200, 1200);
+      return canvas.toDataURL("image/png").split(",")[1];
+    });
+    const saved = page.waitForResponse(response => /\/variants\/thumb$/.test(new URL(response.url()).pathname) && response.request().method() === "PUT");
+    const chooser = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "添加照片", exact: true }).click();
+    await (await chooser).setFiles({ name: "large.png", mimeType: "image/png", buffer: Buffer.from(encoded, "base64") });
+    const response = await saved;
+    expect(response.status()).toBe(200);
+    await expect(page.locator(".album-photo-tile")).toHaveCount(1);
+    const { album: detail } = await (await fixtureRequest(page, "GET", `/api/albums/${album.id}`)).json();
+    const asset = detail.photos[0].assetId;
+    await page.reload();
+    await expect.poll(() => page.locator(".album-photo-tile img").evaluate(img => (img as HTMLImageElement).naturalWidth)).toBe(480);
+    const cookie = (await page.context().cookies()).map(c => `${c.name}=${c.value}`).join("; ");
+    expect((await page.request.get(`/api/media/${asset}?variant=display`, { headers: { cookie } })).headers()["content-type"]).toBe("image/png");
+    expect((await other.request.post("/api/session", { data: { memberName: "kiki", code: "test-invite" } })).status()).toBe(200);
+    const otherCookie = (await other.cookies()).map(c => `${c.name}=${c.value}`).join("; ");
+    expect((await other.request.put(`/api/media/${asset}/variants/thumb`, { data: Buffer.from("invalid"), headers: { cookie: otherCookie, "content-type": "image/webp" } })).status()).toBe(403);
+  } finally { await other.close(); await fixtureRequest(page, "DELETE", `/api/albums/${album.id}`); }
+});

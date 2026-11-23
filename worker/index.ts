@@ -131,6 +131,11 @@ const worker = {
 
       const appHeaders = new Headers(request.headers); appHeaders.set("x-request-id", requestId);
       if (url.pathname === mapCanvasPath) return finish(mapCanvasResponse());
+      const variantPath = request.method === "PUT" && /^\/api\/media\/([^/]+)\/variants\/([^/]+)$/.exec(url.pathname);
+      if (variantPath && memberId) {
+        const { saveBrowserMediaVariant } = await import("../services/media-variant-upload.server");
+        return finish(await saveBrowserMediaVariant(request, decodeURIComponent(variantPath[1]), variantPath[2], memberId, env));
+      }
       if (memberId && request.method === "POST") {
         if (url.pathname === "/api/media/uploads") {
           const { authorizeMediaUpload } = await import("../services/media-response.server");

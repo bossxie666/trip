@@ -1,5 +1,5 @@
 export type AlbumPhoto = {
-  assetId: string; filename: string; sortOrder: number; capturedAt: string;
+  assetId: string; filename: string; sortOrder: number; capturedAt: string; uploadedByMemberId?: string | null;
   isFavorite: boolean; tagIds: string[];
 };
 

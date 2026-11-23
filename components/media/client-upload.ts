@@ -1,3 +1,4 @@
+import { queueFileVariants } from "./client-variants.ts";
 export type UploadPurpose = "home_featured" | "guestbook" | "recommendation_reference" | "trip_cover" | "album" | "member_avatar" | "knowledge_image";
 
 function normalizedType(file: File) {
@@ -81,6 +82,7 @@ export async function uploadMediaFile(file: File, purpose: UploadPurpose, attemp
     }
     throw new Error(result.message || result.error || "图片校验失败，请重试。");
   }
+  if (typeof document !== "undefined") queueFileVariants(file, authorized.assetId);
   return authorized.assetId;
 }
 

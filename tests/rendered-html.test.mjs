@@ -2654,7 +2654,7 @@ test("worker rejects cross-site writes before media dispatch or authentication",
   }
 });
 
-test("private R2 variants avoid repeated transforms and a consumed transform stream falls back to a fresh original", async () => {
+test("private R2 variants serve cached bytes and missing variants never encode inside the Worker", async () => {
   const { serveMedia } = await import("../services/media-read.server.ts");
   const id = "variant-cache-regression", key = `member_avatar/${id}.png`, now = new Date().toISOString();
   DB.database.prepare("INSERT INTO media_assets(id,uploader_member_id,purpose,object_key,original_filename,content_type,byte_size,status,created_at,updated_at) VALUES (?,'member-nini','member_avatar',?,'avatar.png','image/png',8,'ready',?,?)").run(id, key, now, now);
@@ -2666,9 +2666,10 @@ test("private R2 variants avoid repeated transforms and a consumed transform str
   }, IMAGES: { input(stream) { return { transform() { return { async output() { transforms++; await new Response(stream).text(); return { response: () => new Response("resized", { headers: { "content-type": "image/webp" } }) }; } }; } }; } } };
   try {
     const request = new Request(`https://test.invalid/api/media/${id}?variant=thumb`);
+    assert.equal(await (await serveMedia(request, id, "member-nini", env)).text(), "original");
+    stored.set(`${key}.v1-thumb.webp`, "resized");
     assert.equal(await (await serveMedia(request, id, "member-nini", env)).text(), "resized");
-    assert.equal(await (await serveMedia(request, id, "member-nini", env)).text(), "resized");
-    assert.equal(transforms, 1);
+    assert.equal(transforms, 0);
     stored.delete(`${key}.v1-thumb.webp`);
     env.IMAGES.input = stream => ({ transform: () => ({ async output() { await new Response(stream).text(); throw new Error("transform unavailable"); } }) });
     const fallback = await serveMedia(request, id, "member-nini", env);
