@@ -1,8 +1,8 @@
-import {canAccessGuestbookMessage} from "./guestbook-service.server";
-import { and, eq, isNull, like } from "drizzle-orm";
+import { findAuthorizedMediaAsset } from "./media-access.server";
+import { and, eq } from "drizzle-orm";
 import { AwsV4Signer } from "aws4fetch";
 import { getDb, getRuntimeEnv } from "@/db";
-import { homeFeaturedPhotoRecords, knowledgeEntryRecords, knowledgeMediaRecords, mediaAssetRecords, recommendationRecords, recommendationReferenceMediaRecords, recommendationReferenceRecords, tripMemberRecords, tripRecords } from "@/db/schema";
+import { homeFeaturedPhotoRecords, mediaAssetRecords } from "@/db/schema";
 
 export const mediaPurposes = ["home_featured", "guestbook", "recommendation_reference", "trip_cover", "album", "member_avatar", "knowledge_image"] as const;
 export type MediaPurpose = (typeof mediaPurposes)[number];
@@ -116,55 +116,7 @@ export async function getReadyMediaAsset(assetId: string) {
  * recommendation-reference media inherit the owning album/trip membership.
  */
 export async function getAuthorizedReadyMediaAsset(assetId: string, memberId: string) {
-  // Album thumbnails are the busiest path: fetch metadata and enforce current
-  // membership in one D1 query instead of building ORM queries for each image.
-  const asset = await getRuntimeEnv().DB.prepare(`
-    SELECT m.id, m.uploader_member_id AS uploaderMemberId, m.purpose,
-      m.object_key AS objectKey, m.original_filename AS originalFilename,
-      m.content_type AS contentType, m.byte_size AS byteSize, m.width, m.height,
-      m.status, m.created_at AS createdAt, m.updated_at AS updatedAt, m.ready_at AS readyAt
-    FROM media_assets m WHERE m.id=? AND m.status='ready'
-      AND (m.purpose!='album' OR EXISTS (
-        SELECT 1 FROM album_media am JOIN albums a ON a.id=am.album_id
-        WHERE am.media_asset_id=m.id AND a.deleted_at IS NULL
-          AND (a.created_by_member_id=? OR EXISTS (
-            SELECT 1 FROM album_members members WHERE members.album_id=a.id AND members.member_id=?
-          ))
-      )) LIMIT 1
-  `).bind(assetId, memberId, memberId).first<typeof mediaAssetRecords.$inferSelect>();
-  if (!asset) return null;
-  if (asset.purpose === "home_featured" || asset.purpose === "member_avatar" || asset.purpose === "knowledge_image") return asset;
-  if (asset.purpose === "guestbook") {
-    const refs = await getRuntimeEnv().DB.prepare("SELECT message_id AS id FROM guestbook_message_media WHERE media_asset_id=?").bind(assetId).all<{ id: string }>();
-    for (const ref of refs.results) if (await canAccessGuestbookMessage(ref.id, memberId)) return asset;
-    return !refs.results.length && asset.uploaderMemberId === memberId ? asset : null;
-  }
-  if (asset.purpose === "album") return asset;
-  const db = getDb();
-  if (asset.purpose === "recommendation_reference") {
-    const shared = (await db.select({ id: knowledgeMediaRecords.entryId }).from(knowledgeMediaRecords)
-      .innerJoin(knowledgeEntryRecords, eq(knowledgeEntryRecords.id, knowledgeMediaRecords.entryId))
-      .where(and(eq(knowledgeMediaRecords.mediaAssetId, assetId), isNull(knowledgeEntryRecords.deletedAt))).limit(1))[0];
-    if (shared) return asset;
-    const member = (await db.select({ memberId: tripMemberRecords.memberId }).from(recommendationReferenceMediaRecords)
-      .innerJoin(recommendationReferenceRecords, eq(recommendationReferenceRecords.id, recommendationReferenceMediaRecords.referenceId))
-      .innerJoin(recommendationRecords, eq(recommendationRecords.id, recommendationReferenceRecords.recommendationId))
-      .innerJoin(tripMemberRecords, eq(tripMemberRecords.tripId, recommendationRecords.tripId))
-      .where(and(eq(recommendationReferenceMediaRecords.mediaAssetId, assetId), eq(tripMemberRecords.memberId, memberId), isNull(recommendationRecords.deletedAt))).limit(1))[0];
-    return member ? asset : null;
-  }
-  if (asset.purpose === "trip_cover") {
-    // Trip covers are private to members of the Trip that references them.
-    // The uploader-only fallback keeps an orphaned/pending cover visible to
-    // its owner without making an unreferenced asset public to other members.
-    const coverMarker = `/api/media/${assetId}`;
-    const memberTrip = (await db.select({ tripId: tripRecords.id })
-      .from(tripRecords)
-      .innerJoin(tripMemberRecords, eq(tripMemberRecords.tripId, tripRecords.id))
-      .where(and(like(tripRecords.cover, `${coverMarker}%`), eq(tripMemberRecords.memberId, memberId))).limit(1))[0];
-    return memberTrip || asset.uploaderMemberId === memberId ? asset : null;
-  }
-  return asset.uploaderMemberId === memberId ? asset : null;
+  return findAuthorizedMediaAsset(getRuntimeEnv().DB, assetId, memberId);
 }
 
 export async function setHomeFeaturedPhoto(actorMemberId: string, slotKey: "map_primary" | "map_secondary", assetId: string) {

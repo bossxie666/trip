@@ -1,9 +1,7 @@
 /** Cloudflare Worker entry point for the vinext-starter template. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
-import handler from "vinext/server/app-router-entry";
 import { readCookie, sessionCookieName, verifySessionMemberId } from "../services/session";
 import { safeInternalReturnTo } from "../services/return-to";
-import { drainMediaDeletionQueue } from "../services/media-deletion.server";
 import { mapCanvasPath, mapCanvasCsp, mapCanvasResponse } from "../services/map-canvas";
 import { runWithVerifiedSession } from "../services/session-request-context.server";
 import { hasValidRequestOrigin, apiError } from "../services/api-response";
@@ -148,15 +146,18 @@ const worker = {
       // thumbnail through the RSC router after its session is already verified.
       const mediaPath = request.method === "GET" && /^\/api\/media\/([^/]+)$/.exec(url.pathname);
       if (mediaPath && memberId) {
-        const { serveMedia } = await import("../services/media-response.server");
-        return finish(await serveMedia(request, decodeURIComponent(mediaPath[1]), memberId));
+        const { serveMedia } = await import("../services/media-read.server");
+        return finish(await serveMedia(request, decodeURIComponent(mediaPath[1]), memberId, env));
       }
       const uploadPath = request.method === "PUT" && /^\/api\/media\/uploads\/([^/]+)\/content$/.exec(url.pathname);
       if (uploadPath && memberId) {
         const { serveMediaUpload } = await import("../services/media-response.server");
         return finish(await serveMediaUpload(request, decodeURIComponent(uploadPath[1]), memberId));
       }
-      const serve = () => handler.fetch(new Request(request, { headers: appHeaders }), env, ctx);
+      const serve = async () => {
+        const { default: handler } = await import("vinext/server/app-router-entry");
+        return handler.fetch(new Request(request, { headers: appHeaders }), env, ctx);
+      };
       return finish(await (memberId ? runWithVerifiedSession({ token, database: env.DB, memberId, stats: sessionStats }, serve) : serve()));
     } catch (caught) {
       console.error(JSON.stringify({ type: "request_error", requestId, method: request.method, route: url.pathname, durationMs: Date.now() - startedAt, error: caught instanceof Error ? caught.name : "UnknownError" }));
@@ -165,7 +166,7 @@ const worker = {
   },
   async scheduled(_controller: unknown, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(cleanExpiredOperationalData(env));
-    ctx.waitUntil(drainMediaDeletionQueue(env).then((result) => console.log(JSON.stringify({ type: "media_deletion_cleanup", ...result }))));
+    ctx.waitUntil(import("../services/media-deletion.server").then(({ drainMediaDeletionQueue }) => drainMediaDeletionQueue(env)).then((result) => console.log(JSON.stringify({ type: "media_deletion_cleanup", ...result }))));
   },
 };
 
