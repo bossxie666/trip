@@ -18,7 +18,7 @@ test("photo decode stall survives refresh and retry completes without decoding d
     await page.getByRole("button", { name: "添加照片", exact: true }).click();
     await (await chooser).setFiles("tests/fixtures/photo.png");
     await expect.poll(() => page.evaluate(() => new Promise<string | undefined>((resolve, reject) => {
-      const open = indexedDB.open("trip-photo-uploads", 1);
+      const open = indexedDB.open("trip-photo-uploads");
       open.onerror = () => reject(open.error);
       open.onsuccess = () => {
         const db = open.result, tx = db.transaction("queues"), read = tx.objectStore("queues").getAll();

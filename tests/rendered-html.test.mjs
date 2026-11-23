@@ -2692,3 +2692,54 @@ test("rate limited upload pauses the batch and persists cooldown without losing 
     assert.equal(requests, 1);
   } finally { globalThis.fetch = originalFetch; }
 });
+
+test("empty, oversized and unreadable mobile files fail before consuming an upload authorization", async () => {
+  const fetch = globalThis.fetch; let requests = 0;
+  globalThis.fetch = async () => { requests++; throw new Error("unexpected network"); };
+  try {
+    await assert.rejects(uploadMediaFile(new File([], "empty.jpg"), "album"), error => error.code === "FILE_EMPTY" && /重新/.test(error.message));
+    await assert.rejects(uploadMediaFile(new File([new Uint8Array(10 * 1024 * 1024 + 1)], "large.jpg"), "album"), error => error.code === "FILE_TOO_LARGE" && /超出 1 字节/.test(error.message));
+    const unreadable = new File(["photo"], "unreadable.jpg");
+    unreadable.slice = () => new Blob([]);
+    await assert.rejects(uploadMediaFile(unreadable, "album"), error => error.code === "FILE_UNREADABLE");
+    assert.equal(requests, 0);
+  } finally { globalThis.fetch = fetch; }
+});
+
+test("pausing an upload retains unfinished files and never reruns completed attachments", async () => {
+  const controller = new AbortController(); let started;
+  const active = new Promise(resolve => { started = resolve; });
+  let uploads = 0, attached = 0;
+  const actions = { signal: controller.signal, capturedAt: async () => null, changed: async () => {}, attach: async () => { attached++; }, upload: async () => {
+    uploads++;
+    if (uploads === 1) return "first";
+    started();
+    return new Promise((_, reject) => controller.signal.addEventListener("abort", () => reject(controller.signal.reason), { once: true }));
+  } };
+  const work = runAlbumUploadQueue([1, 2, 3].map(n => ({ file: new File(["photo"], `${n}.jpg`), status: "waiting" })), actions);
+  await active; controller.abort();
+  const paused = await work;
+  assert.deepEqual(paused.map(item => item.status), ["done", "error", "error"]);
+  assert.equal(uploads, 2); assert.equal(attached, 1);
+  const retried = await runAlbumUploadQueue(paused, { ...actions, signal: undefined, upload: async file => file.name });
+  assert.ok(retried.every(item => item.status === "done")); assert.equal(attached, 3);
+});
+
+test("a transport timeout pauses the remaining batch instead of timing out every file", async () => {
+  let uploads = 0;
+  const items = [1, 2, 3].map(n => ({ file: new File(["photo"], `${n}.jpg`), status: "waiting" }));
+  const result = await runAlbumUploadQueue(items, { capturedAt: async () => null, changed: () => {}, attach: async () => assert.fail("not uploaded"), upload: async () => { uploads++; throw new DOMException("expired", "TimeoutError"); } });
+  assert.equal(uploads, 1); assert.ok(result.every(item => item.status === "error"));
+  assert.match(result[0].error, /超时/); assert.match(result[1].error, /暂停/);
+});
+
+test("a stale persisted transfer checkpoint can confirm an already completed owned asset", async () => {
+  const fetch = globalThis.fetch; let authorizations = 0;
+  globalThis.fetch = async (url, init) => {
+    if (url === "/api/media/uploads") { authorizations++; return Response.json({ assetId: "already-ready", uploadUrl: "/api/media/uploads/already-ready/content" }); }
+    if (init.method === "PUT") return Response.json({ error: "这张图片已经上传完成。" }, { status: 409 });
+    return Response.json({ asset: { id: "already-ready" } });
+  };
+  try { assert.equal(await uploadMediaFile(new File(["photo"], "photo.heic", { type: "image/heic" }), "album"), "already-ready"); assert.equal(authorizations, 1); }
+  finally { globalThis.fetch = fetch; }
+});

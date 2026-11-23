@@ -1,4 +1,5 @@
 import { consumeRateLimit, rateLimitResponse } from "@/services/rate-limit.server";
+import { photoFileIssue } from "../components/media/upload-file.ts";
 import { uploadMediaContent, createDirectUpload, validateMediaInput, completeDirectUpload } from "@/services/media-service.server";
 
 export async function serveMediaUpload(request: Request, assetId: string, memberId: string) {
@@ -20,8 +21,11 @@ export async function serveMediaUpload(request: Request, assetId: string, member
 }
 
 export async function authorizeMediaUpload(request: Request, memberId: string) {
+  let requestedBytes: unknown;
   try {
-    const body = validateMediaInput(await request.json().catch(() => null));
+    const raw = await request.json().catch(() => null);
+    requestedBytes = raw?.byteSize;
+    const body = validateMediaInput(raw);
     // Allow several photo batches without making invalid files consume slots.
     const limit = await consumeRateLimit("media-upload", memberId, 120, 10 * 60 * 1000);
     if (!limit.allowed) return rateLimitResponse(limit, `本次上传较多，请 ${Math.ceil(limit.retryAfterSeconds / 60)} 分钟后重试。`);
@@ -29,7 +33,7 @@ export async function authorizeMediaUpload(request: Request, memberId: string) {
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
     const invalid = code.startsWith("INVALID_MEDIA_");
-    return Response.json({ error: code === "MEDIA_UPLOAD_NOT_CONFIGURED" ? "图片存储尚未完成配置，文字内容仍可正常保存。" : code === "INVALID_MEDIA_SIZE" ? "照片大小必须大于 0 且不超过 10MB。" : code === "INVALID_MEDIA_TYPE" ? "不支持这种图片格式，请选择 JPG、PNG、WebP、HEIC 或 HEIF。" : invalid ? "照片信息无效，请重新选择。" : "无法准备图片上传，请稍后重试。" }, { status: code === "MEDIA_UPLOAD_NOT_CONFIGURED" ? 503 : invalid ? 400 : 500 });
+    return Response.json({ code: invalid ? code : "MEDIA_UPLOAD_UNAVAILABLE", error: code === "MEDIA_UPLOAD_NOT_CONFIGURED" ? "图片存储尚未完成配置，文字内容仍可正常保存。" : code === "INVALID_MEDIA_SIZE" ? photoFileIssue({ size: Number(requestedBytes) })?.message || "无法读取照片大小，请重新选择。" : code === "INVALID_MEDIA_TYPE" ? "不支持这种图片格式，请选择 JPG、PNG、WebP、HEIC 或 HEIF。" : invalid ? "照片信息无效，请重新选择。" : "无法准备图片上传，请稍后重试。" }, { status: code === "MEDIA_UPLOAD_NOT_CONFIGURED" ? 503 : invalid ? 400 : 500 });
   }
 }
 
