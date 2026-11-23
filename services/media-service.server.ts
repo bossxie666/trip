@@ -1,9 +1,8 @@
-import {canAccessGuestbookMessage} from "./guestbook-service.server";
-import {canAccessAlbum} from "./album-access.server";
-import { and, eq, isNull, like } from "drizzle-orm";
+import { findAuthorizedMediaAsset } from "./media-access.server";
+import { and, eq } from "drizzle-orm";
 import { AwsV4Signer } from "aws4fetch";
 import { getDb, getRuntimeEnv } from "@/db";
-import { homeFeaturedPhotoRecords, knowledgeEntryRecords, knowledgeMediaRecords, mediaAssetRecords, recommendationRecords, recommendationReferenceMediaRecords, recommendationReferenceRecords, tripMemberRecords, tripRecords } from "@/db/schema";
+import { homeFeaturedPhotoRecords, mediaAssetRecords } from "@/db/schema";
 
 export const mediaPurposes = ["home_featured", "guestbook", "recommendation_reference", "trip_cover", "album", "member_avatar", "knowledge_image"] as const;
 export type MediaPurpose = (typeof mediaPurposes)[number];
@@ -78,14 +77,17 @@ async function createR2PresignedPut(objectKey: string, contentType: string) {
   return { url: signed.url.toString(), headers: { "content-type": contentType } };
 }
 
-export async function uploadMediaContent(actorMemberId: string, assetId: string, contentType: string | null, bytes: ArrayBuffer) {
+export async function uploadMediaContent(actorMemberId: string, assetId: string, contentType: string | null, body: ReadableStream<Uint8Array> | null, contentLength: string | null) {
   const env = getRuntimeEnv();
   if (!env.MEDIA) throw new Error("MEDIA_UPLOAD_NOT_CONFIGURED");
   const asset = (await getDb().select().from(mediaAssetRecords).where(and(eq(mediaAssetRecords.id, assetId), eq(mediaAssetRecords.uploaderMemberId, actorMemberId))).limit(1))[0];
   if (!asset) throw new Error("MEDIA_NOT_FOUND");
   if (asset.status !== "pending") throw new Error("MEDIA_UPLOAD_ALREADY_COMPLETE");
-  if (contentType !== asset.contentType || bytes.byteLength !== asset.byteSize) throw new Error("MEDIA_UPLOAD_MISMATCH");
-  await env.MEDIA.put(asset.objectKey, bytes, { httpMetadata: { contentType: asset.contentType } });
+  if (!body || contentType !== asset.contentType || !contentLength || Number(contentLength) !== asset.byteSize || asset.byteSize > maxImageBytes) throw new Error("MEDIA_UPLOAD_MISMATCH");
+  // Enforce the authorized length while streaming instead of buffering 10MB.
+  const stream = new FixedLengthStream(asset.byteSize);
+  const transfer = body.pipeTo(stream.writable).catch(() => { throw new Error("MEDIA_UPLOAD_MISMATCH"); });
+  await Promise.all([transfer, env.MEDIA.put(asset.objectKey, stream.readable, { httpMetadata: { contentType: asset.contentType } })]);
   return { ok: true };
 }
 
@@ -114,44 +116,7 @@ export async function getReadyMediaAsset(assetId: string) {
  * recommendation-reference media inherit the owning album/trip membership.
  */
 export async function getAuthorizedReadyMediaAsset(assetId: string, memberId: string) {
-  const asset = await getReadyMediaAsset(assetId);
-  if (!asset) return null;
-  if (asset.purpose === "home_featured" || asset.purpose === "member_avatar" || asset.purpose === "knowledge_image") return asset;
-  if (asset.purpose === "guestbook") {
-    const refs = await getRuntimeEnv().DB.prepare("SELECT message_id AS id FROM guestbook_message_media WHERE media_asset_id=?").bind(assetId).all<{ id: string }>();
-    for (const ref of refs.results) if (await canAccessGuestbookMessage(ref.id, memberId)) return asset;
-    return !refs.results.length && asset.uploaderMemberId === memberId ? asset : null;
-  }
-  const db = getDb();
-  if (asset.purpose === "album") {
-    const rows=await getRuntimeEnv().DB.prepare("SELECT album_id AS id FROM album_media WHERE media_asset_id=?").bind(assetId).all<{id:string}>();
-    for(const row of rows.results)if(await canAccessAlbum(row.id,memberId))return asset;
-    return null;
-  }
-  if (asset.purpose === "recommendation_reference") {
-    const shared = (await db.select({ id: knowledgeMediaRecords.entryId }).from(knowledgeMediaRecords)
-      .innerJoin(knowledgeEntryRecords, eq(knowledgeEntryRecords.id, knowledgeMediaRecords.entryId))
-      .where(and(eq(knowledgeMediaRecords.mediaAssetId, assetId), isNull(knowledgeEntryRecords.deletedAt))).limit(1))[0];
-    if (shared) return asset;
-    const member = (await db.select({ memberId: tripMemberRecords.memberId }).from(recommendationReferenceMediaRecords)
-      .innerJoin(recommendationReferenceRecords, eq(recommendationReferenceRecords.id, recommendationReferenceMediaRecords.referenceId))
-      .innerJoin(recommendationRecords, eq(recommendationRecords.id, recommendationReferenceRecords.recommendationId))
-      .innerJoin(tripMemberRecords, eq(tripMemberRecords.tripId, recommendationRecords.tripId))
-      .where(and(eq(recommendationReferenceMediaRecords.mediaAssetId, assetId), eq(tripMemberRecords.memberId, memberId), isNull(recommendationRecords.deletedAt))).limit(1))[0];
-    return member ? asset : null;
-  }
-  if (asset.purpose === "trip_cover") {
-    // Trip covers are private to members of the Trip that references them.
-    // The uploader-only fallback keeps an orphaned/pending cover visible to
-    // its owner without making an unreferenced asset public to other members.
-    const coverMarker = `/api/media/${assetId}`;
-    const memberTrip = (await db.select({ tripId: tripRecords.id })
-      .from(tripRecords)
-      .innerJoin(tripMemberRecords, eq(tripMemberRecords.tripId, tripRecords.id))
-      .where(and(like(tripRecords.cover, `${coverMarker}%`), eq(tripMemberRecords.memberId, memberId))).limit(1))[0];
-    return memberTrip || asset.uploaderMemberId === memberId ? asset : null;
-  }
-  return asset.uploaderMemberId === memberId ? asset : null;
+  return findAuthorizedMediaAsset(getRuntimeEnv().DB, assetId, memberId);
 }
 
 export async function setHomeFeaturedPhoto(actorMemberId: string, slotKey: "map_primary" | "map_secondary", assetId: string) {

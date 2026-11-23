@@ -1,5 +1,5 @@
 import {canAccessAlbum,validatedAlbumMembers} from "./album-access.server";
-import { and, asc, desc, eq, getTableColumns, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getDb, getRuntimeEnv } from "@/db";
 import { albumMediaRecords, albumMediaTagRecords, albumRecords, albumTagRecords, mediaAssetRecords, tripMemberRecords, tripRecords } from "@/db/schema";
 import { drainMediaDeletionQueue } from "./media-deletion.server";
@@ -39,13 +39,15 @@ export async function listAlbumTripOptions(memberId: string) {
 }
 
 export async function listAlbums(memberId: string): Promise<AlbumSummary[]> {
-  const rows = await getDb().select({ ...getTableColumns(albumRecords), tripTitle: tripRecords.title,
-    memberIdsJson: sql<string>`(SELECT json_group_array(member_id) FROM album_members WHERE album_id=${albumRecords.id})`, photoCount: sql<number>`(SELECT count(*) FROM album_media am WHERE am.album_id=${albumRecords.id})`,
-  }).from(albumRecords).leftJoin(tripRecords, eq(tripRecords.id, albumRecords.tripId))
-    .where(and(isNull(albumRecords.deletedAt), or(eq(albumRecords.createdByMemberId,memberId),
-      sql`EXISTS (SELECT 1 FROM album_members am WHERE am.album_id=${albumRecords.id} AND am.member_id=${memberId})`)))
-    .orderBy(desc(albumRecords.updatedAt));
-  return rows.map((row) => ({ ...row, memberIds: JSON.parse(row.memberIdsJson), canEditAlbum: row.createdByMemberId === memberId }));
+  const { results } = await getRuntimeEnv().DB.prepare(`SELECT a.id, a.title, a.description,
+    a.trip_id AS tripId, t.title AS tripTitle, a.created_by_member_id AS createdByMemberId,
+    a.cover_media_asset_id AS coverMediaAssetId, a.updated_at AS updatedAt,
+    (SELECT json_group_array(member_id) FROM album_members WHERE album_id=a.id) AS memberIdsJson,
+    (SELECT count(*) FROM album_media WHERE album_id=a.id) AS photoCount
+    FROM albums a LEFT JOIN trips t ON t.id=a.trip_id WHERE a.deleted_at IS NULL
+      AND (a.created_by_member_id=? OR EXISTS (SELECT 1 FROM album_members am WHERE am.album_id=a.id AND am.member_id=?))
+    ORDER BY a.updated_at DESC`).bind(memberId, memberId).all<Omit<AlbumSummary, "canEditAlbum"> & { memberIdsJson: string }>();
+  return results.map(({ memberIdsJson, ...row }) => ({ ...row, memberIds: JSON.parse(memberIdsJson), canEditAlbum: row.createdByMemberId === memberId }));
 }
 
 type AlbumPhotoQuery = { filter?: string; cursor?: string | null; limit?: number };

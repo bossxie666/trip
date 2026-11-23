@@ -19,3 +19,7 @@ interface Fetcher { fetch(input: RequestInfo | URL, init?: RequestInit): Promise
 declare module "cloudflare:workers" {
   export const env: { DB: D1Database; IMAGES: { input(stream: ReadableStream): { transform(options: Record<string, unknown>): { output(options: { format: string; quality: number }): Promise<{ response(): Response }> } } }; [key: string]: unknown };
 }
+/** Cloudflare's length-enforcing stream keeps uploads bounded without buffering. */
+declare class FixedLengthStream extends TransformStream<Uint8Array, Uint8Array> {
+  constructor(expectedLength: number | bigint);
+}
