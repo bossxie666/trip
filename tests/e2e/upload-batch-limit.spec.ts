@@ -42,6 +42,7 @@ test("streamed uploads reject mismatched size and allow a clean retry", async ({
   const { assetId } = await authorized.json();
   const cookie = (await page.context().cookies()).map(c => `${c.name}=${c.value}`).join("; ");
   const path = `/api/media/uploads/${assetId}/content`;
+  expect((await fixtureRequest(page, "POST", `/api/media/uploads/${assetId}/complete`, {})).status()).toBe(409);
   expect((await page.request.put(path, { data: buffer.subarray(1), headers: { cookie, "content-type": "image/png" } })).status()).toBe(400);
   expect((await fixtureRequest(page, "POST", `/api/media/uploads/${assetId}/complete`, {})).status()).toBe(409);
   expect((await page.request.put(path, { data: buffer, headers: { cookie, "content-type": "image/png" } })).status()).toBe(200);

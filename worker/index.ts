@@ -133,6 +133,17 @@ const worker = {
 
       const appHeaders = new Headers(request.headers); appHeaders.set("x-request-id", requestId);
       if (url.pathname === mapCanvasPath) return finish(mapCanvasResponse());
+      if (memberId && request.method === "POST") {
+        if (url.pathname === "/api/media/uploads") {
+          const { authorizeMediaUpload } = await import("../services/media-response.server");
+          return finish(await authorizeMediaUpload(request, memberId));
+        }
+        const completePath = /^\/api\/media\/uploads\/([^/]+)\/complete$/.exec(url.pathname);
+        if (completePath) {
+          const { confirmMediaUpload } = await import("../services/media-response.server");
+          return finish(await confirmMediaUpload(request, decodeURIComponent(completePath[1]), memberId));
+        }
+      }
       // Keep resource permissions in the shared service, without running every
       // thumbnail through the RSC router after its session is already verified.
       const mediaPath = request.method === "GET" && /^\/api\/media\/([^/]+)$/.exec(url.pathname);
