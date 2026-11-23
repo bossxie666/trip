@@ -33,11 +33,12 @@ export function AlbumDetailClient({ album: initial, currentMemberId }: { album: 
   }, [queueKey]);
   async function rememberUploads(items: AlbumUploadItem[]) {
     setQueue(items);
-    try { saveUploadJournal(queueKey, items); }
+    let journalSaved = false;
+    try { saveUploadJournal(queueKey, items); journalSaved = true; }
     catch { setStorageError("浏览器无法保存上传任务，本次上传请勿刷新。"); }
     if (!canPersistQueue.current) return;
     try { await saveUploadQueue(queueKey, items); }
-    catch { canPersistQueue.current = false; setStorageError("浏览器暂时无法保存上传记录，本次上传请勿刷新。"); }
+    catch { canPersistQueue.current = false; setStorageError(journalSaved ? "照片文件暂时无法保存，任务记录已保留；刷新后需重新选择照片。" : "浏览器暂时无法保存上传记录，本次上传请勿刷新。"); }
   }
   const filter = album.pagination.filter;
   const [selecting, setSelecting] = useState(false), [selected, setSelected] = useState<Set<string>>(new Set()), [viewer, setViewer] = useState<string | null>(null);

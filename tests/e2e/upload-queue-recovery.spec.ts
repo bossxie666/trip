@@ -173,7 +173,7 @@ test("storage quota failure warns once and does not rewrite photos at every chec
     await page.goto(`/albums/${album.id}`); const chooser = page.waitForEvent("filechooser");
     await page.getByRole("button", { name: "添加照片", exact: true }).click(); await (await chooser).setFiles("tests/fixtures/photo.png");
     await expect(page.locator(".album-photo-tile")).toHaveCount(1);
-    await expect(page.getByRole("alert")).toContainText("本次上传请勿刷新");
+    await expect(page.getByRole("alert")).toContainText("任务记录已保留");
     expect(await page.evaluate(() => Reflect.get(window, "failedFileWrites"))).toBe(1);
   } finally { await fixtureRequest(page, "DELETE", `/api/albums/${album.id}`); }
 });
