@@ -30,11 +30,6 @@ export async function uploadMediaFile(file: File, purpose: UploadPurpose, attemp
   signal?.throwIfAborted();
   const issue = !attempt.uploaded && photoFileIssue(file);
   if (issue) throw Object.assign(new Error(issue.message), { code: issue.code });
-  if (!attempt.uploaded) {
-    attempt.stage = "检查照片文件";
-    await checkpoint?.();
-    await verifyPhotoReadable(file, signal);
-  }
   if (attempt.retryAt && attempt.retryAt > Date.now()) throwUploadCooldown(attempt.retryAt);
   attempt.retryAt = undefined;
   attempt.stage = "准备上传";
@@ -56,7 +51,7 @@ export async function uploadMediaFile(file: File, purpose: UploadPurpose, attemp
     const direct = /^https:\/\//i.test(authorized.uploadUrl);
     let uploaded: Response;
     try {
-      uploaded = await fetch(authorized.uploadUrl, { method: authorized.method || "PUT", headers: authorized.headers, body: file, signal: uploadSignal(signal, 120_000) });
+      uploaded = await transferPhoto(authorized.uploadUrl, { method: authorized.method || "PUT", headers: authorized.headers, body: file, signal: uploadSignal(signal, 120_000) });
     } catch (error) {
       // Only transport failures use the authenticated same-origin fallback.
       // Timeouts remain explicit so a slow connection cannot silently wait twice.
@@ -64,7 +59,7 @@ export async function uploadMediaFile(file: File, purpose: UploadPurpose, attemp
       uploaded = new Response(null, { status: 502 });
     }
     if (direct && !uploaded.ok) {
-      uploaded = await fetch(`/api/media/uploads/${encodeURIComponent(authorized.assetId)}/content`, {
+      uploaded = await transferPhoto(`/api/media/uploads/${encodeURIComponent(authorized.assetId)}/content`, {
         method: "PUT", headers: { "content-type": normalizedType(file) }, body: file, signal: uploadSignal(signal, 120_000),
       });
     }
@@ -102,20 +97,18 @@ function uploadSignal(signal: AbortSignal | undefined, timeout: number) {
   return signal ? AbortSignal.any([signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout);
 }
 
-async function verifyPhotoReadable(file: File, signal?: AbortSignal) {
-  const check = uploadSignal(signal, 8000);
-  check.throwIfAborted();
-  let cancel: (() => void) | undefined;
+// Mobile photo providers may not support JavaScript slice/arrayBuffer reads.
+// Let the browser stream the original File; only a real transfer read failure
+// should require reselection. Metadata and image decoding remain best effort.
+async function transferPhoto(url: string, init: RequestInit) {
   try {
-    const bytes = await Promise.race([
-      file.slice(0, 1).arrayBuffer(),
-      new Promise<never>((_, reject) => { cancel = () => reject(check.reason); check.addEventListener("abort", cancel, { once: true }); }),
-    ]);
-    if (!bytes.byteLength) throw new Error("FILE_EMPTY_READ");
+    return await fetch(url, init);
   } catch (error) {
-    if (signal?.aborted) throw error;
-    throw Object.assign(new Error("手机未能读取这张照片，请重新从相册选择。"), { code: "FILE_UNREADABLE" });
-  } finally { if (cancel) check.removeEventListener("abort", cancel); }
+    if (!init.signal?.aborted && error instanceof Error && error.name === "NotReadableError") {
+      throw Object.assign(new Error("传输时无法读取照片，请重新从手机相册选择。"), { code: "FILE_UNREADABLE" });
+    }
+    throw error;
+  }
 }
 
 export async function readPhotoCapturedAt(file: File) {

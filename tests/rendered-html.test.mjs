@@ -2693,17 +2693,40 @@ test("rate limited upload pauses the batch and persists cooldown without losing 
   } finally { globalThis.fetch = originalFetch; }
 });
 
-test("empty, oversized and unreadable mobile files fail before consuming an upload authorization", async () => {
+test("empty and oversized mobile files fail before consuming an upload authorization", async () => {
   const fetch = globalThis.fetch; let requests = 0;
   globalThis.fetch = async () => { requests++; throw new Error("unexpected network"); };
   try {
     await assert.rejects(uploadMediaFile(new File([], "empty.jpg"), "album"), error => error.code === "FILE_EMPTY" && /重新/.test(error.message));
     await assert.rejects(uploadMediaFile(new File([new Uint8Array(10 * 1024 * 1024 + 1)], "large.jpg"), "album"), error => error.code === "FILE_TOO_LARGE" && /超出 1 字节/.test(error.message));
-    const unreadable = new File(["photo"], "unreadable.jpg");
-    unreadable.slice = () => new Blob([]);
-    await assert.rejects(uploadMediaFile(unreadable, "album"), error => error.code === "FILE_UNREADABLE");
     assert.equal(requests, 0);
   } finally { globalThis.fetch = fetch; }
+});
+
+test("mobile provider slice failures do not prevent streaming the original photo", async () => {
+  const originalFetch = globalThis.fetch;
+  const photo = new File(["photo"], "provider.heic", { type: "image/heic" });
+  photo.slice = () => { throw new DOMException("Provider cannot slice", "NotReadableError"); };
+  let puts = 0;
+  globalThis.fetch = async (url, init) => {
+    if (url === "/api/media/uploads") return Response.json({ assetId: "provider", uploadUrl: "/provider-put" });
+    if (init.method === "PUT") { assert.equal(init.body, photo); assert.equal(await init.body.text(), "photo"); puts++; return new Response(null); }
+    return Response.json({ asset: { id: "provider" } });
+  };
+  try { assert.equal(await uploadMediaFile(photo, "album"), "provider"); assert.equal(puts, 1); }
+  finally { globalThis.fetch = originalFetch; }
+});
+
+test("an actual photo transfer read failure offers reselection and retains authorization", async () => {
+  const originalFetch = globalThis.fetch, attempt = {};
+  globalThis.fetch = async (url) => {
+    if (url === "/api/media/uploads") return Response.json({ assetId: "unreadable", uploadUrl: "/provider-put" });
+    throw new DOMException("Provider file no longer available", "NotReadableError");
+  };
+  try {
+    await assert.rejects(uploadMediaFile(new File(["photo"], "provider.heic", { type: "image/heic" }), "album", attempt), error => error.code === "FILE_UNREADABLE" && /传输时/.test(error.message));
+    assert.equal(attempt.authorization.assetId, "unreadable"); assert.equal(attempt.uploaded, false);
+  } finally { globalThis.fetch = originalFetch; }
 });
 
 test("pausing an upload retains unfinished files and never reruns completed attachments", async () => {
