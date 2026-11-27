@@ -98,3 +98,16 @@ test("shows a recently visited day within one second while the return request is
   }
   await expect(page).toHaveURL(returnUrl.href);
 });
+
+test("planning uses a single flat surface without a book crease", async ({ page }) => {
+  await page.goto("/trips/e2e-shanghai/plan?view=planning");
+  const sheet = page.locator(".trip-book-leaf");
+  const columns = page.locator(".plan-columns");
+  for (const surface of [sheet, columns]) {
+    await expect(surface).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(surface).toHaveCSS("background-image", "none");
+    await expect(surface).toHaveCSS("box-shadow", "none");
+  }
+  expect(await sheet.evaluate(el => getComputedStyle(el, "::before").content)).toBe("none");
+  expect(await columns.evaluate(el => getComputedStyle(el, "::after").content)).toBe("none");
+});
