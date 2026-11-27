@@ -15,6 +15,7 @@ import { PlaceDiscoveryControl } from "./PlaceDiscoveryControl";
 import { ItineraryItemPlaceControl } from "./ItineraryItemPlaceControl";
 import { TransportIcon, iconForBookingType, iconForItemType } from "./TransportIcon";
 import { LocalRouteSegmentControl } from "./LocalRouteSegmentControl";
+import { RecentPlanningDays } from "./RecentPlanningDays";
 import { DayNavigation } from "./DayNavigation";
 import { PlanningDesktopMap } from "./PlanningDesktopMap";
 import type { getPlanWorkspace } from "@/services/plan-workspace-service.server";
@@ -185,7 +186,7 @@ export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query
   const accommodationAmount = accommodation.amounts.length === 1
     ? `${accommodation.amounts[0].currency === "CNY" ? "¥" : `${accommodation.amounts[0].currency} `}${(accommodation.amounts[0].amountMinor / 100).toFixed(2).replace(/\.00$/, "")}`
     : accommodation.amounts.length > 1 ? "金额查看详情" : "金额未完整";
-  return <TripBookShell view={view}><main className="trip-plan-page trip-journal-workspace">
+  const page = <TripBookShell view={view}><main className="trip-plan-page trip-journal-workspace">
     <header className="trip-console">
       <div className="console-title"><Link href="/trips">← 我的旅行</Link><span>TRIP CONSOLE</span><h1>{trip.title}</h1><p>{fullRange(trip.startDate, trip.endDate)} · {stageSummary}</p></div>
       <div className="trip-console-side"><div className="booking-console"><span className="booking-console-label">住宿</span>{hotelBookings.length ? <><div className="accommodation-summary"><strong>{accommodation.count}项 · {accommodation.incomplete && accommodation.amounts.length ? `已记录 ${accommodationAmount}` : accommodationAmount}</strong>{accommodation.tentativeCount ? <small>其中 {accommodation.confirmedCount} 项已确认，{accommodation.tentativeCount} 项计划中</small> : <small>{accommodation.confirmedCount} 项已确认</small>}</div><AccommodationListControl>{hotelBookings.map((record) => <article key={record.booking.id}><b className="booking-summary-title"><TransportIcon kind="hotel" size={15} />{record.booking.title.replace("附近", "")}</b><span>{bookingStatus(record.booking.status, record.booking.type)} · {bookingTime(record.booking)}</span><BookingEditControl slug={trip.slug} booking={record} members={memberOptions} existingPlaces={existingPlaceChoices} /></article>)}</AccommodationListControl></> : <p className="booking-console-empty">还没有添加住宿</p>}<BookingCreateControl slug={trip.slug} members={memberOptions} existingPlaces={existingPlaceChoices} /></div></div>
@@ -195,6 +196,7 @@ export function TripPlanWorkspace({ workspace, activeDayId, view, mapMode, query
     {view === "planning" && <><div className="empty-trip-actions"><PlaceDiscoveryControl slug={trip.slug} days={dayLabels} defaultDayId={activeDayId} existingPlaces={existingPlaceChoices} /></div><PlanningPanels library={<KnowledgeTripPicker slug={trip.slug} days={dayLabels} defaultDayId={activeDayId} />} itinerary={itinerary} map={<PlanningDesktopMap slug={trip.slug} workspace={mapWorkspace} activeDayId={activeDayId} mapMode="day" fullHref={link("map", activeDayId, "day")} />} /></>}
     {view === "budget" && <BudgetWorkspace slug={trip.slug} budget={workspace.budget} members={memberOptions} days={dayLabels} cities={cityOptions} routeSegmentsByDay={workspace.routeSegmentsByDay} routePreferences={workspace.routePreferences} costMode={costMode} />}
   </main></TripBookShell>;
+  return view === "planning" ? <RecentPlanningDays key={JSON.stringify([trip.slug, workspace.currentMemberId, memberFilter, areaFilter, categoryFilter, query])} href={link("planning")}>{page}</RecentPlanningDays> : page;
 }
 
 
