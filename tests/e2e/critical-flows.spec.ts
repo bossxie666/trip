@@ -72,3 +72,42 @@ test("has no critical accessibility violations on primary pages", async ({ page 
     expect(results.violations.filter((violation) => violation.impact === "critical"), path).toEqual([]);
   }
 });
+
+test("shows a recently visited day within one second while the return request is held", async ({ page }) => {
+  await page.goto("/trips/e2e-shanghai/plan?view=planning");
+  const rail = page.getByRole("navigation", { name: "选择日期" });
+  const first = rail.getByRole("link").nth(0);
+  const second = rail.getByRole("link").nth(1);
+  const heading = page.locator(".itinerary-panel h2");
+  const firstTitle = await heading.innerText();
+  await expect(page.getByRole("button", { name: "＋ 添加住宿", exact: true })).toBeEnabled();
+  await second.click();
+  await expect(heading).not.toHaveText(firstTitle);
+  const returnUrl = new URL((await first.getAttribute("href"))!, page.url());
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  await page.route(url => url.pathname.startsWith(returnUrl.pathname) && url.searchParams.get("day") === returnUrl.searchParams.get("day"), async route => {
+    await held;
+    await route.continue();
+  });
+  try {
+    await first.evaluate(anchor => (anchor as HTMLAnchorElement).click());
+    await expect(heading).toHaveText(firstTitle, { timeout: 950 });
+  } finally {
+    release();
+  }
+  await expect(page).toHaveURL(returnUrl.href);
+});
+
+test("planning uses a single flat surface without a book crease", async ({ page }) => {
+  await page.goto("/trips/e2e-shanghai/plan?view=planning");
+  const sheet = page.locator(".trip-book-leaf");
+  const columns = page.locator(".plan-columns");
+  for (const surface of [sheet, columns]) {
+    await expect(surface).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(surface).toHaveCSS("background-image", "none");
+    await expect(surface).toHaveCSS("box-shadow", "none");
+  }
+  expect(await sheet.evaluate(el => getComputedStyle(el, "::before").content)).toBe("none");
+  expect(await columns.evaluate(el => getComputedStyle(el, "::after").content)).toBe("none");
+});
