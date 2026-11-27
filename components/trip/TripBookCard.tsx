@@ -14,11 +14,12 @@ import { EditTripDialog } from "./EditTripDialog";
 type Props = {
   trip: { slug: string; title: string; cover: string | null; status: TripStatus; statusLabel: string; participantSummary: string; cities: string[]; startDate: string | null; endDate: string | null; people: number; memberIds: string[] };
   index: number;
+  albumCover?: string;
   canDelete: boolean;
   members: { id: string; displayName: string }[];
 };
 
-export function TripBookCard({ trip, index, canDelete, members }: Props) {
+export function TripBookCard({ trip, index, albumCover, canDelete, members }: Props) {
   const router = useRouter();
   const ready = useClientReady();
   const [editOpen, setEditOpen] = useState(false);
@@ -78,14 +79,14 @@ export function TripBookCard({ trip, index, canDelete, members }: Props) {
     }
   }
 
-  const cover = tripCoverCardUrl(trip.cover);
+  const cover = tripCoverCardUrl(trip.cover || albumCover || null);
   return <article className={`trip-book-card trip-book-tone-${index % 4}`}>
     <input ref={coverInputRef} className="trip-book-cover-input" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" tabIndex={-1} aria-hidden="true" onChange={replaceCover} />
     <a className={`trip-book-cover${replacing ? " is-replacing" : ""}`} href={href} onClick={openBook} onPointerEnter={event => { if (event.pointerType === "mouse") prefetchBook(); }} onFocus={event => { if (event.currentTarget.matches(":focus-visible")) prefetchBook(); }} onPointerDown={beginPress} onPointerMove={movePress} onPointerUp={clearPress} onPointerCancel={clearPress} onContextMenu={(event) => { event.preventDefault(); setEditOpen(true); }}>
       <span className="trip-book-spine" aria-hidden="true" />
-      <span className="trip-book-image">{cover ? <img src={cover} alt="" width={640} height={480} fetchPriority={index < 2 ? "high" : "auto"} loading={index < 4 ? "eager" : "lazy"} /> : <span className="trip-book-empty">NO COVER</span>}</span>
+      <span className="trip-book-image">{cover ? <img src={cover} alt="" width={640} height={480} fetchPriority={index < 2 ? "high" : "auto"} loading={index < 4 ? "eager" : "lazy"} /> : <span className="trip-book-empty">添加封面</span>}</span>
       <span className="trip-book-status">{trip.statusLabel}</span>
-      <span className="trip-book-meta"><strong title="打开行程">{trip.title}</strong>{opening ? <small role="status">正在打开…</small> : <small><Users size={14} />{trip.participantSummary}</small>}</span>
+      <span className="trip-book-meta"><strong title="打开行程">{trip.title}</strong>{opening ? <small role="status">正在打开…</small> : <small><Users size={14} />{trip.participantSummary}{trip.startDate && ` · ${trip.startDate}${trip.endDate && trip.endDate !== trip.startDate ? ` – ${trip.endDate}` : ""}`}</small>}</span>
       <i className="trip-book-mark" aria-hidden="true" />
     </a>
     <button className="trip-book-menu-trigger" disabled={!ready} type="button" aria-label={`编辑旅行：${trip.title}`} aria-haspopup="dialog" aria-expanded={editOpen} onClick={() => setEditOpen(true)}><MoreHorizontal size={18} /></button>
