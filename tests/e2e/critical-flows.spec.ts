@@ -34,8 +34,9 @@ test("keeps the bookshelf visible and shows progress while a trip opens", async 
   await expect(page.getByRole("navigation", { name: "工作台视图" })).toBeVisible();
 });
 
-test("loads the planning map when its canvas scrolls into view", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 570 });
+test("loads the planning map when its canvas scrolls into view", async ({ page }, testInfo) => {
+  const mobile = testInfo.project.name === "mobile";
+  await page.setViewportSize({ width: mobile ? 390 : 1280, height: 570 });
   let mapRequested = false;
   page.on("request", request => {
     if (/\/PlanMap-[^/]+\.js$/.test(new URL(request.url()).pathname)) mapRequested = true;
@@ -45,7 +46,13 @@ test("loads the planning map when its canvas scrolls into view", async ({ page }
   const placeholder = page.locator(".planning-map-placeholder");
   await expect(placeholder).not.toBeInViewport();
   expect(mapRequested).toBe(false);
-  await placeholder.scrollIntoViewIfNeeded();
+  if (mobile) {
+    await expect(placeholder).toBeHidden();
+    await page.getByRole("link", { name: "打开完整地图 →" }).click();
+    await expect(page).toHaveURL(/view=map/);
+  } else {
+    await placeholder.scrollIntoViewIfNeeded();
+  }
   await expect(page.getByLabel("高德地图", { exact: true })).toBeAttached();
   expect(mapRequested).toBe(true);
 });
