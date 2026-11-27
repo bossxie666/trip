@@ -51,7 +51,7 @@ export async function listAlbums(memberId: string): Promise<AlbumSummary[]> {
 }
 
 type AlbumPhotoQuery = { filter?: string; cursor?: string | null; limit?: number };
-const albumPhotoDate = sql<string>`substr(coalesce(${albumMediaRecords.capturedAt},${albumMediaRecords.createdAt}),1,10)`;
+const albumPhotoDate = sql<string>`coalesce(substr(nullif(${albumMediaRecords.capturedAt},${albumMediaRecords.createdAt}),1,10),'')`;
 function photoFilter(albumId: string, filter = "all") {
   if (filter.length > 180) throw new Error("INVALID_ALBUM_FILTER");
   return filter === "all" || !filter ? undefined : filter === "favorite" ? eq(albumMediaRecords.isFavorite, true)
@@ -62,7 +62,7 @@ function photoCursor(value?: string | null) {
   try {
     if (value.length > 512) throw new Error();
     const cursor = JSON.parse(value) as { date?: unknown; order?: unknown; id?: unknown };
-    if (typeof cursor.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(cursor.date) || !Number.isSafeInteger(cursor.order) || typeof cursor.id !== "string" || !cursor.id || cursor.id.length > 180) throw new Error();
+    if (typeof cursor.date !== "string" || (cursor.date !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(cursor.date)) || !Number.isSafeInteger(cursor.order) || typeof cursor.id !== "string" || !cursor.id || cursor.id.length > 180) throw new Error();
     return { date: cursor.date, order: cursor.order as number, id: cursor.id };
   } catch { throw new Error("INVALID_ALBUM_CURSOR"); }
 }
@@ -76,7 +76,7 @@ export async function getAlbum(id: string, memberId: string, query: AlbumPhotoQu
   const after = cursor ? sql`(${albumPhotoDate}<${cursor.date} OR (${albumPhotoDate}=${cursor.date} AND (${albumMediaRecords.sortOrder}>${cursor.order} OR (${albumMediaRecords.sortOrder}=${cursor.order} AND ${albumMediaRecords.mediaAssetId}>${cursor.id}))))` : undefined;
   const [trip, rows, tags, dateCounts, counts] = await Promise.all([
     album.tripId ? db.select({ title: tripRecords.title }).from(tripRecords).where(eq(tripRecords.id, album.tripId)).limit(1) : [],
-    db.select({ assetId: mediaAssetRecords.id, filename: mediaAssetRecords.originalFilename, width: mediaAssetRecords.width, height: mediaAssetRecords.height, uploadedByMemberId: albumMediaRecords.uploadedByMemberId, sortOrder: albumMediaRecords.sortOrder, capturedAt: albumMediaRecords.capturedAt, createdAt: albumMediaRecords.createdAt, isFavorite: albumMediaRecords.isFavorite })
+    db.select({ assetId: mediaAssetRecords.id, filename: mediaAssetRecords.originalFilename, width: mediaAssetRecords.width, height: mediaAssetRecords.height, uploadedByMemberId: albumMediaRecords.uploadedByMemberId, sortOrder: albumMediaRecords.sortOrder, dayKey: albumPhotoDate, capturedAt: albumMediaRecords.capturedAt, createdAt: albumMediaRecords.createdAt, isFavorite: albumMediaRecords.isFavorite })
       .from(albumMediaRecords).innerJoin(mediaAssetRecords, eq(mediaAssetRecords.id, albumMediaRecords.mediaAssetId))
       .where(and(filteredWhere, after)).orderBy(desc(albumPhotoDate), asc(albumMediaRecords.sortOrder), asc(albumMediaRecords.mediaAssetId)).limit(limit + 1),
     db.select().from(albumTagRecords).where(eq(albumTagRecords.albumId, id)).orderBy(asc(albumTagRecords.name)),
@@ -93,10 +93,10 @@ export async function getAlbum(id: string, memberId: string, query: AlbumPhotoQu
   for (const row of photoTags) { const selected = tagsByPhoto.get(row.mediaAssetId) || []; selected.push(row.tagId); tagsByPhoto.set(row.mediaAssetId, selected); }
   const last = photos.at(-1);
   return { ...album, tripTitle: trip[0]?.title || null, tags,
-    photos: photos.map(photo => ({ ...photo, capturedAt: photo.capturedAt || photo.createdAt, tagIds: tagsByPhoto.get(photo.assetId) || [] })),
+    photos: photos.map(photo => ({ ...photo, capturedAt: photo.dayKey ? photo.capturedAt! : "", tagIds: tagsByPhoto.get(photo.assetId) || [] })),
     memberIds: (await getRuntimeEnv().DB.prepare("SELECT member_id AS id FROM album_members WHERE album_id=?").bind(id).all<{id:string}>()).results.map(row=>row.id), canEditAlbum: album.createdByMemberId === memberId,
     pagination: { filter, total: dateCounts.reduce((sum, row) => sum + row.count, 0), totalPhotos: counts[0]?.count || 0, dateCounts,
-      nextCursor: rows.length > limit && last ? JSON.stringify({ date: (last.capturedAt || last.createdAt).slice(0, 10), order: last.sortOrder, id: last.assetId }) : null },
+      nextCursor: rows.length > limit && last ? JSON.stringify({ date: last.dayKey, order: last.sortOrder, id: last.assetId }) : null },
   };
 }
 

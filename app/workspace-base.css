@@ -213,3 +213,32 @@ body:has(.trip-book-shell) {
   .trip-journal-workspace .trip-settings{order:2}
 }
 .standalone-map{width:100%;max-width:none;min-height:calc(100dvh - 72px);padding:16px clamp(12px,3vw,40px) 80px;background:#fcfaf4}.standalone-map-toolbar{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:12px}.standalone-map-toolbar label{display:flex;align-items:center;gap:8px;font-size:13px}.standalone-map-toolbar select{min-height:38px;max-width:240px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:#fff}.standalone-map .plan-map-surface{display:flex;flex-direction:column}.standalone-map .plan-map-canvas-wrap{order:1;min-height:65dvh}.standalone-map .route-directory{order:2;margin-top:20px}.standalone-map .map-hint{order:2}.standalone-map .plan-map-canvas{min-height:65dvh}
+
+@media (max-width: 680px) {
+  .trip-book-chapter-planning .trip-journal-workspace {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .trip-book-chapter-planning .trip-console {
+    display: contents;
+  }
+
+  .trip-book-chapter-planning .trip-console-side,
+  .trip-book-chapter-planning .empty-trip-actions {
+    order: 1;
+  }
+
+  .trip-book-chapter-planning .plan-columns.knowledge-compact {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .trip-book-chapter-planning .knowledge-compact .itinerary-panel {
+    order: -1;
+  }
+
+  .trip-book-chapter-planning .planning-map-panel > :not(header) {
+    display: none;
+  }
+}

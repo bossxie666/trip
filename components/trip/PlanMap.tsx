@@ -103,6 +103,11 @@ function PlanMapContent({ slug, places = [], workspace, activeDayId, mapMode = "
     // deliberately muted by the marker layer below.
     return entries.filter((entry) => matchesMapArea(entry.place, area, workspace.cities) && (category === "all" || placeCategory(entry) === category));
   }, [area, category, dayFilter, dayStops, entries, mapMode, workspace]);
+  const stopNumbers = new Map(mapEntries.map(entry => [entry.timelineId, entry.nodeNumber]));
+  const stopLabel = (stop: { id: string; title: string }) => {
+    const number = stopNumbers.get(stop.id);
+    return number == null ? stop.title : `${number}. ${stop.title}`;
+  };
   const visible = useMemo(() => mapEntries.filter((entry) => entry.place.latitude != null && entry.place.longitude != null), [mapEntries]);
   const focusedEntries = useMemo(() => focusedRecommendationId ? visible.filter((entry) => entry.recommendations?.some(({ id }) => id === focusedRecommendationId)).sort((a, b) => (a.recommendations?.find(({ id }) => id === focusedRecommendationId)?.sortOrder ?? 999) - (b.recommendations?.find(({ id }) => id === focusedRecommendationId)?.sortOrder ?? 999)) : [], [focusedRecommendationId, visible]);
   const focusedFitSignature = `${focusedRecommendationId || ""}:${focusedEntries.map((entry) => entry.place.id).join(",")}`;
@@ -344,7 +349,7 @@ function PlanMapContent({ slug, places = [], workspace, activeDayId, mapMode = "
         {dayStops.length < 2 ? (
           <p className="map-empty">这一天至少需要两个带坐标的地点，才可以生成路线段。</p>
         ) : null}
-        {daySegments.map((segment, index) => {
+        {daySegments.map((segment) => {
           const route = routeResults[segment.id];
           const mode = route?.mode || preferredFor(segment);
           const alternatives = routeComparisons[segment.id] || {};
@@ -352,9 +357,9 @@ function PlanMapContent({ slug, places = [], workspace, activeDayId, mapMode = "
           return (
             <article className="route-segment-card" key={segment.id}>
               <div className="route-segment-head">
-                <b>{index + 1}. {segment.from.title}</b>
+                <b>{stopLabel(segment.from)}</b>
                 <span>→</span>
-                <b>{segment.to.title}</b>
+                <b>{stopLabel(segment.to)}</b>
               </div>
               <div className="route-participant-summary">
                 {participantSummary.unknown ? (

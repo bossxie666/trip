@@ -2305,7 +2305,7 @@ test("paginates album dates and filters without missing photos or limiting full 
     const first = (await (await render(`${path}?limit=40`)).json()).album;
     assert.equal(first.photos.length, 40);
     assert.equal(first.pagination.total, 245);
-    assert.deepEqual(first.pagination.dateCounts, [{ date: "2026-08-21", count: 120 }, { date: "2026-08-20", count: 124 }, { date: "2026-08-19", count: 1 }]);
+    assert.deepEqual(first.pagination.dateCounts, [{ date: "2026-08-21", count: 120 }, { date: "2026-08-20", count: 124 }, { date: "", count: 1 }]);
     const seen = first.photos.map(photo => photo.assetId);
     let cursor = first.pagination.nextCursor;
     while (cursor) {

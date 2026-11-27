@@ -1,3 +1,4 @@
+import { getRuntimeEnv } from "@/db";
 import { tripCoverCardUrl } from "@/components/media/cover-url";
 import { listTripSummaries } from "@/services/trip-repository.server";
 import { getCurrentMember } from "@/services/auth.server";
@@ -29,7 +30,21 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
   const [trips, members] = actor ? await Promise.all([listTripSummaries(activeStatus, actor.id), listActiveMembers()]) : [[], []];
   const canDeleteTrips = actor?.role === "admin";
 
-  const firstCover = tripCoverCardUrl(trips[0]?.cover ?? null);
+  const albumCovers = actor && trips.some(trip => !trip.cover)
+    ? (await getRuntimeEnv().DB.prepare(`
+        SELECT trip_id AS tripId, media_asset_id AS assetId FROM (
+          SELECT a.trip_id, am.media_asset_id,
+            row_number() OVER (PARTITION BY a.trip_id ORDER BY
+              CASE WHEN am.media_asset_id = a.cover_media_asset_id THEN 0 ELSE 1 END,
+              am.is_favorite DESC, am.sort_order, am.media_asset_id) AS rank
+          FROM albums a JOIN album_members m ON m.album_id = a.id
+          JOIN album_media am ON am.album_id = a.id
+          JOIN media_assets ma ON ma.id = am.media_asset_id
+          WHERE m.member_id = ? AND a.deleted_at IS NULL AND a.trip_id IS NOT NULL AND ma.status = 'ready'
+        ) WHERE rank = 1
+      `).bind(actor.id).all<{ tripId: string; assetId: string }>()).results : [];
+  const albumCoverByTrip = new Map(albumCovers.map(row => [row.tripId, `/api/media/${encodeURIComponent(row.assetId)}?variant=card`]));
+  const firstCover = tripCoverCardUrl(trips[0]?.cover || albumCoverByTrip.get(trips[0]?.id) || null);
   return (<>
     {firstCover && <link rel="preload" as="image" href={firstCover} fetchPriority="high" />}
     {actor && <SiteHeader active="trips" currentMember={{ id: actor.id, displayName: actor.displayName, avatar: actor.avatar, role: actor.role }} />}
@@ -37,7 +52,7 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
       <div className="archive-index-toolbar"><nav className="trip-tabs" aria-label="行程状态">{filters.map((filter) => <Link key={filter.value} className={activeStatus === filter.value ? "active" : ""} href={filter.value === "all" ? "/trips" : `/trips?status=${filter.value}`}>{filter.label}</Link>)}</nav></div><Link className="global-floating-add" aria-label="新建行程" href="/trips/new">＋</Link>
       <section className="trip-list">
         {!trips.length && <div className="trip-empty"><h2>暂无行程</h2></div>}
-        {trips.map((trip, index) => <TripBookCard key={trip.id} index={index} canDelete={canDeleteTrips} members={members.map((member) => ({ id: member.id, displayName: member.displayName }))} trip={{ slug: trip.slug, title: trip.title, cover: trip.cover, status: trip.status, statusLabel: statusLabels[trip.status], participantSummary: participantSummary(trip), cities: trip.cities.map((city) => city.name), startDate: trip.startDate, endDate: trip.endDate, people: trip.people, memberIds: (trip.members || []).map((member) => member.id) }} />)}
+        {trips.map((trip, index) => <TripBookCard key={trip.id} index={index} albumCover={albumCoverByTrip.get(trip.id)} canDelete={canDeleteTrips} members={members.map((member) => ({ id: member.id, displayName: member.displayName }))} trip={{ slug: trip.slug, title: trip.title, cover: trip.cover, status: trip.status, statusLabel: statusLabels[trip.status], participantSummary: participantSummary(trip), cities: trip.cities.map((city) => city.name), startDate: trip.startDate, endDate: trip.endDate, people: trip.people, memberIds: (trip.members || []).map((member) => member.id) }} />)}
       </section>
     </main>
   </>);
