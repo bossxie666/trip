@@ -318,22 +318,11 @@
   grid-template-columns: minmax(340px, 41fr) minmax(480px, 59fr);
   gap: 0;
   min-height: 620px;
-  border: 1px solid var(--journal-rule);
-  background: rgba(255, 253, 247, .68);
-  box-shadow: var(--journal-shadow);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
-.trip-journal-workspace .plan-columns::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 41%;
-  width: 12px;
-  transform: translateX(-6px);
-  background: linear-gradient(90deg, transparent, rgba(43, 48, 45, .06), transparent);
-  pointer-events: none;
-}
 
 .trip-journal-workspace .itinerary-panel {
   padding: 22px;
@@ -758,9 +747,6 @@
     grid-template-columns: minmax(300px, 30fr) minmax(350px, 32fr) minmax(390px, 38fr);
   }
 
-  .trip-journal-workspace .plan-columns::after {
-    display: none;
-  }
 
   .trip-journal-workspace .itinerary-panel {
     padding: 18px;
@@ -1074,9 +1060,6 @@
     box-shadow: 0 5px 14px rgba(35, 49, 56, .07);
   }
 
-  .trip-journal-workspace .plan-columns::after {
-    display: none;
-  }
 
   .trip-journal-workspace .mobile-plan-tabs {
     position: static;
@@ -1362,4 +1345,22 @@
   .trip-journal-workspace *,.recommendation-detail-drawer * {
     scroll-behavior: auto !important;
   }
+}
+body:has(.trip-book-chapter-planning) {
+  background: #fcf8ee;
+}
+
+.trip-book-chapter-planning .trip-book-leaf,
+.trip-book-chapter-planning .trip-journal-workspace,
+.trip-book-chapter-planning .plan-columns,
+.trip-book-chapter-planning .itinerary-panel,
+.trip-book-chapter-planning .planning-map-panel {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.trip-book-chapter-planning .trip-book-leaf::before {
+  content: none;
 }
