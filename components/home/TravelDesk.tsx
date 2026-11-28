@@ -20,7 +20,7 @@ export function TravelDesk({data}:{data:Awaited<ReturnType<typeof getHomeDesk>>}
         const response=await fetch("/assets/travel-desk/desk.html?v=navigation-20261106",{signal:controller.signal});
         if(!response.ok)throw new Error("DESK_UNAVAILABLE");
         const html=await response.text();
-        const moduleUrl="/assets/travel-desk/desk.js?v=navigation-20261106";
+        const moduleUrl="/assets/travel-desk/desk.js?v=ribbon-20261129";
         const deskModule=await import(/* @vite-ignore */ moduleUrl);
         if(controller.signal.aborted)return;
         shadow.innerHTML=html;

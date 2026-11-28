@@ -35,9 +35,11 @@ test("homepage favorites follow dragging without opening the photo",async({page}
     const response=await route.fetch();const body=await response.text();
     await route.fulfill({response,body:body.replace('const escape=value=>','data={...data,photos:Array.from({length:15},(_,i)=>({id:"fixture-"+i,albumId:"fixture",title:"测试照片"+i,src:"/desk-drag-fixture.png",full:"/desk-drag-fixture.png"}))};const escape=value=>')});
   });
-  await page.goto("/");const rail=page.locator("#carousel");await expect(rail.locator(".photo")).toHaveCount(15);
+  await page.goto("/");const rail=page.locator("#carousel");await expect(rail.locator(".photo:not([aria-hidden=true])")).toHaveCount(15);
   await rail.scrollIntoViewIfNeeded();
   const bounds=(await rail.boundingBox())!;
-  await page.mouse.move(bounds.x+bounds.width*.8,bounds.y+40);await page.mouse.down();await page.mouse.move(bounds.x+20,bounds.y+40,{steps:12});await page.mouse.up();
-  expect(await rail.evaluate(el=>el.scrollLeft)).toBeGreaterThan(40);await expect(page.locator("#lightbox")).not.toBeVisible();
+  await page.mouse.move(bounds.x+bounds.width*.8,bounds.y+40);
+  const beforeDrag=await rail.evaluate(el=>el.scrollLeft);
+  await page.mouse.down();await page.mouse.move(bounds.x+20,bounds.y+40,{steps:12});await page.mouse.up();
+  expect(await rail.evaluate(el=>el.scrollLeft)).toBeGreaterThan(beforeDrag+40);await expect(page.locator("#lightbox")).not.toBeVisible();
 });
