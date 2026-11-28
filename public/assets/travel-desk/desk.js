@@ -13,7 +13,7 @@ function render() {
   const items = list();
   count = items.length;
   const copies = count > 1 && !reduced.matches ? Math.ceil(pageSize() / count) + 2 : 1;
-  const groups = Array.from({length: copies}, (_, copy) => items.map((p, index) => `<article class="photo" style="transform:rotate(${index % 2 ? 2 : -2}deg);translate:0 ${index % 2 ? 4 : 0}px" ${copy ? 'aria-hidden="true"' : ""}><img loading="lazy" decoding="async" draggable="false" role="button" tabindex="${copy ? -1 : 0}" data-open="${p.id}" src="${p.src}" alt="${escape(p.title)}"><button class="heart" tabindex="${copy ? -1 : 0}" data-heart="${p.id}" aria-label="取消收藏${escape(p.title)}" aria-pressed="true">♥</button><div class="caption"><span>${escape(p.title)}</span><small>${String(p.number).padStart(2,'0')}</small></div></article>`).join(""));
+  const groups = Array.from({length: copies}, (_, copy) => items.map((p, index) => `<article class="photo" style="transform:rotate(${index % 2 ? 2 : -2}deg);translate:0 ${index % 2 ? 4 : 0}px" ${copy ? 'aria-hidden="true"' : ""}><img loading="lazy" decoding="async" draggable="false" role="button" tabindex="${copy ? -1 : 0}" data-open="${escape(p.id)}" src="${escape(p.src)}" alt="${escape(p.title)}"><button class="heart" tabindex="${copy ? -1 : 0}" data-heart="${escape(p.id)}" aria-label="取消收藏${escape(p.title)}" aria-pressed="true">♥</button><div class="caption"><span>${escape(p.title)}</span><small>${String(p.number).padStart(2,'0')}</small></div></article>`).join(""));
   rail.innerHTML = count ? groups.join("") : '<div class="empty">暂无收藏</div>';
   root.querySelector(".memory-strip").classList.toggle("is-empty", !count);
   $("total").textContent = favorites.size;
@@ -40,7 +40,7 @@ function scrollState() {
 function schedule() {
   cancelAnimationFrame(frame);
   previous = 0;
-  if (period && inView && !document.hidden && !hovering && !touching && !$("lightbox").open && !rail.querySelector(":focus-visible"))
+  if (!lifetime.signal.aborted && period && inView && !document.hidden && !hovering && !touching && !$("lightbox").open && !rail.querySelector(":focus-visible"))
     frame = requestAnimationFrame(advance);
 }
 function advance(now) {
